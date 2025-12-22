@@ -7,7 +7,8 @@ import '../widgets/tree_summary_widget.dart';
 import '../widgets/weather_widget.dart';
 
 import '../../../../features/tasks/presentation/pages/tasks_page.dart';
-import '../../../../features/contacts/presentation/pages/contacts_page.dart';
+import '../../../contacts/presentation/pages/contacts_page.dart';
+import '../../../map/presentation/pages/map_page.dart'; // Add this line
 import 'package:url_launcher/url_launcher.dart';
 
 class HomePage extends StatelessWidget {
@@ -73,7 +74,13 @@ class HomePage extends StatelessWidget {
                     ],
                   ),
                   onDestinationSelected: (int index) {
-                    if (index == 5) {
+                    if (index == 1) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const MapPage(),
+                        ),
+                      );
+                    } else if (index == 5) {
                       _navigateToTasks(context);
                     } else if (index == 6) {
                       _navigateToContacts(context);

@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/task.dart';
 import '../providers/tasks_provider.dart';
 import '../widgets/task_column.dart';
-import '../widgets/task_column.dart';
 import '../widgets/task_edit_sheet.dart';
 import '../widgets/scan_whiteboard_sheet.dart';
 

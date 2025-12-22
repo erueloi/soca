@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/task.dart';
 import '../../domain/entities/task_item.dart';
 import '../../../contacts/data/contacts_data.dart';
+import 'package:latlong2/latlong.dart';
+import '../../../map/presentation/widgets/location_picker_sheet.dart';
 import '../providers/tasks_provider.dart';
 
 class TaskEditSheet extends ConsumerStatefulWidget {
@@ -299,15 +301,32 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
         const SizedBox(width: 16),
         Expanded(
           child: OutlinedButton.icon(
-            onPressed: () {
-              // Placeholder implementation
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('S\'obriria el mapa... 🗺️')),
+            onPressed: () async {
+              // Open Location Picker
+              final LatLng? initialPos =
+                  (_latitude != null && _longitude != null)
+                  ? LatLng(_latitude!, _longitude!)
+                  : null;
+
+              final LatLng? pickedLocation = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      LocationPickerSheet(initialLocation: initialPos),
+                ),
               );
-              setState(() {
-                _latitude = 41.3851; // Dummy coords
-                _longitude = 2.1734;
-              });
+
+              if (pickedLocation != null) {
+                setState(() {
+                  _latitude = pickedLocation.latitude;
+                  _longitude = pickedLocation.longitude;
+                });
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Ubicació guardada! 📍')),
+                  );
+                }
+              }
             },
             icon: const Icon(Icons.location_on),
             label: Text(_latitude == null ? 'Ubicar' : 'Ubicat ✅'),
