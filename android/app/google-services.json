@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "810172062958",
+    "project_id": "soca-aacac",
+    "storage_bucket": "soca-aacac.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:810172062958:android:2d6bd8b04e524eff0727ff",
+        "android_client_info": {
+          "package_name": "com.molicaljeroni.soca"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDssgK-xdDHUscQi-eWwa4IkY_RlEAcgSM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
