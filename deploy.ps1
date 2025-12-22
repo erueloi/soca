@@ -108,10 +108,14 @@ try {
     Write-Success "APK copied to $apkDest"
 
     # --- Step 7: Deploy to Firebase ---
-    Write-Step "Step 7: Deploying to Firebase Hosting"
-    cmd /c "firebase deploy --only hosting"
+    Write-Step "Step 7: Deploying to Firebase Hosting & Functions"
+    
+    # Deploy functions first (or together)
+    # Using --only functions,hosting
+    cmd /c "firebase deploy --only functions,hosting"
+    
     if ($LASTEXITCODE -ne 0) { throw "Firebase deploy failed" }
-    Write-Success "Deployed directly to soca-aacac.web.app"
+    Write-Success "Deployed Functions and Hosting"
 
     # --- Step 8: Git & Tagging ---
     Write-Step "Step 8: Git & Tagging"

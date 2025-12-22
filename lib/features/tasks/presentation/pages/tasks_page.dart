@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/task.dart';
 import '../providers/tasks_provider.dart';
 import '../widgets/task_column.dart';
+import '../widgets/task_column.dart';
 import '../widgets/task_edit_sheet.dart';
+import '../widgets/scan_whiteboard_sheet.dart';
 
 class TasksPage extends ConsumerStatefulWidget {
   const TasksPage({super.key});
@@ -68,6 +70,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
         onSave: (updatedTask) {
           ref.read(tasksRepositoryProvider).updateTask(updatedTask);
         },
+        onDelete: () => _deleteTask(task),
       ),
     );
   }
@@ -104,7 +107,23 @@ class _TasksPageState extends ConsumerState<TasksPage> {
     final tasksAsync = ref.watch(tasksStreamProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Pissarra de Tasques')),
+      appBar: AppBar(
+        title: const Text('Pissarra de Tasques'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.camera_alt_outlined),
+            tooltip: 'Sincronització Analògica (OCR)',
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                builder: (context) => const ScanWhiteboardSheet(),
+              );
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: tasksAsync.when(
         data: (tasks) => Column(
           children: [

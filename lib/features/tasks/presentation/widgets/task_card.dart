@@ -40,6 +40,51 @@ class TaskCard extends StatelessWidget {
         color: Colors.green,
         child: const Icon(Icons.check, color: Colors.white),
       ),
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.endToStart) {
+          // Archive (Done) - No confirmation needed or maybe yes? User said "esborrar lliscant".
+          // Usually right-to-left is delete in this code (red background is alignment.centerLeft? wait)
+          // Let's check backgrounds.
+          // background: alignment.centerLeft (Red/Delete) -> Swipe Left-to-Right? No defaults.
+          // DismissDirection.startToEnd (Left to Right).
+          // secondaryBackground: alignment.centerRight (Green/Check) -> Swipe Right-to-Left.
+
+          // Text direction LTR.
+          // background (Start/Left side) is revealed when swiping Left to Right -> Delete (Red).
+          // secondaryBackground (End/Right side) is revealed when swiping Right to Left -> Archive/Check (Green).
+          // The code says: onDismissed: if endToStart (Right to Left) -> onArchive. else -> onDelete.
+
+          // Checks:
+          // Swipe Right (Delete): Needs confirmation.
+          // Swipe Left (Archive): Maybe no confirmation? User strictly said "esborrar lliscant".
+
+          if (direction == DismissDirection.startToEnd) {
+            return await showDialog(
+              context: context,
+              builder: (BuildContext context) {
+                return AlertDialog(
+                  title: const Text('Esborrar tasca?'),
+                  content: const Text('Segur que vols esborrar aquesta tasca?'),
+                  actions: <Widget>[
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text('Cancel·lar'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: const Text(
+                        'Esborrar',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            );
+          }
+        }
+        return true; // Archive allows straight away
+      },
       onDismissed: (direction) {
         if (direction == DismissDirection.endToStart) {
           onArchive?.call(task);
@@ -65,7 +110,7 @@ class TaskCard extends StatelessWidget {
           child: _buildCardContent(context),
         ),
         child: GestureDetector(
-          onLongPress: () => onEdit?.call(task),
+          onTap: () => onEdit?.call(task),
           child: _buildCardContent(context),
         ),
       ),

@@ -5,17 +5,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/task.dart';
 import '../../domain/entities/task_item.dart';
 import '../../../contacts/data/contacts_data.dart';
+import '../providers/tasks_provider.dart';
 
 class TaskEditSheet extends ConsumerStatefulWidget {
   final Task? task;
   final String initialBucket;
   final Function(Task) onSave;
+  final VoidCallback? onDelete;
 
   const TaskEditSheet({
     super.key,
     this.task,
     required this.initialBucket,
     required this.onSave,
+    this.onDelete,
   });
 
   @override
@@ -237,9 +240,47 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
             ),
           ],
         ),
-        IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
+        Row(
+          children: [
+            if (widget.task != null && widget.onDelete != null)
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                tooltip: 'Eliminar Tasca',
+                onPressed: () {
+                  // Confirm deletion
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Eliminar Tasca?'),
+                      content: const Text(
+                        'Estàs segur que vols eliminar aquesta tasca definitivament?',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Cancel·lar'),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(ctx); // Close dialog
+                            Navigator.pop(context); // Close sheet
+                            widget.onDelete!();
+                          },
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.red,
+                          ),
+                          child: const Text('Eliminar'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
         ),
       ],
     );
@@ -399,15 +440,51 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
     );
   }
 
-  // ... (Wait, I need to add imports to TaskEditSheet for ImagePicker and File)
+  Future<void> _saveTask() async {
+    if (_titleController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('El títol és obligatori')));
+      return;
+    }
 
-  // Let's rewrite the save function to be generic for now, and I will do a separate pass for imports + logic.
-  void _saveTask() {
-    // This will be replaced by async logic in the next tool call
-    // We can either call the callback or just do logic here.
-    // The callback on TasksPage does repo.addTask/updateTask.
-    // So we invoke it.
-    // widget.onSave(newTask); // newTask is not defined here, this will be part of the next step.
+    setState(() => _isUploading = true);
+
+    String? photoUrl;
+    // Use existing ID or generate new one
+    final taskId =
+        widget.task?.id ?? DateTime.now().millisecondsSinceEpoch.toString();
+
+    // Upload image if selected
+    if (_imageFile != null) {
+      // Use the provider to access repository
+      final repo = ref.read(tasksRepositoryProvider);
+      photoUrl = await repo.uploadTaskImage(_imageFile!, taskId);
+    }
+
+    // Prepare photo URLs list
+    // Start with existing URLs if editing, or empty list
+    List<String> currentPhotoUrls = List.from(widget.task?.photoUrls ?? []);
+    if (photoUrl != null) {
+      currentPhotoUrls.add(photoUrl);
+    }
+
+    final newTask = Task(
+      id: taskId,
+      title: _titleController.text,
+      bucket: widget.task?.bucket ?? widget.initialBucket,
+      description: _descriptionController.text,
+      phase: _phase,
+      isDone: widget.task?.isDone ?? false,
+      items: _items,
+      contactIds: _contactIds,
+      dueDate: _dueDate,
+      latitude: _latitude,
+      longitude: _longitude,
+      photoUrls: currentPhotoUrls,
+    );
+
+    widget.onSave(newTask);
 
     if (mounted) {
       setState(() => _isUploading = false);
