@@ -1,8 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/config/firebase_options.dart';
+import 'core/theme/app_theme.dart';
+import 'features/dashboard/presentation/pages/home_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +19,7 @@ void main() async {
     persistenceEnabled: true,
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
   );
-  runApp(const SocaApp());
+  runApp(const ProviderScope(child: SocaApp()));
 }
 
 class SocaApp extends StatelessWidget {
@@ -27,11 +30,8 @@ class SocaApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Soca - Molí de Cal Jeroni',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.brown),
-        useMaterial3: true,
-      ),
-      home: const WelcomeScreen(),
+      theme: AppTheme.theme,
+      home: const HomePage(),
     );
   }
 }
