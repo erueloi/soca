@@ -13,9 +13,10 @@
     },
     "main": "index.js",
     "dependencies": {
-        "firebase-functions": "^4.3.1",
+        "@google-cloud/vision": "^3.1.2",
+        "@google/generative-ai": "^0.24.1",
         "firebase-admin": "^11.5.0",
-        "@google-cloud/vision": "^3.1.2"
+        "firebase-functions": "^4.3.1"
     },
     "devDependencies": {
         "firebase-functions-test": "^3.1.0"

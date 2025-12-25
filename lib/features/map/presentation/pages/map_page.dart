@@ -3,6 +3,8 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../tasks/presentation/providers/tasks_provider.dart';
+import '../../../trees/presentation/providers/trees_provider.dart';
+import '../../../trees/presentation/widgets/tree_detail.dart';
 
 class MapPage extends ConsumerStatefulWidget {
   const MapPage({super.key});
@@ -17,6 +19,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   // Using a sample coordinate near Montserrat for now as a default.
   // Molí de Cal Jeroni
   static const LatLng _initialCenter = LatLng(41.5126017, 0.9185921);
+  final MapController _mapController = MapController();
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +36,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         ],
       ),
       body: FlutterMap(
+        mapController: _mapController,
         options: MapOptions(
           initialCenter: _initialCenter,
           initialZoom: 16.0,
@@ -52,10 +56,14 @@ class _MapPageState extends ConsumerState<MapPage> {
           Consumer(
             builder: (context, ref, child) {
               final tasksAsyncValue = ref.watch(tasksStreamProvider);
+              final treesAsyncValue = ref.watch(treesStreamProvider);
 
-              return tasksAsyncValue.when(
-                data: (tasks) {
-                  final markers = tasks
+              List<Marker> markers = [];
+
+              // Add Task Markers
+              if (tasksAsyncValue.hasValue) {
+                markers.addAll(
+                  tasksAsyncValue.value!
                       .where((t) => t.latitude != null && t.longitude != null)
                       .map((t) {
                         final isTree = t.bucket == 'Reforestació';
@@ -65,7 +73,6 @@ class _MapPageState extends ConsumerState<MapPage> {
                           height: 40,
                           child: GestureDetector(
                             onTap: () {
-                              // Show tiny info window or navigate to task?
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text('${t.title} (${t.bucket})'),
@@ -73,7 +80,6 @@ class _MapPageState extends ConsumerState<MapPage> {
                               );
                             },
                             child: Icon(
-                              // If 'Reforestació' bucket -> Tree Icon, else generic Pin
                               isTree ? Icons.forest : Icons.location_on,
                               color: isTree ? Colors.green[800] : Colors.red,
                               size: 40,
@@ -83,15 +89,76 @@ class _MapPageState extends ConsumerState<MapPage> {
                             ),
                           ),
                         );
-                      })
-                      .toList();
+                      }),
+                );
+              }
 
-                  return MarkerLayer(markers: markers);
-                },
-                loading: () => const MarkerLayer(markers: []),
-                error: (_, __) => const MarkerLayer(markers: []),
+              // Add Tree Markers
+              if (treesAsyncValue.hasValue) {
+                markers.addAll(
+                  treesAsyncValue.value!.map((t) {
+                    return Marker(
+                      point: LatLng(t.latitude, t.longitude),
+                      width: 45,
+                      height: 45,
+                      child: GestureDetector(
+                        onTap: () {
+                          // Navigate to Tree Detail
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => Scaffold(
+                                appBar: AppBar(title: Text(t.species)),
+                                body: TreeDetail(tree: t),
+                              ),
+                            ),
+                          );
+                        },
+                        child: Icon(
+                          Icons.park,
+                          color: Colors.greenAccent[700],
+                          size: 45,
+                          shadows: const [
+                            Shadow(blurRadius: 5, color: Colors.black54),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                );
+              }
+
+              return MarkerLayer(markers: markers);
+            },
+          ),
+        ],
+      ),
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FloatingActionButton(
+            heroTag: 'zoom_in',
+            mini: true,
+            onPressed: () {
+              final currentZoom = _mapController.camera.zoom;
+              _mapController.move(
+                _mapController.camera.center,
+                currentZoom + 1,
               );
             },
+            child: const Icon(Icons.add),
+          ),
+          const SizedBox(height: 8),
+          FloatingActionButton(
+            heroTag: 'zoom_out',
+            mini: true,
+            onPressed: () {
+              final currentZoom = _mapController.camera.zoom;
+              _mapController.move(
+                _mapController.camera.center,
+                currentZoom - 1,
+              );
+            },
+            child: const Icon(Icons.remove),
           ),
         ],
       ),

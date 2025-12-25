@@ -247,3 +247,72 @@ function groupWordsIntoLines(words) {
 
     return lines;
 }
+
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+exports.identifyTree = functions.https.onCall(async (data, context) => {
+    // if (!context.auth) {
+    //     throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
+    // }
+
+    // image can be a base64 string or a GS URI. 
+    // Ideally pass base64 for quick analysis or a gs:// path.
+    // Let's support base64 for now as per plan to avoid upload latency for "preview".
+    // data.image: base64 string (without data:image/jpeg;base64, prefix preferably, or strip it)
+    // data.mimeType: 'image/jpeg'
+
+    const imageBase64 = data.image;
+    const mimeType = data.mimeType || "image/jpeg";
+
+    if (!imageBase64) {
+        throw new functions.https.HttpsError("invalid-argument", "Image data missing.");
+    }
+
+    // Initialize Gemini
+    // Allow API key from env var or runtime config.
+    const apiKey = process.env.GEMINI_API_KEY || functions.config().gemini.key;
+    if (!apiKey) {
+        throw new functions.https.HttpsError("failed-precondition", "Gemini API Key not configured.");
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const prompt = `
+    Analyze this image of a tree. Return a strict JSON object (no markdown) with the following fields:
+    - species: Scientific name of the tree.
+    - commonName: Common name in Catalan (or Spanish if unknown).
+    - status: One of "Viable", "Malalt", "Mort" based on visual health.
+    - notes: A concise summary including water needs, ideal sun exposure, and observed health issues.
+    
+    Example:
+    {
+      "species": "Quercus ilex",
+      "commonName": "Alzina",
+      "status": "Viable",
+      "notes": "Necessita poc reg, ple sol. Fulles sanes."
+    }
+    `;
+
+    try {
+        const imagePart = {
+            inlineData: {
+                data: imageBase64,
+                mimeType: mimeType
+            }
+        };
+
+        const result = await model.generateContent([prompt, imagePart]);
+        const response = await result.response;
+        const text = response.text();
+
+        // Clean markdown code blocks if present
+        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        const info = JSON.parse(jsonStr);
+
+        return info;
+    } catch (error) {
+        console.error("Gemini Error:", error);
+        throw new functions.https.HttpsError("internal", "Failed to identify tree.", error.message);
+    }
+});

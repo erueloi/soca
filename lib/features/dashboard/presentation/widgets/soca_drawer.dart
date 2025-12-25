@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../tasks/presentation/pages/tasks_page.dart';
 import '../../../contacts/presentation/pages/contacts_page.dart';
+import '../../../map/presentation/pages/map_page.dart';
+import '../../../trees/presentation/pages/trees_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -51,35 +53,38 @@ class SocaDrawer extends StatelessWidget {
                 ),
                 ListTile(
                   leading: const Icon(Icons.map_outlined),
-                  title: const Text('Mapa de la Finca'),
+                  title: const Text('Mapa'),
                   onTap: () {
                     Navigator.pop(context);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (context) => const MapPage()),
+                    );
                   },
                 ),
                 ListTile(
                   leading: const Icon(Icons.water_drop_outlined),
-                  title: const Text('Gestió de Reg'),
+                  title: const Text('Reg'),
                   onTap: () {
                     Navigator.pop(context);
                   },
                 ),
                 ListTile(
                   leading: const Icon(Icons.forest_outlined),
-                  title: const Text("Inventari d'Arbres"),
-                  onTap: () {
-                    Navigator.pop(context);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.people_alt_outlined),
-                  title: const Text('Directori de Contactes'),
+                  title: const Text("Arbres"),
                   onTap: () {
                     Navigator.pop(context);
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (context) => const ContactsPage(),
+                        builder: (context) => const TreesPage(),
                       ),
                     );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.architecture_outlined),
+                  title: const Text('Obres'),
+                  onTap: () {
+                    Navigator.pop(context);
                   },
                 ),
                 ListTile(
@@ -94,10 +99,22 @@ class SocaDrawer extends StatelessWidget {
                     );
                   },
                 ),
+                ListTile(
+                  leading: const Icon(Icons.people_alt_outlined),
+                  title: const Text('Contactes'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const ContactsPage(),
+                      ),
+                    );
+                  },
+                ),
                 const Divider(),
                 ListTile(
                   leading: const Icon(Icons.android),
-                  title: const Text('Descarregar App Android'),
+                  title: const Text('Descarregar App'),
                   onTap: () async {
                     Navigator.pop(context);
                     final Uri url = Uri.parse('/soca.apk');

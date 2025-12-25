@@ -8,8 +8,10 @@ import '../widgets/weather_widget.dart';
 
 import '../../../../features/tasks/presentation/pages/tasks_page.dart';
 import '../../../contacts/presentation/pages/contacts_page.dart';
-import '../../../map/presentation/pages/map_page.dart'; // Add this line
+import '../../../map/presentation/pages/map_page.dart';
+import '../../../trees/presentation/pages/trees_page.dart'; // Add TreesPage import
 import 'package:url_launcher/url_launcher.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -24,6 +26,12 @@ class HomePage extends StatelessWidget {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (context) => const ContactsPage()));
+  }
+
+  void _navigateToTrees(BuildContext context) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (context) => const TreesPage()));
   }
 
   @override
@@ -80,14 +88,86 @@ class HomePage extends StatelessWidget {
                           builder: (context) => const MapPage(),
                         ),
                       );
+                    } else if (index == 3) {
+                      // Arbres index
+                      _navigateToTrees(context);
                     } else if (index == 5) {
                       _navigateToTasks(context);
                     } else if (index == 6) {
                       _navigateToContacts(context);
-                    } else if (index == 7) {
-                      launchUrl(Uri.parse('/soca.apk'));
                     }
                   },
+                  trailing: Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          const Divider(),
+                          // Download App
+                          TextButton.icon(
+                            onPressed: () => launchUrl(Uri.parse('/soca.apk')),
+                            icon: const Icon(
+                              Icons.android,
+                              color: Colors.green,
+                            ),
+                            label: const Text('App'),
+                          ),
+                          const SizedBox(height: 8),
+                          // Release Notes / Version
+                          FutureBuilder<PackageInfo>(
+                            future: PackageInfo.fromPlatform(),
+                            builder: (context, snapshot) {
+                              if (!snapshot.hasData) {
+                                return const SizedBox.shrink();
+                              }
+                              return IconButton(
+                                icon: const Icon(Icons.info_outline),
+                                tooltip: 'Versió ${snapshot.data!.version}',
+                                onPressed: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) => AlertDialog(
+                                      title: Text(
+                                        'Novetats v${snapshot.data!.version}',
+                                      ),
+                                      content: SizedBox(
+                                        width: 400,
+                                        child: FutureBuilder<String>(
+                                          future: DefaultAssetBundle.of(context)
+                                              .loadString(
+                                                'assets/release_notes.md',
+                                              ),
+                                          builder: (context, noteSnapshot) {
+                                            if (noteSnapshot.hasData) {
+                                              return SingleChildScrollView(
+                                                child: Text(noteSnapshot.data!),
+                                              );
+                                            }
+                                            return const Center(
+                                              child:
+                                                  CircularProgressIndicator(),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(context),
+                                          child: const Text('Tancar'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                   destinations: const [
                     NavigationRailDestination(
                       icon: Icon(Icons.dashboard_outlined),
@@ -107,7 +187,7 @@ class HomePage extends StatelessWidget {
                     NavigationRailDestination(
                       icon: Icon(Icons.forest_outlined),
                       selectedIcon: Icon(Icons.forest),
-                      label: Text('Arbres'),
+                      label: Text('Arbres'), // Index is 3
                     ),
                     NavigationRailDestination(
                       icon: Icon(Icons.architecture_outlined),
@@ -123,11 +203,6 @@ class HomePage extends StatelessWidget {
                       icon: Icon(Icons.people_alt_outlined),
                       selectedIcon: Icon(Icons.people_alt),
                       label: Text('Contactes'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.android),
-                      selectedIcon: Icon(Icons.android, color: Colors.green),
-                      label: Text('Descarregar App'),
                     ),
                   ],
                 ),
