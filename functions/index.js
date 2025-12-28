@@ -276,7 +276,7 @@ exports.identifyTree = functions.https.onCall(async (data, context) => {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const prompt = `
     Analyze this image of a tree. Return a strict JSON object (no markdown) with the following fields:
@@ -314,5 +314,102 @@ exports.identifyTree = functions.https.onCall(async (data, context) => {
     } catch (error) {
         console.error("Gemini Error:", error);
         throw new functions.https.HttpsError("internal", "Failed to identify tree.", error.message);
+    }
+});
+
+exports.analyzeTree = functions.https.onCall(async (data, context) => {
+    // Input: { imagePath: string, species: string, format: string, location: string }
+
+    // 1. Get Image
+    let imageBase64 = data.image; // Option A: Direct Base64
+    const imagePath = data.imagePath; // Option B: Storage Path
+
+    if (!imageBase64 && !imagePath) {
+        throw new functions.https.HttpsError("invalid-argument", "Must provide 'image' (base64) or 'imagePath'.");
+    }
+
+    if (!imageBase64 && imagePath) {
+        // Download from Storage
+        try {
+            const bucket = admin.storage().bucket();
+            // If imagePath is a full URL, we might need to parse it. 
+            // Assuming imagePath is the relative path in the bucket (e.g. 'trees/xyz.jpg')
+            // If the client sends the full download URL, we have a problem. Client should send the path.
+            // Let's assume client sends relative path.
+
+            // Handle if client sends full gs:// or http url (basic stripping)
+            let path = imagePath;
+            if (path.startsWith('gs://')) {
+                const parts = path.split('/');
+                path = parts.slice(3).join('/'); // Remove gs://bucket/
+            }
+            // Simple heuristic to remove query params if url
+            if (path.includes('?')) path = path.split('?')[0];
+            // If it's a full HTTPS url from firebase storage
+            if (path.includes('/o/')) {
+                path = decodeURIComponent(path.split('/o/')[1]);
+            }
+
+            const [file] = await bucket.file(path).download();
+            imageBase64 = file.toString('base64');
+        } catch (e) {
+            console.error("Storage Download Error:", e);
+            throw new functions.https.HttpsError("internal", "Failed to download image from storage.");
+        }
+    }
+
+    // 2. Setup Gemini
+    const apiKey = process.env.GEMINI_API_KEY || functions.config().gemini.key;
+    if (!apiKey) {
+        throw new functions.https.HttpsError("failed-precondition", "Gemini API Key not configured. Run: firebase functions:config:set gemini.key=\"YOUR_KEY\"");
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    // Updated to available model from user list
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+    // 3. Prompt
+    const species = data.species || "Unknown";
+    const format = data.format || "Unknown";
+    const location = data.location || "Unknown location";
+
+    const prompt = `
+    Act as an expert arborist. Analyze the health of this tree based on the image and context.
+    
+    Context:
+    - Species: ${species}
+    - Format/Age: ${format}
+    - Location: ${location}
+
+    Return a strict JSON object (no markdown) with:
+    - health: One of "Viable", "Malalt", "Mort".
+    - vigor: One of "Alt", "Mitjà", "Baix".
+    - advice: A paragraph of advice and diagnosis in Catalan (Català). Mention specific visual indicators observed in the photo.
+
+    Example JSON:
+    {
+      "health": "Malalt",
+      "vigor": "Baix",
+      "advice": "S'observa clorosi a les fulles, indicant falta de ferro..."
+    }
+    `;
+
+    try {
+        const imagePart = {
+            inlineData: {
+                data: imageBase64,
+                mimeType: "image/jpeg"
+            }
+        };
+
+        const result = await model.generateContent([prompt, imagePart]);
+        const response = await result.response;
+        const text = response.text();
+        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        return JSON.parse(jsonStr);
+
+    } catch (error) {
+        console.error("Gemini Analysis Error:", error);
+        throw new functions.https.HttpsError("internal", "AI Analysis Failed", error.message);
     }
 });

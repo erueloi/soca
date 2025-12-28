@@ -2,6 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../domain/entities/tree.dart';
+import '../../domain/entities/watering_event.dart';
+import '../../domain/entities/evolution_entry.dart';
+import '../../domain/entities/ai_analysis_entry.dart';
 
 class TreesRepository {
   final CollectionReference _treesCollection = FirebaseFirestore.instance
@@ -53,5 +56,87 @@ class TreesRepository {
     await _treesCollection.doc(treeId).update({
       'timeline': FieldValue.arrayUnion([event.toMap()]),
     });
+  }
+
+  Stream<List<WateringEvent>> getWateringEventsStream(String treeId) {
+    return _treesCollection
+        .doc(treeId)
+        .collection('regs')
+        .orderBy('date', descending: true)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs.map((doc) {
+            return WateringEvent.fromMap(doc.data(), doc.id);
+          }).toList();
+        });
+  }
+
+  Future<void> addWateringEvent(String treeId, WateringEvent event) async {
+    await _treesCollection.doc(treeId).collection('regs').add(event.toMap());
+  }
+
+  Future<void> deleteWateringEvent(String treeId, String eventId) async {
+    await _treesCollection.doc(treeId).collection('regs').doc(eventId).delete();
+  }
+
+  // --- Evolution ---
+
+  Stream<List<EvolutionEntry>> getEvolutionStream(String treeId) {
+    return _treesCollection
+        .doc(treeId)
+        .collection('evolucio')
+        .orderBy('date', descending: true)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs.map((doc) {
+            return EvolutionEntry.fromMap(doc.data(), doc.id);
+          }).toList();
+        });
+  }
+
+  Future<void> addEvolutionEntry(String treeId, EvolutionEntry entry) async {
+    await _treesCollection
+        .doc(treeId)
+        .collection('evolucio')
+        .add(entry.toMap());
+  }
+
+  Future<String?> uploadEvolutionImage(XFile imageFile, String treeId) async {
+    try {
+      final ref = _storage.ref().child(
+        'evolution_images/$treeId/${DateTime.now().millisecondsSinceEpoch}.jpg',
+      );
+      final bytes = await imageFile.readAsBytes();
+      final uploadTask = await ref.putData(
+        bytes,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+      return await uploadTask.ref.getDownloadURL();
+    } catch (e) {
+      print('Error uploading evolution image: $e');
+      return null;
+    }
+  }
+
+  // --- AI History ---
+
+  Stream<List<AIAnalysisEntry>> getAIHistoryStream(String treeId) {
+    return _treesCollection
+        .doc(treeId)
+        .collection('historic_ia')
+        .orderBy('date', descending: true)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs.map((doc) {
+            return AIAnalysisEntry.fromMap(doc.data(), doc.id);
+          }).toList();
+        });
+  }
+
+  Future<void> addAIHistoryEntry(String treeId, AIAnalysisEntry entry) async {
+    await _treesCollection
+        .doc(treeId)
+        .collection('historic_ia')
+        .add(entry.toMap());
   }
 }

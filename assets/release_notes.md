@@ -1,5 +1,9 @@
 ﻿# Release Notes
 
+## v1.4.1
+Millora de la fitxa dels arbres. Connexio correcta amb la IA. Històric de reg
+## v1.4.1
+Millora de la fitxa dels arbres. Connexio correcta amb la IA. Històric de reg
 ## v1.4.0
 Afegida gestió d'Arbres. Identificació amb IA. Millora de gestió de Tasques.
 ## v1.3.0
@@ -25,6 +29,8 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - VersiÃ³ inicial amb Dashboard i Pissarra de Tasques.
+
+
 
 
 

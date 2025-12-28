@@ -106,10 +106,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                           // Navigate to Tree Detail
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (context) => Scaffold(
-                                appBar: AppBar(title: Text(t.species)),
-                                body: TreeDetail(tree: t),
-                              ),
+                              builder: (context) => TreeDetail(tree: t),
                             ),
                           );
                         },

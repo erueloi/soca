@@ -1,6 +1,4 @@
-import 'dart:convert';
 import 'dart:io';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../domain/entities/tree.dart';
 import '../providers/trees_provider.dart';
+import '../../../../core/services/ai_service.dart';
 
 class TreeFormSheet extends ConsumerStatefulWidget {
   final Tree? tree;
@@ -54,15 +53,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
     setState(() => _isSaving = true);
 
     try {
-      final bytes = await _imageFile!.readAsBytes();
-      final base64Image = base64Encode(bytes);
-
-      final result = await FirebaseFunctions.instance
-          .httpsCallable('identifyTree')
-          .call({'image': base64Image, 'mimeType': 'image/jpeg'});
-
-      final data = result.data as Map;
-      final info = Map<String, dynamic>.from(data);
+      final info = await ref.read(aiServiceProvider).identifyTree(_imageFile!);
 
       if (mounted) {
         setState(() {
@@ -185,6 +176,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
   Future<void> _pickImage() async {
     final XFile? pickedFile = await _picker.pickImage(
       source: ImageSource.camera,
+      imageQuality: 50,
     );
     if (pickedFile != null) {
       setState(() {

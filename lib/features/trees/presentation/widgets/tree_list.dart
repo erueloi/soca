@@ -80,12 +80,7 @@ class TreeList extends ConsumerWidget {
             if (MediaQuery.of(context).size.width <= 600) {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => Scaffold(
-                    appBar: AppBar(title: Text(tree.commonName)),
-                    body: TreeDetail(tree: tree),
-                  ),
-                ),
+                MaterialPageRoute(builder: (_) => TreeDetail(tree: tree)),
               );
             }
           },
