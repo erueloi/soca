@@ -174,8 +174,11 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
   }
 
   Future<void> _pickImage() async {
+    final source = await _showImageSourceActionSheet(context);
+    if (source == null) return;
+
     final XFile? pickedFile = await _picker.pickImage(
-      source: ImageSource.camera,
+      source: source,
       imageQuality: 50,
     );
     if (pickedFile != null) {
@@ -183,6 +186,30 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
         _imageFile = pickedFile;
       });
     }
+  }
+
+  Future<ImageSource?> _showImageSourceActionSheet(BuildContext context) async {
+    if (kIsWeb) return ImageSource.gallery;
+    return await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Fer Foto'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Triar de la Galeria'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _save() async {

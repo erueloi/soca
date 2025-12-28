@@ -139,4 +139,12 @@ class TreesRepository {
         .collection('historic_ia')
         .add(entry.toMap());
   }
+
+  Future<void> deleteAIHistoryEntry(String treeId, String entryId) async {
+    await _treesCollection
+        .doc(treeId)
+        .collection('historic_ia')
+        .doc(entryId)
+        .delete();
+  }
 }

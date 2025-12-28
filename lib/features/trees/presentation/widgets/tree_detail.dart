@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -42,6 +43,8 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
   late LatLng _location;
   late String _status;
   String? _vigor;
+
+  int _aiHistoryLimit = 3;
 
   @override
   void initState() {
@@ -164,17 +167,30 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
               ],
               flexibleSpace: FlexibleSpaceBar(
                 title: Text(
-                  _isEditing ? 'Editant...' : widget.tree.commonName,
+                  _isEditing
+                      ? 'Editant...'
+                      : '${widget.tree.commonName}\n(${widget.tree.species})',
                   style: const TextStyle(
                     color: Colors.white,
+                    fontSize: 16,
                     shadows: [Shadow(color: Colors.black45, blurRadius: 2)],
                   ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 background: Stack(
                   fit: StackFit.expand,
                   children: [
                     if (widget.tree.photoUrl != null)
-                      Image.network(widget.tree.photoUrl!, fit: BoxFit.cover)
+                      GestureDetector(
+                        onTap: () =>
+                            _showFullImage(context, widget.tree.photoUrl!),
+                        child: Image.network(
+                          widget.tree.photoUrl!,
+                          fit: BoxFit.cover,
+                        ),
+                      )
                     else
                       Container(color: Colors.green),
                     const DecoratedBox(
@@ -441,6 +457,38 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     }
   }
 
+  Future<void> _deleteAIEntry(String entryId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Esborrar registre'),
+        content: const Text(
+          'Estàs segur que vols esborrar aquest consell de l\'històric?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('CANCEL·LAR'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('ESBORRAR', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await ref
+          .read(treesRepositoryProvider)
+          .deleteAIHistoryEntry(widget.tree.id, entryId);
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Registre esborrat')));
+    }
+  }
+
   Widget _buildAIHistory(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -472,54 +520,80 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                 ),
               );
             }
-            return ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: entries.take(3).length, // Context: Show last 3
-              itemBuilder: (context, index) {
-                final entry = entries[index];
-                return Card(
-                  elevation: 0,
-                  color: Colors.indigo.shade50,
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+
+            final visibleEntries = entries.take(_aiHistoryLimit).toList();
+
+            return Column(
+              children: [
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: visibleEntries.length,
+                  itemBuilder: (context, index) {
+                    final entry = visibleEntries[index];
+                    return Card(
+                      elevation: 0,
+                      color: Colors.indigo.shade50,
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              DateFormat('dd/MM/yyyy').format(entry.date),
-                              style: TextStyle(
-                                color: Colors.indigo.shade800,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
                             Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                _buildTag(
-                                  entry.health,
-                                  _getStatusColor(entry.health),
+                                Text(
+                                  DateFormat('dd/MM/yyyy').format(entry.date),
+                                  style: TextStyle(
+                                    color: Colors.indigo.shade800,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
                                 ),
-                                const SizedBox(width: 4),
-                                _buildTag(entry.vigor, Colors.blue),
+                                Row(
+                                  children: [
+                                    _buildTag(
+                                      entry.health,
+                                      _getStatusColor(entry.health),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    _buildTag(entry.vigor, Colors.blue),
+                                    const SizedBox(width: 8),
+                                    InkWell(
+                                      onTap: () => _deleteAIEntry(
+                                        entry.id,
+                                      ), // Assuming entry has ID
+                                      child: const Icon(
+                                        Icons.delete_outline,
+                                        size: 20,
+                                        color: Colors.indigo,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              entry.advice,
+                              style: const TextStyle(fontSize: 14),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          entry.advice,
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                      ],
+                      ),
+                    );
+                  },
+                ),
+                if (entries.length > _aiHistoryLimit)
+                  TextButton(
+                    onPressed: () => setState(() => _aiHistoryLimit += 3),
+                    child: const Text(
+                      'VEURE MÉS',
+                      style: TextStyle(color: Colors.indigo),
                     ),
                   ),
-                );
-              },
+              ],
             );
           },
         ),
@@ -565,10 +639,12 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
           ],
 
           GridView.count(
-            crossAxisCount: 3,
+            crossAxisCount: MediaQuery.of(context).size.width > 600 ? 3 : 2,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 2.5,
+            childAspectRatio: MediaQuery.of(context).size.width > 600
+                ? 2.5
+                : 2.0,
             mainAxisSpacing: 8,
             crossAxisSpacing: 8,
             children: [
@@ -967,9 +1043,12 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
   }
 
   Future<void> _takeEvolutionPhoto(BuildContext context) async {
+    final source = await _showImageSourceActionSheet(context);
+    if (source == null) return;
+
     final picker = ImagePicker();
     final XFile? image = await picker.pickImage(
-      source: ImageSource.camera,
+      source: source,
       imageQuality: 80,
     );
 
@@ -1361,6 +1440,49 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
       default:
         return Colors.blueGrey;
     }
+  }
+
+  Future<ImageSource?> _showImageSourceActionSheet(BuildContext context) async {
+    if (kIsWeb) return ImageSource.gallery;
+    return await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Fer Foto'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Triar de la Galeria'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showFullImage(BuildContext context, String url) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            InteractiveViewer(child: Image.network(url, fit: BoxFit.contain)),
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.white, size: 30),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

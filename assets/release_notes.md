@@ -1,7 +1,7 @@
 ﻿# Release Notes
 
-## v1.4.1
-Millora de la fitxa dels arbres. Connexio correcta amb la IA. Històric de reg
+## v1.4.2
+Millora de la fitxa dels arbres. Petits retocs visuals.
 ## v1.4.1
 Millora de la fitxa dels arbres. Connexio correcta amb la IA. Històric de reg
 ## v1.4.0
@@ -22,13 +22,14 @@ OCR Analògic via Cloud Vision, Save tasks correctly firebase database.
 Persistència, Fotos i Desplegament Web
 ## v1.1.0
 - **Desplegament Web**: Ara pots accedir a l'app des del navegador.
-- **DescÃ rrega APK**: BotÃ³ directe per baixar l'app Android.
-- **PersistÃ¨ncia**: Totes les tasques es guarden al nÃºvol (Firestore).
-- **Fotos**: Ja pots adjuntar fotos a les tasques fent servir la cÃ mera.
-- **GestiÃ³ de Tasques**: AssignaciÃ³ a contactes, data lÃ­mit i fases.
+- **Descàrrega APK**: Bot directe per baixar l'app Android.
+- **Persistència**: Totes les tasques es guarden al núvol (Firestore).
+- **Fotos**: Ja pots adjuntar fotos a les tasques fent servir la càmera.
+- **Gestió de Tasques**: Assignació a contactes, data límit i fases.
 
 ## v1.0.0
-- VersiÃ³ inicial amb Dashboard i Pissarra de Tasques.
+- Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 
