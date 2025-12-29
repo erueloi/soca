@@ -179,17 +179,28 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
   }
 
   Future<void> _pickImage() async {
-    final source = await _showImageSourceActionSheet(context);
-    if (source == null) return;
+    try {
+      final source = await _showImageSourceActionSheet(context);
+      if (source == null) return;
 
-    final XFile? pickedFile = await _picker.pickImage(
-      source: source,
-      imageQuality: 50,
-    );
-    if (pickedFile != null) {
-      setState(() {
-        _imageFile = pickedFile;
-      });
+      final XFile? pickedFile = await _picker.pickImage(
+        source: source,
+        maxWidth: 2048,
+        maxHeight: 2048,
+      );
+
+      if (pickedFile != null) {
+        setState(() {
+          _imageFile = pickedFile;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error picking image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error seleccionant imatge: $e')),
+        );
+      }
     }
   }
 
@@ -524,7 +535,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
-                      key: ValueKey(_status),
+                      key: ValueKey('status_$_status'),
                       initialValue: _status,
                       decoration: const InputDecoration(
                         labelText: 'Estat',
@@ -549,7 +560,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                     const SizedBox(height: 16),
                     // Forestry Data
                     DropdownButtonFormField<String>(
-                      key: ValueKey(_ecologicalFunction),
+                      key: ValueKey('eco_$_ecologicalFunction'),
                       initialValue: _ecologicalFunction,
                       decoration: const InputDecoration(
                         labelText: 'Funció Ecològica',
@@ -572,7 +583,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
-                      key: ValueKey(_plantingFormat),
+                      key: ValueKey('format_$_plantingFormat'),
                       initialValue: _plantingFormat,
                       decoration: const InputDecoration(
                         labelText: 'Format de Plantació',
@@ -594,7 +605,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
-                      key: ValueKey(_vigor),
+                      key: ValueKey('vigor_$_vigor'),
                       initialValue: _vigor,
                       decoration: const InputDecoration(
                         labelText: 'Vigor',

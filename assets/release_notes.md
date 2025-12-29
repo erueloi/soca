@@ -1,5 +1,7 @@
 ﻿# Release Notes
 
+## v1.5.1
+Minor fixes on add tree.
 ## v1.5.0
 Widgets de Reg, Arbres i Tasques.
 ## v1.4.2
@@ -31,6 +33,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 
