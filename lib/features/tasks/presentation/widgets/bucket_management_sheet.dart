@@ -155,6 +155,16 @@ class _BucketManagementSheetState extends ConsumerState<BucketManagementSheet> {
     _saveBuckets();
   }
 
+  void _togglePin(int index) {
+    setState(() {
+      final bucket = _localBuckets[index];
+      _localBuckets[index] = bucket.copyWith(
+        showOnDashboard: !bucket.showOnDashboard,
+      );
+    });
+    _saveBuckets();
+  }
+
   @override
   Widget build(BuildContext context) {
     // We watch the provider to keep sync if externa changes happen,
@@ -245,6 +255,17 @@ class _BucketManagementSheetState extends ConsumerState<BucketManagementSheet> {
                                     : Colors.orange,
                               ),
                               onPressed: () => _toggleArchive(index),
+                            ),
+                            IconButton(
+                              icon: Icon(
+                                bucket.showOnDashboard
+                                    ? Icons.star
+                                    : Icons.star_border,
+                                color: bucket.showOnDashboard
+                                    ? Colors.amber
+                                    : Colors.grey,
+                              ),
+                              onPressed: () => _togglePin(index),
                             ),
                             IconButton(
                               icon: const Icon(Icons.edit, color: Colors.blue),

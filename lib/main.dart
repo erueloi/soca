@@ -7,8 +7,11 @@ import 'core/config/firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'features/dashboard/presentation/pages/home_page.dart';
 
+import 'package:intl/date_symbol_data_local.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('ca_ES', null);
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // Enable offline persistence

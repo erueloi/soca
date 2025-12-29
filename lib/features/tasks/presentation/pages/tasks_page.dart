@@ -8,7 +8,9 @@ import '../widgets/scan_whiteboard_sheet.dart';
 import '../widgets/bucket_management_sheet.dart';
 
 class TasksPage extends ConsumerStatefulWidget {
-  const TasksPage({super.key});
+  final String? initialBucketFilter;
+
+  const TasksPage({super.key, this.initialBucketFilter});
 
   @override
   ConsumerState<TasksPage> createState() => _TasksPageState();
@@ -124,6 +126,11 @@ class _TasksPageState extends ConsumerState<TasksPage> {
             // Filter out archived buckets
             final activeBuckets = allBuckets
                 .where((b) => !b.isArchived)
+                .where(
+                  (b) =>
+                      widget.initialBucketFilter == null ||
+                      b.name == widget.initialBucketFilter,
+                )
                 .toList();
 
             return Column(
@@ -172,7 +179,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                     return Container(
                       height: 80,
                       color: isHovering
-                          ? Colors.green.withOpacity(0.2)
+                          ? Colors.green.withValues(alpha: 0.2)
                           : Colors.transparent,
                       child: Center(
                         child: Row(
@@ -184,7 +191,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                                   : Icons.archive_outlined,
                               color: isHovering
                                   ? Colors.green
-                                  : Colors.grey.withOpacity(0.5),
+                                  : Colors.grey.withValues(alpha: 0.5),
                               size: 32,
                             ),
                             const SizedBox(width: 8),
@@ -195,7 +202,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                               style: TextStyle(
                                 color: isHovering
                                     ? Colors.green
-                                    : Colors.grey.withOpacity(0.5),
+                                    : Colors.grey.withValues(alpha: 0.5),
                                 fontWeight: FontWeight.bold,
                               ),
                             ),

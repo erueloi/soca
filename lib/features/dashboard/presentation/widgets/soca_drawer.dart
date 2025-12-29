@@ -3,6 +3,8 @@ import '../../../tasks/presentation/pages/tasks_page.dart';
 import '../../../contacts/presentation/pages/contacts_page.dart';
 import '../../../map/presentation/pages/map_page.dart';
 import '../../../trees/presentation/pages/trees_page.dart';
+import '../../../trees/presentation/pages/watering_page.dart';
+import '../../../settings/presentation/pages/farm_profile_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -66,6 +68,11 @@ class SocaDrawer extends StatelessWidget {
                   title: const Text('Reg'),
                   onTap: () {
                     Navigator.pop(context);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const WateringPage(),
+                      ),
+                    );
                   },
                 ),
                 ListTile(
@@ -107,6 +114,18 @@ class SocaDrawer extends StatelessWidget {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (context) => const ContactsPage(),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.settings),
+                  title: const Text('Configuració Finca'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const FarmProfilePage(),
                       ),
                     );
                   },

@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../domain/entities/watering_event.dart';
@@ -12,6 +13,7 @@ import '../../domain/entities/ai_analysis_entry.dart';
 import '../../../../core/services/ai_service.dart';
 
 import '../providers/trees_provider.dart';
+import '../pages/watering_page.dart';
 import '../../domain/entities/tree.dart';
 
 class TreeDetail extends ConsumerStatefulWidget {
@@ -49,7 +51,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _initializeControllers();
   }
 
@@ -164,6 +166,11 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                     }
                   },
                 ),
+                IconButton(
+                  icon: const Icon(Icons.water_drop, color: Colors.blueAccent),
+                  tooltip: 'Reg Ràpid',
+                  onPressed: () => _showQuickWateringSheet(context),
+                ),
               ],
               flexibleSpace: FlexibleSpaceBar(
                 title: Text(
@@ -216,7 +223,6 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                     Tab(text: 'Resum/IA'),
                     Tab(text: 'Tècnica'),
                     Tab(text: 'Ubicació'),
-                    Tab(text: 'Reg'),
                   ],
                 ),
               ),
@@ -230,7 +236,6 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
             _buildSummaryTab(),
             _buildTechnicalTab(),
             _buildLocationTab(),
-            _buildWateringTab(),
           ],
         ),
       ),
@@ -795,250 +800,447 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
               ),
             ),
           ),
+        if (!_isEditing)
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              vertical: 16.0,
+              horizontal: 16.0,
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          WateringPage(initialTreeId: widget.tree.id),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.history_edu),
+                label: const Text('VEURE HISTÒRIC DE REG'),
+              ),
+            ),
+          ),
       ],
     );
   }
 
-  Widget _buildWateringTab() {
-    return StreamBuilder<List<WateringEvent>>(
-      stream: ref
-          .watch(treesRepositoryProvider)
-          .getWateringEventsStream(widget.tree.id),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final events = snapshot.data ?? [];
+  // --- QUICK WATERING (Replaces Watering Tab) ---
 
-        // Calculate Totals
-        final now = DateTime.now();
-        final currentMonthEvents = events.where(
-          (e) => e.date.year == now.year && e.date.month == now.month,
-        );
-        final totalLiters = currentMonthEvents.fold(
-          0.0,
-          (sum, e) => sum + e.liters,
-        );
-        final lastRegDate = events.isNotEmpty ? events.first.date : null;
-
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+  void _showQuickWateringSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Summary Section
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  'Reg Ràpid: ${widget.tree.commonName}',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  Expanded(
-                    child: _buildCompactCard(
-                      'Total Mes',
-                      '${totalLiters.toStringAsFixed(1)} L',
-                      Icons.water_drop,
-                      Colors.blue,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildCompactCard(
-                      'Últim Reg',
-                      lastRegDate != null
-                          ? DateFormat('dd/MM').format(lastRegDate)
-                          : 'Mai',
-                      Icons.calendar_today,
-                      Colors.blueGrey,
-                    ),
-                  ),
+                  _buildWaterOption(context, 2),
+                  _buildWaterOption(context, 5),
+                  _buildWaterOption(context, 8),
+                  _buildCustomWaterOption(context),
                 ],
               ),
-              const SizedBox(height: 24),
-
-              // Add Button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  icon: const Icon(Icons.add),
-                  label: const Text('AFEGIR REG MANUAL'),
-                  onPressed: () => _showAddWateringDialog(context),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // History List
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Darrers Regs',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(height: 8),
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: events.take(5).length,
-                itemBuilder: (context, index) {
-                  final event = events[index];
-                  return Card(
-                    elevation: 1,
-                    margin: const EdgeInsets.only(bottom: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.blue.shade100,
-                        child: const Icon(Icons.water_drop, color: Colors.blue),
-                      ),
-                      title: Text(
-                        '${event.liters} Litres',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            DateFormat('dd/MM/yyyy HH:mm').format(event.date),
-                          ),
-                          if (event.note != null && event.note!.isNotEmpty)
-                            Text(
-                              event.note!,
-                              style: const TextStyle(
-                                fontStyle: FontStyle.italic,
-                                color: Colors.grey,
-                                fontSize: 12,
-                              ),
-                            ),
-                        ],
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => _confirmDeleteWatering(context, event),
-                      ),
-                    ),
-                  );
-                },
-              ),
+              const SizedBox(height: 16),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
-  Future<void> _confirmDeleteWatering(
-    BuildContext context,
-    WateringEvent event,
-  ) async {
-    final confirm = await showDialog<bool>(
+  Widget _buildWaterOption(BuildContext context, double liters) {
+    return ElevatedButton.icon(
+      style: ElevatedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        backgroundColor: Colors.blue.shade50,
+        foregroundColor: Colors.blue.shade800,
+      ),
+      onPressed: () async {
+        Navigator.pop(context);
+        final event = WateringEvent(
+          id: '',
+          date: DateTime.now(),
+          liters: liters,
+          note: 'Reg Ràpid',
+        );
+        await ref
+            .read(treesRepositoryProvider)
+            .addWateringEvent(widget.tree.id, event);
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Afegits ${liters.toInt()}L a ${widget.tree.commonName}',
+              ),
+            ),
+          );
+        }
+      },
+      icon: const Icon(Icons.water_drop),
+      label: Text('${liters.toInt()}L'),
+    );
+  }
+
+  Widget _buildCustomWaterOption(BuildContext context) {
+    return ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        backgroundColor: Colors.grey.shade100,
+        foregroundColor: Colors.black,
+      ),
+      onPressed: () {
+        Navigator.pop(context);
+        _showCustomWaterDialog(context);
+      },
+      child: const Text('Altres...'),
+    );
+  }
+
+  Future<void> _showCustomWaterDialog(BuildContext context) async {
+    final controller = TextEditingController();
+    return showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Esborrar Reg'),
-        content: const Text(
-          'Estàs segur que vols esborrar aquest registre de reg?',
+        title: const Text('Quantitat Personalitzada'),
+        content: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Litres',
+            suffixText: 'L',
+            border: OutlineInputBorder(),
+          ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(context),
             child: const Text('CANCEL·LAR'),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('ESBORRAR', style: TextStyle(color: Colors.red)),
+          ElevatedButton(
+            onPressed: () async {
+              final val = double.tryParse(controller.text);
+              if (val != null && val > 0) {
+                Navigator.pop(context);
+                final event = WateringEvent(
+                  id: '',
+                  date: DateTime.now(),
+                  liters: val,
+                  note: 'Reg Manual',
+                );
+                await ref
+                    .read(treesRepositoryProvider)
+                    .addWateringEvent(widget.tree.id, event);
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Afegits ${val.toInt()}L a ${widget.tree.commonName}',
+                      ),
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('GUARDAR'),
           ),
         ],
       ),
     );
-
-    if (confirm == true) {
-      await ref
-          .read(treesRepositoryProvider)
-          .deleteWateringEvent(widget.tree.id, event.id);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Reg esborrat correctament')),
-        );
-      }
-    }
   }
 
   // --- EVOLUTION ---
+
+  // --- EVOLUTION ---
+
+  // State for comparison
+  bool _isComparisonMode = false;
+  final List<String> _selectedForComparison = [];
 
   Widget _buildEvolutionGallery(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Diari Visual (Evolució)',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Diari Visual (Evolució)',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.indigo,
+              ),
+            ),
+            if (!_isEditing)
+              TextButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _isComparisonMode = !_isComparisonMode;
+                    _selectedForComparison.clear();
+                  });
+                },
+                icon: Icon(_isComparisonMode ? Icons.close : Icons.compare),
+                label: Text(_isComparisonMode ? 'CANCEL·LAR' : 'COMPARAR'),
+              ),
+          ],
         ),
+        if (_isComparisonMode)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Text(
+              'Selecciona 2 fotos per comparar (${_selectedForComparison.length}/2)',
+              style: TextStyle(
+                color: Colors.indigo.shade700,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ),
+        if (_isComparisonMode && _selectedForComparison.length == 2)
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _showComparisonView,
+              icon: const Icon(Icons.compare_arrows),
+              label: const Text('VEURE COMPARACIÓ'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.indigo,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ),
         const SizedBox(height: 12),
-        SizedBox(
-          height: 120,
-          child: StreamBuilder<List<EvolutionEntry>>(
-            stream: ref
-                .watch(treesRepositoryProvider)
-                .getEvolutionStream(widget.tree.id),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              final entries = snapshot.data ?? [];
+        StreamBuilder<List<EvolutionEntry>>(
+          stream: ref
+              .watch(treesRepositoryProvider)
+              .getEvolutionStream(widget.tree.id),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final entries = snapshot.data ?? [];
 
-              return ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: entries.length + 1, // +1 for Add Button
-                itemBuilder: (context, index) {
-                  if (index == 0) {
-                    // Add Button
-                    return Container(
-                      width: 90,
-                      margin: const EdgeInsets.only(right: 12),
+            if (entries.isEmpty) {
+              return _buildEmptyGalleryState();
+            }
+
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                childAspectRatio: 1,
+              ),
+              itemCount: entries.length + (_isEditing ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (_isEditing && index == 0) {
+                  // Add Button
+                  return InkWell(
+                    onTap: () => _takeEvolutionPhoto(context),
+                    child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.indigo.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: Colors.grey.shade400,
+                          color: Colors.indigo.withOpacity(0.3),
                           style: BorderStyle.solid,
                         ),
                       ),
-                      child: InkWell(
-                        onTap: () => _takeEvolutionPhoto(context),
-                        borderRadius: BorderRadius.circular(12),
-                        child: const Icon(
-                          Icons.add_a_photo,
-                          size: 32,
-                          color: Colors.blueGrey,
-                        ),
-                      ),
-                    );
-                  }
-
-                  final entry = entries[index - 1]; // Offset by 1
-                  return GestureDetector(
-                    onTap: () => _showEvolutionPhotoDetail(context, entry),
-                    child: Container(
-                      width: 90,
-                      margin: const EdgeInsets.only(right: 12),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        image: DecorationImage(
-                          image: NetworkImage(entry.photoUrl),
-                          fit: BoxFit.cover,
-                        ),
+                      child: const Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.add_a_photo,
+                            size: 30,
+                            color: Colors.indigo,
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Afegir',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.indigo,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   );
-                },
-              );
-            },
-          ),
+                }
+
+                final entry = entries[index - (_isEditing ? 1 : 0)];
+                final isSelected = _selectedForComparison.contains(
+                  entry.photoUrl,
+                );
+
+                return Stack(
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        if (_isComparisonMode) {
+                          setState(() {
+                            if (isSelected) {
+                              _selectedForComparison.remove(entry.photoUrl);
+                            } else {
+                              if (_selectedForComparison.length < 2) {
+                                _selectedForComparison.add(entry.photoUrl);
+                              }
+                            }
+                          });
+                        } else {
+                          _showEvolutionPhotoDetail(context, entry);
+                        }
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: isSelected
+                              ? Border.all(color: Colors.indigo, width: 3)
+                              : null,
+                          image: DecorationImage(
+                            image: NetworkImage(entry.photoUrl),
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 2,
+                          horizontal: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.6),
+                          borderRadius: const BorderRadius.only(
+                            bottomLeft: Radius.circular(8),
+                            bottomRight: Radius.circular(8),
+                          ),
+                        ),
+                        child: Text(
+                          DateFormat('dd/MM/yy').format(entry.date),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                    if (_isComparisonMode && isSelected)
+                      const Positioned(
+                        top: 4,
+                        right: 4,
+                        child: Icon(
+                          Icons.check_circle,
+                          color: Colors.indigo,
+                          size: 20,
+                        ),
+                      ),
+                  ],
+                );
+              },
+            );
+          },
         ),
       ],
+    );
+  }
+
+  void _showComparisonView() {
+    if (_selectedForComparison.length != 2) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          appBar: AppBar(title: const Text('Comparació d\'Evolució')),
+          body: Column(
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: InteractiveViewer(
+                        child: Image.network(
+                          _selectedForComparison[0],
+                          fit: BoxFit.contain,
+                          width: double.infinity,
+                          height: double.infinity,
+                        ),
+                      ),
+                    ),
+                    Container(width: 2, color: Colors.white),
+                    Expanded(
+                      child: InteractiveViewer(
+                        child: Image.network(
+                          _selectedForComparison[1],
+                          fit: BoxFit.contain,
+                          width: double.infinity,
+                          height: double.infinity,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyGalleryState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          children: [
+            Icon(
+              Icons.photo_library_outlined,
+              size: 48,
+              color: Colors.grey.shade300,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Encara no hi ha fotos.',
+              style: TextStyle(color: Colors.grey),
+            ),
+            if (_isEditing) ...[
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: () => _takeEvolutionPhoto(context),
+                icon: const Icon(Icons.add_a_photo),
+                label: const Text('AFEGIR PRIMERA FOTO'),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -1196,78 +1398,6 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                 ],
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showAddWateringDialog(BuildContext context) {
-    final litersController = TextEditingController();
-    final noteController = TextEditingController();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-          left: 16,
-          right: 16,
-          top: 16,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Nou Reg Manual',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: litersController,
-              keyboardType: TextInputType.number,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Litres',
-                border: OutlineInputBorder(),
-                suffixText: 'L',
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: noteController,
-              decoration: const InputDecoration(
-                labelText: 'Comentari (opcional)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () async {
-                final liters = double.tryParse(litersController.text);
-                if (liters != null) {
-                  final event = WateringEvent(
-                    id: '', // Generated by Firestore or ignored on add
-                    date: DateTime.now(),
-                    liters: liters,
-                    note: noteController.text,
-                  );
-                  await ref
-                      .read(treesRepositoryProvider)
-                      .addWateringEvent(widget.tree.id, event);
-                  if (context.mounted) Navigator.pop(context);
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              child: const Text('GUARDAR REG'),
-            ),
-            const SizedBox(height: 24),
           ],
         ),
       ),
@@ -1513,11 +1643,53 @@ class _LocationPickerPage extends StatefulWidget {
 class _LocationPickerPageState extends State<_LocationPickerPage> {
   late LatLng _currentLocation;
   final MapController _mapController = MapController();
+  int _currentLayerIndex = 0; // 0: Ortho (Sat), 1: Topo (Map)
+  bool _isLoadingLocation = false;
+
+  static const List<String> _layerUrls = [
+    'https://geoserveis.icgc.cat/icc_mapesmultibase/noutm/wmts/orto/GRID3857/{z}/{x}/{y}.jpeg',
+    'https://geoserveis.icgc.cat/icc_mapesmultibase/noutm/wmts/topo/GRID3857/{z}/{x}/{y}.jpeg',
+  ];
 
   @override
   void initState() {
     super.initState();
     _currentLocation = widget.initialLocation;
+  }
+
+  Future<void> _moveToCurrentLocation() async {
+    setState(() => _isLoadingLocation = true);
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        throw Exception('Location services are disabled.');
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          throw Exception('Location permissions are denied');
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        throw Exception('Location permissions are permanently denied.');
+      }
+
+      Position position = await Geolocator.getCurrentPosition();
+      final newLoc = LatLng(position.latitude, position.longitude);
+      setState(() => _currentLocation = newLoc);
+      _mapController.move(newLoc, 18);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error GPS: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoadingLocation = false);
+    }
   }
 
   @override
@@ -1545,9 +1717,9 @@ class _LocationPickerPageState extends State<_LocationPickerPage> {
             ),
             children: [
               TileLayer(
-                urlTemplate:
-                    'https://geoserveis.icgc.cat/icc_mapesmultibase/noutm/wmts/orto/GRID3857/{z}/{x}/{y}.jpeg',
+                urlTemplate: _layerUrls[_currentLayerIndex],
                 userAgentPackageName: 'com.soca.app',
+                maxZoom: 20,
               ),
               MarkerLayer(
                 markers: [
@@ -1563,12 +1735,55 @@ class _LocationPickerPageState extends State<_LocationPickerPage> {
               ),
             ],
           ),
+          // Controls
+          Positioned(
+            top: 20,
+            right: 20,
+            child: Column(
+              children: [
+                FloatingActionButton(
+                  heroTag: 'layer_switch',
+                  mini: true,
+                  backgroundColor: Colors.white,
+                  onPressed: () {
+                    setState(() {
+                      _currentLayerIndex =
+                          (_currentLayerIndex + 1) % _layerUrls.length;
+                    });
+                  },
+                  child: Icon(
+                    _currentLayerIndex == 0 ? Icons.map : Icons.satellite,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                FloatingActionButton(
+                  heroTag: 'my_location',
+                  mini: true,
+                  backgroundColor: Colors.white,
+                  onPressed: _isLoadingLocation ? null : _moveToCurrentLocation,
+                  child: _isLoadingLocation
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.my_location, color: Colors.blue),
+                ),
+              ],
+            ),
+          ),
           Positioned(
             bottom: 20,
             left: 20,
             right: 20,
             child: ElevatedButton(
               onPressed: () => Navigator.pop(context, _currentLocation),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                backgroundColor: Theme.of(context).primaryColor,
+                foregroundColor: Colors.white,
+              ),
               child: const Text('CONFIRMAR POSICIÓ'),
             ),
           ),

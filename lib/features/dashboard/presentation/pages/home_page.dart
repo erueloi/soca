@@ -9,12 +9,21 @@ import '../widgets/weather_widget.dart';
 import '../../../../features/tasks/presentation/pages/tasks_page.dart';
 import '../../../contacts/presentation/pages/contacts_page.dart';
 import '../../../map/presentation/pages/map_page.dart';
-import '../../../trees/presentation/pages/trees_page.dart'; // Add TreesPage import
+import '../../../trees/presentation/pages/trees_page.dart';
+import '../../../trees/presentation/pages/watering_page.dart';
+import '../../../settings/presentation/pages/farm_profile_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  bool? _isRailExtended;
 
   void _navigateToTasks(BuildContext context) {
     Navigator.of(
@@ -41,6 +50,10 @@ class HomePage extends StatelessWidget {
         // Breakpoint for Tablet (e.g. 800px)
         final bool isWideScreen = constraints.maxWidth > 800;
 
+        // Auto-extended if very wide (> 1200), unless manually toggled
+        final bool autoExtended = constraints.maxWidth > 1200;
+        final bool isRailExtended = _isRailExtended ?? autoExtended;
+
         return Scaffold(
           appBar: isWideScreen ? null : AppBar(title: const Text('Soca')),
           drawer: isWideScreen ? null : const SocaDrawer(),
@@ -49,37 +62,44 @@ class HomePage extends StatelessWidget {
               if (isWideScreen)
                 NavigationRail(
                   selectedIndex: 0,
-                  extended:
-                      constraints.maxWidth > 1200, // Collapsible on tablet
+                  extended: isRailExtended,
                   backgroundColor: Theme.of(context).colorScheme.surface,
                   selectedIconTheme: IconThemeData(
                     color: Theme.of(context).colorScheme.primary,
                   ),
-                  leading: Column(
-                    children: [
-                      const SizedBox(height: 16),
-                      Icon(
-                        Icons.spa,
-                        size: 40,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      if (constraints.maxWidth > 1200) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Soca',
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.primary,
-                                fontWeight: FontWeight.bold,
-                              ),
+                  leading: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        // Toggle state. If it was null (auto), we flip auto.
+                        _isRailExtended = !isRailExtended;
+                      });
+                    },
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 16),
+                        Icon(
+                          Icons.spa,
+                          size: 40,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
-                        Text(
-                          'Molí de Cal Jeroni',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
+                        if (isRailExtended) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Soca',
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                          ),
+                          Text(
+                            'Molí de Cal Jeroni',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                        const SizedBox(height: 24),
                       ],
-                      const SizedBox(height: 24),
-                    ],
+                    ),
                   ),
                   onDestinationSelected: (int index) {
                     if (index == 1) {
@@ -95,6 +115,18 @@ class HomePage extends StatelessWidget {
                       _navigateToTasks(context);
                     } else if (index == 6) {
                       _navigateToContacts(context);
+                    } else if (index == 2) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const WateringPage(),
+                        ),
+                      );
+                    } else if (index == 7) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const FarmProfilePage(),
+                        ),
+                      );
                     }
                   },
                   trailing: Expanded(
@@ -111,7 +143,9 @@ class HomePage extends StatelessWidget {
                               Icons.android,
                               color: Colors.green,
                             ),
-                            label: const Text('App'),
+                            label: isRailExtended
+                                ? const Text('App')
+                                : const SizedBox.shrink(),
                           ),
                           const SizedBox(height: 8),
                           // Release Notes / Version
@@ -203,6 +237,11 @@ class HomePage extends StatelessWidget {
                       icon: Icon(Icons.people_alt_outlined),
                       selectedIcon: Icon(Icons.people_alt),
                       label: Text('Contactes'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.settings_outlined),
+                      selectedIcon: Icon(Icons.settings),
+                      label: Text('Configuració'),
                     ),
                   ],
                 ),

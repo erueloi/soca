@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../domain/entities/tree.dart';
 import '../providers/trees_provider.dart';
 import '../../../../core/services/ai_service.dart';
+import '../../../settings/presentation/providers/settings_provider.dart';
 
 class TreeFormSheet extends ConsumerStatefulWidget {
   final Tree? tree;
@@ -43,10 +44,11 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
 
   Future<void> _identifyTree() async {
     if (_imageFile == null) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Primer fes una foto.')));
+      }
       return;
     }
 
@@ -57,10 +59,12 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
 
       if (mounted) {
         setState(() {
-          if (info['species'] != null)
+          if (info['species'] != null) {
             _speciesController.text = info['species'];
-          if (info['commonName'] != null)
+          }
+          if (info['commonName'] != null) {
             _commonNameController.text = info['commonName'];
+          }
 
           final status = info['status'];
           if (['Viable', 'Malalt', 'Mort'].contains(status)) {
@@ -78,10 +82,11 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
       }
     } catch (e) {
       debugPrint('AI Error: $e');
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Error IA: $e')));
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -385,9 +390,11 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.1),
+                        color: Colors.blue.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                        border: Border.all(
+                          color: Colors.blue.withValues(alpha: 0.3),
+                        ),
                       ),
                       child: Row(
                         children: [
@@ -455,9 +462,70 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                       validator: (v) =>
                           v!.isEmpty ? 'Cal posar l\'espècie' : null,
                     ),
+
+                    const SizedBox(height: 16),
+                    // Zone Dropdown (Dynamic from FarmConfig)
+                    Consumer(
+                      builder: (context, ref, child) {
+                        final configAsync = ref.watch(farmConfigStreamProvider);
+                        return configAsync.when(
+                          data: (config) {
+                            if (config.zones.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                DropdownButtonFormField<String>(
+                                  decoration: const InputDecoration(
+                                    labelText: 'Zona',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  items: config.zones.map((zone) {
+                                    // Default to grey if hex is invalid, though validation ensures it's hex.
+                                    // We assume colorHex is 'FFFF0000' or similar int.toRadixString(16).
+                                    Color color;
+                                    try {
+                                      color = Color(int.parse(zone.colorHex));
+                                    } catch (_) {
+                                      color = Colors.grey;
+                                    }
+
+                                    return DropdownMenuItem(
+                                      value: zone.name,
+                                      child: Row(
+                                        children: [
+                                          CircleAvatar(
+                                            backgroundColor: color,
+                                            radius: 8,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(zone.name),
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                  onChanged: (v) {
+                                    // Only visual for now, as Tree doesn't have 'zone' field yet.
+                                    // I will add 'zone' field to Tree entity in next step.
+                                    if (v != null) {
+                                      // _zone = v;
+                                    }
+                                  },
+                                ),
+                                const SizedBox(height: 16),
+                              ],
+                            );
+                          },
+                          loading: () => const LinearProgressIndicator(),
+                          error: (e, s) => const SizedBox.shrink(),
+                        );
+                      },
+                    ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
-                      value: _status,
+                      key: ValueKey(_status),
+                      initialValue: _status,
                       decoration: const InputDecoration(
                         labelText: 'Estat',
                         border: OutlineInputBorder(),
@@ -481,7 +549,8 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                     const SizedBox(height: 16),
                     // Forestry Data
                     DropdownButtonFormField<String>(
-                      value: _ecologicalFunction,
+                      key: ValueKey(_ecologicalFunction),
+                      initialValue: _ecologicalFunction,
                       decoration: const InputDecoration(
                         labelText: 'Funció Ecològica',
                         border: OutlineInputBorder(),
@@ -503,7 +572,8 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
-                      value: _plantingFormat,
+                      key: ValueKey(_plantingFormat),
+                      initialValue: _plantingFormat,
                       decoration: const InputDecoration(
                         labelText: 'Format de Plantació',
                         border: OutlineInputBorder(),
@@ -524,7 +594,8 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
-                      value: _vigor,
+                      key: ValueKey(_vigor),
+                      initialValue: _vigor,
                       decoration: const InputDecoration(
                         labelText: 'Vigor',
                         border: OutlineInputBorder(),

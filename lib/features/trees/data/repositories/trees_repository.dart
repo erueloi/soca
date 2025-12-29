@@ -72,11 +72,81 @@ class TreesRepository {
   }
 
   Future<void> addWateringEvent(String treeId, WateringEvent event) async {
-    await _treesCollection.doc(treeId).collection('regs').add(event.toMap());
+    // Ensure treeId is in the event map
+    final map = event.toMap();
+    map['treeId'] = treeId;
+    await _treesCollection.doc(treeId).collection('regs').add(map);
+  }
+
+  Future<void> updateWateringEvent(String treeId, WateringEvent event) async {
+    // Ensure treeId is in the event map
+    final map = event.toMap();
+    map['treeId'] = treeId;
+    await _treesCollection
+        .doc(treeId)
+        .collection('regs')
+        .doc(event.id)
+        .update(map);
   }
 
   Future<void> deleteWateringEvent(String treeId, String eventId) async {
     await _treesCollection.doc(treeId).collection('regs').doc(eventId).delete();
+  }
+
+  // --- Global Watering Vision ---
+
+  Stream<List<WateringEvent>> getGlobalWateringEvents({
+    DateTime? startDate,
+    DateTime? endDate,
+    String? treeId,
+    int days = 7, // Fallback if no dates provided
+  }) {
+    Query query = FirebaseFirestore.instance.collectionGroup('regs');
+
+    if (startDate != null && endDate != null) {
+      // Use provided range
+      // Important to set start time to 00:00:00 and end time to 23:59:59
+      final start = DateTime(
+        startDate.year,
+        startDate.month,
+        startDate.day,
+        0,
+        0,
+        0,
+      );
+      final end = DateTime(
+        endDate.year,
+        endDate.month,
+        endDate.day,
+        23,
+        59,
+        59,
+      );
+      query = query
+          .where('date', isGreaterThanOrEqualTo: start)
+          .where('date', isLessThanOrEqualTo: end);
+    } else {
+      // Fallback to last N days
+      final cutoff = DateTime.now().subtract(Duration(days: days));
+      query = query.where('date', isGreaterThanOrEqualTo: cutoff);
+    }
+
+    if (treeId != null) {
+      // NOTE: This might require a Composite Index (treeId + date)
+      // The user already knows about index creation requirements.
+      // But 'treeId' is a field inside the document data, not always indexed equaly in collection group queries if not explicitly set.
+      // Wait, watering events have 'treeId' field inside? Yes.
+      query = query.where('treeId', isEqualTo: treeId);
+    }
+
+    return query.orderBy('date', descending: true).snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        return WateringEvent.fromMap(
+          doc.data() as Map<String, dynamic>,
+          doc.id,
+        );
+      }).toList();
+    });
   }
 
   // --- Evolution ---

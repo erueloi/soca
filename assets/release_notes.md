@@ -1,5 +1,7 @@
 ﻿# Release Notes
 
+## v1.5.0
+Widgets de Reg, Arbres i Tasques.
 ## v1.4.2
 Millora de la fitxa dels arbres. Petits retocs visuals.
 ## v1.4.1
@@ -29,6 +31,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

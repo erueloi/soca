@@ -39,7 +39,6 @@ class AIService {
         advice: data['advice'] ?? 'Sense consells.',
       );
     } catch (e) {
-      print('Cloud Function Error: $e');
       throw Exception('Error connectant amb IA: $e');
     }
   }
@@ -60,7 +59,6 @@ class AIService {
 
       return Map<String, dynamic>.from(result.data);
     } catch (e) {
-      print('Cloud Function (identify) Error: $e');
       throw Exception('Error identificant arbre: $e');
     }
   }

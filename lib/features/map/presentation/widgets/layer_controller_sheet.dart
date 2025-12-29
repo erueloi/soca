@@ -1,0 +1,59 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/map_layers_provider.dart';
+
+class LayerControllerSheet extends ConsumerWidget {
+  const LayerControllerSheet({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final layers = ref.watch(mapLayersProvider);
+    final notifier = ref.read(mapLayersProvider.notifier);
+
+    return Container(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.layers, size: 28),
+              const SizedBox(width: 8),
+              Text(
+                'Capes del Mapa',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SwitchListTile(
+            title: const Text('Tasques'),
+            subtitle: const Text('Mostra marcadors de tasques pendents'),
+            secondary: const Icon(
+              Icons.check_circle_outline,
+              color: Colors.orange,
+            ),
+            value: layers[MapLayer.tasks] ?? true,
+            onChanged: (val) => notifier.toggleLayer(MapLayer.tasks),
+          ),
+          SwitchListTile(
+            title: const Text('Zones de Reg'),
+            subtitle: const Text('Mostra les àrees de reg (A/B)'),
+            secondary: const Icon(Icons.grass, color: Colors.blue),
+            value: layers[MapLayer.irrigationZones] ?? false,
+            onChanged: (val) => notifier.toggleLayer(MapLayer.irrigationZones),
+          ),
+          SwitchListTile(
+            title: const Text('Salut dels Arbres'),
+            subtitle: const Text('Codifica els arbres per color segons salut'),
+            secondary: const Icon(Icons.health_and_safety, color: Colors.red),
+            value: layers[MapLayer.healthStatus] ?? false,
+            onChanged: (val) => notifier.toggleLayer(MapLayer.healthStatus),
+          ),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+}
