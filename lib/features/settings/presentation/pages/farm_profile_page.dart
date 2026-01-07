@@ -3,6 +3,8 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:soca/features/settings/domain/entities/farm_config.dart';
+import '../../../../core/services/meteocat_service.dart';
+import '../../../climate/data/repositories/climate_repository.dart';
 import '../providers/settings_provider.dart';
 
 import 'package:soca/features/settings/presentation/widgets/zone_edit_dialog.dart';
@@ -24,6 +26,7 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
   final MapController _mapController = MapController();
 
   List<FarmZone> _zones = [];
+  String? _stationCode; // Hoist state
 
   bool _isSaving = false;
 
@@ -61,6 +64,10 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
     // Ideally we track if we initialized.
     if (_zones.isEmpty && config.zones.isNotEmpty) {
       _zones = List.from(config.zones);
+    }
+    // Init station code if not set locally
+    if (_stationCode == null && config.meteocatStationCode != null) {
+      _stationCode = config.meteocatStationCode;
     }
   }
 
@@ -105,7 +112,7 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
         latitude: _mapCenter?.latitude,
         longitude: _mapCenter?.longitude,
         zoom: _mapController.camera.zoom,
-        zones: _zones,
+        meteocatStationCode: _stationCode ?? currentConfig.meteocatStationCode,
       );
 
       await ref.read(settingsRepositoryProvider).saveFarmConfig(newConfig);
@@ -283,6 +290,23 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
                     );
                   }),
                 const SizedBox(height: 24),
+
+                // --- Meteocat Integration Section ---
+                const Text(
+                  'Integració Meteocat',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                _MeteocatSection(
+                  latitude: _mapCenter?.latitude ?? config.latitude,
+                  longitude: _mapCenter?.longitude ?? config.longitude,
+                  initialStationCode: config.meteocatStationCode,
+                  onStationChanged: (code) {
+                    setState(() => _stationCode = code);
+                  },
+                ),
+
+                const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -315,5 +339,249 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
         error: (e, s) => Center(child: Text('Error: $e')),
       ),
     );
+  }
+}
+
+class _MeteocatSection extends ConsumerStatefulWidget {
+  final double latitude;
+  final double longitude;
+  final String? initialStationCode;
+  final Function(String) onStationChanged;
+
+  const _MeteocatSection({
+    required this.latitude,
+    required this.longitude,
+    this.initialStationCode,
+    required this.onStationChanged,
+  });
+
+  @override
+  ConsumerState<_MeteocatSection> createState() => _MeteocatSectionState();
+}
+
+class _MeteocatSectionState extends ConsumerState<_MeteocatSection> {
+  String? _stationCode;
+  Map<String, dynamic>? _quota;
+  bool _loading = false;
+  bool _quotaSaverEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final service = ref.read(meteocatServiceProvider);
+
+    // Load Station - Prefer prop if fresh load, else cache
+    // Actually, local cache is "source of truth for this device until save"
+    // BUT we want to show what's in Config if provided.
+    // Let's use service cache as base, but if widget prop is set, maybe that?
+    // Let's stick to: Service finds it.
+
+    String? code = await service.getCachedStationCode();
+    // If cache matches initial, good. If initial is different (from Firestore), show initial?
+    if (widget.initialStationCode != null &&
+        widget.initialStationCode != code) {
+      code = widget.initialStationCode;
+      // Also sync service locally
+      await service.setCachedStation(code!);
+    }
+
+    // Load Quota
+    final quota = await service.getQuota();
+
+    // Load Saver Status
+    final saver = await service.isQuotaSaverEnabled;
+
+    if (mounted) {
+      setState(() {
+        _stationCode = code;
+        _quota = quota;
+        _quotaSaverEnabled = saver;
+      });
+      // Notify parent of initial load
+      if (code != null) widget.onStationChanged(code);
+    }
+  }
+
+  Future<void> _refreshStation() async {
+    setState(() => _loading = true);
+    try {
+      final service = ref.read(meteocatServiceProvider);
+      final newCode = await service.refreshStation(
+        widget.latitude,
+        widget.longitude,
+      );
+
+      if (mounted) {
+        setState(() => _stationCode = newCode);
+        widget.onStationChanged(newCode!); // Notify Parent
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Estació actualitzada: $newCode')),
+        );
+        // Refresh quota too just in case
+        _loadData();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error actualitzant estació: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.cloud, color: Colors.blueAccent),
+                const SizedBox(width: 8),
+                Text(
+                  'Estació Meteocat: ${_stationCode ?? "Desconeguda"}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Basada en: ${widget.latitude.toStringAsFixed(4)}, ${widget.longitude.toStringAsFixed(4)}',
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            if (_loading)
+              const Center(child: CircularProgressIndicator())
+            else
+              Column(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _refreshStation,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Actualitzar estació (segons mapa)'),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: () async {
+                      final repo = ref.read(climateRepositoryProvider);
+                      await repo.generateMockData();
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Dades Mock Generades! 🧪'),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.science, color: Colors.orange),
+                    label: const Text('Generar Dades Test (Mock)'),
+                  ),
+                ],
+              ),
+            const Divider(height: 24),
+            const Text(
+              'Consum API',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            if (_quota == null)
+              const Text('Carregant quota...')
+            else if (_quota!.containsKey('error'))
+              Text(
+                'Error: ${_quota!['error']}',
+                style: const TextStyle(color: Colors.red),
+              )
+            else ...[
+              _buildQuotaInfo(_quota!),
+            ],
+            const SizedBox(height: 16),
+            // Quota Saver Toggle
+            SwitchListTile(
+              title: const Text('Mode Estalvi de Quota'),
+              subtitle: const Text(
+                'Si s\'activa, no es descarregaran dades històriques per estalviar API.',
+              ),
+              value: _quotaSaverEnabled,
+              secondary: Icon(
+                _quotaSaverEnabled ? Icons.savings : Icons.history,
+                color: _quotaSaverEnabled ? Colors.green : Colors.grey,
+              ),
+              onChanged: (val) {
+                _toggleQuotaSaver(val);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _toggleQuotaSaver(bool enabled) async {
+    final service = ref.read(meteocatServiceProvider);
+    await service.setQuotaSaver(enabled);
+    setState(() => _quotaSaverEnabled = enabled);
+
+    // Show simplified value (don't refresh quota as user might be saving)
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            enabled ? 'Mode Estalvi Activat 🛡️' : 'Mode Estalvi Desactivat 🌍',
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _buildQuotaInfo(Map<String, dynamic> data) {
+    try {
+      final plans = data['plans'] as List;
+      if (plans.isEmpty) return const Text('Sense plans actius');
+
+      // Assume first plan is the relevant one or look for one with limits
+      final plan = plans.firstWhere(
+        (p) => p.containsKey('maxConsultes'),
+        orElse: () => plans.first,
+      );
+
+      final max = plan['maxConsultes'] ?? 0;
+      final remaining = plan['consultesRestants'] ?? 0;
+      final used = max - remaining;
+      final percent = max > 0 ? (used / max) : 0.0;
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Pla: ${plan['nom'] ?? "Desconegut"}'),
+          const SizedBox(height: 4),
+          LinearProgressIndicator(
+            value: percent.toDouble(),
+            backgroundColor: Colors.grey[200],
+            color: (percent > 0.9) ? Colors.red : Colors.green,
+            minHeight: 8,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '$used / $max consultes (${(percent * 100).toStringAsFixed(1)}%)',
+            style: const TextStyle(fontSize: 12),
+          ),
+        ],
+      );
+    } catch (e) {
+      return const Text('Format de quota desconegut');
+    }
   }
 }

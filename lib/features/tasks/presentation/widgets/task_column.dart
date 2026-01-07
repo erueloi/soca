@@ -87,6 +87,7 @@ class TaskColumn extends StatelessWidget {
               const Divider(height: 1),
               Expanded(
                 child: ReorderableListView.builder(
+                  buildDefaultDragHandles: false,
                   padding: const EdgeInsets.all(8),
                   itemCount: tasks.length,
                   onReorder: (oldIndex, newIndex) {

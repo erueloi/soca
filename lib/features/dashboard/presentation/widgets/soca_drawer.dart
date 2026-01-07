@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../features/climate/presentation/pages/clima_page.dart';
 import '../../../tasks/presentation/pages/tasks_page.dart';
 import '../../../contacts/presentation/pages/contacts_page.dart';
 import '../../../map/presentation/pages/map_page.dart';
@@ -60,6 +61,18 @@ class SocaDrawer extends StatelessWidget {
                     Navigator.pop(context);
                     Navigator.of(context).push(
                       MaterialPageRoute(builder: (context) => const MapPage()),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.cloud_outlined),
+                  title: const Text('Clima'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const ClimaPage(),
+                      ),
                     );
                   },
                 ),

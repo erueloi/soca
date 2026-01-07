@@ -170,6 +170,29 @@ class TaskCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (task.totalBudget > 0)
+                  Container(
+                    margin: const EdgeInsets.only(left: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: Colors.green.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Text(
+                      '${task.totalBudget.toStringAsFixed(2)}€',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: Colors.green,
+                      ),
+                    ),
+                  ),
               ],
             ),
             if (task.dueDate != null) ...[

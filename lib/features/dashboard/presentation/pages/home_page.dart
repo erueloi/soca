@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../features/climate/presentation/pages/clima_page.dart';
 
 import '../widgets/irrigation_widget.dart';
 import '../widgets/soca_drawer.dart';
@@ -181,20 +182,26 @@ class _HomePageState extends State<HomePage> {
                           builder: (context) => const MapPage(),
                         ),
                       );
-                    } else if (index == 3) {
+                    } else if (index == 2) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const ClimaPage(),
+                        ),
+                      );
+                    } else if (index == 4) {
                       // Arbres index
                       _navigateToTrees(context);
-                    } else if (index == 5) {
-                      _navigateToTasks(context);
                     } else if (index == 6) {
+                      _navigateToTasks(context);
+                    } else if (index == 7) {
                       _navigateToContacts(context);
-                    } else if (index == 2) {
+                    } else if (index == 3) {
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (context) => const WateringPage(),
                         ),
                       );
-                    } else if (index == 7) {
+                    } else if (index == 8) {
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (context) => const FarmProfilePage(),
@@ -285,6 +292,11 @@ class _HomePageState extends State<HomePage> {
                       icon: Icon(Icons.map_outlined),
                       selectedIcon: Icon(Icons.map),
                       label: Text('Mapa'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.cloud_outlined),
+                      selectedIcon: Icon(Icons.cloud),
+                      label: Text('Clima'),
                     ),
                     NavigationRailDestination(
                       icon: Icon(Icons.water_drop_outlined),

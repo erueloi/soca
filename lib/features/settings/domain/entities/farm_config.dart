@@ -6,6 +6,7 @@ class FarmConfig {
   final double longitude;
   final double zoom;
   final List<FarmZone> zones;
+  final String? meteocatStationCode;
 
   const FarmConfig({
     required this.name,
@@ -15,6 +16,7 @@ class FarmConfig {
     required this.longitude,
     required this.zoom,
     required this.zones,
+    this.meteocatStationCode,
   });
 
   factory FarmConfig.empty() {
@@ -26,6 +28,7 @@ class FarmConfig {
       longitude: 0.9185921,
       zoom: 16.0,
       zones: [],
+      meteocatStationCode: null,
     );
   }
 
@@ -38,6 +41,7 @@ class FarmConfig {
       'longitude': longitude,
       'zoom': zoom,
       'zones': zones.map((z) => z.toMap()).toList(),
+      'meteocatStationCode': meteocatStationCode,
     };
   }
 
@@ -54,6 +58,7 @@ class FarmConfig {
               ?.map((z) => FarmZone.fromMap(z))
               .toList() ??
           [],
+      meteocatStationCode: map['meteocatStationCode'],
     );
   }
 
@@ -65,6 +70,7 @@ class FarmConfig {
     double? longitude,
     double? zoom,
     List<FarmZone>? zones,
+    String? meteocatStationCode,
   }) {
     return FarmConfig(
       name: name ?? this.name,
@@ -74,6 +80,7 @@ class FarmConfig {
       longitude: longitude ?? this.longitude,
       zoom: zoom ?? this.zoom,
       zones: zones ?? this.zones,
+      meteocatStationCode: meteocatStationCode ?? this.meteocatStationCode,
     );
   }
 }
