@@ -5,6 +5,7 @@ import '../widgets/soca_drawer.dart';
 import '../widgets/task_bucket_widget.dart';
 import '../widgets/tree_summary_widget.dart';
 import '../widgets/weather_widget.dart';
+import '../widgets/dashboard_agenda_widget.dart';
 
 import '../../../../features/tasks/presentation/pages/tasks_page.dart';
 import '../../../contacts/presentation/pages/contacts_page.dart';
@@ -14,6 +15,7 @@ import '../../../trees/presentation/pages/watering_page.dart';
 import '../../../settings/presentation/pages/farm_profile_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -35,6 +37,77 @@ class _HomePageState extends State<HomePage> {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (context) => const ContactsPage()));
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOrder();
+  }
+
+  bool _isEditing = false;
+  List<String> _widgetOrder = [
+    'weather',
+    'trees',
+    'irrigation',
+    'buckets',
+    'agenda',
+  ];
+
+  final Map<String, String> _widgetNames = {
+    'weather': 'Temps',
+    'trees': 'Resum Arbres',
+    'irrigation': 'Reg',
+    'buckets': 'Tasques per Partida',
+    'agenda': 'Agenda',
+  };
+
+  Future<void> _loadOrder() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedOrder = prefs.getStringList('dashboard_order');
+    if (savedOrder != null && savedOrder.isNotEmpty) {
+      // Ensure all current widgets are present (handle new widgets added in updates)
+      final currentKeys = _widgetOrder.toSet();
+      final savedKeys = savedOrder.toSet();
+
+      // Add saved keys that are still valid
+      final newOrder = savedOrder
+          .where((key) => currentKeys.contains(key))
+          .toList();
+
+      // Append any new widgets that weren't in the saved list
+      for (final key in _widgetOrder) {
+        if (!savedKeys.contains(key)) {
+          newOrder.add(key);
+        }
+      }
+
+      setState(() {
+        _widgetOrder = newOrder;
+      });
+    }
+  }
+
+  Future<void> _saveOrder() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('dashboard_order', _widgetOrder);
+  }
+
+  Widget _getWidgetByKey(String key) {
+    switch (key) {
+      case 'weather':
+        return const WeatherWidget();
+      case 'trees':
+        return const TreeSummaryWidget();
+      case 'irrigation':
+        return const IrrigationWidget();
+      case 'buckets':
+        return const TaskBucketWidget();
+      case 'agenda':
+        return const DashboardAgendaWidget();
+      default:
+        return const SizedBox.shrink();
+    }
   }
 
   void _navigateToTrees(BuildContext context) {
@@ -253,31 +326,88 @@ class _HomePageState extends State<HomePage> {
                       SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.all(24.0),
-                          child: Text(
-                            'Tauler de Control', // Dashboard title for desktop
-                            style: Theme.of(context).textTheme.headlineMedium,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Tauler de Control', // Dashboard title for desktop
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.headlineMedium,
+                              ),
+                              IconButton(
+                                icon: Icon(
+                                  _isEditing ? Icons.check : Icons.edit,
+                                ),
+                                onPressed: () {
+                                  if (_isEditing) {
+                                    _saveOrder();
+                                  }
+                                  setState(() {
+                                    _isEditing = !_isEditing;
+                                  });
+                                },
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                    SliverPadding(
-                      padding: const EdgeInsets.all(16.0),
-                      sliver: SliverGrid(
-                        gridDelegate:
-                            const SliverGridDelegateWithMaxCrossAxisExtent(
-                              maxCrossAxisExtent:
-                                  350.0, // Targets ~3 cols on landscape tablet (1024px)
-                              mainAxisSpacing: 16.0,
-                              crossAxisSpacing: 16.0,
-                              childAspectRatio: 1.1,
+                    if (_isEditing)
+                      SliverReorderableList(
+                        itemBuilder: (context, index) {
+                          final key = _widgetOrder[index];
+                          return ReorderableDragStartListener(
+                            key: ValueKey(key),
+                            index: index,
+                            child: Card(
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 4,
+                              ),
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                side: BorderSide(color: Colors.grey.shade300),
+                              ),
+                              color: Colors.white,
+                              child: ListTile(
+                                leading: const Icon(Icons.drag_handle),
+                                title: Text(_widgetNames[key] ?? key),
+                              ),
                             ),
-                        delegate: SliverChildListDelegate(const [
-                          WeatherWidget(),
-                          TreeSummaryWidget(),
-                          IrrigationWidget(),
-                          TaskBucketWidget(),
-                        ]),
+                          );
+                        },
+                        itemCount: _widgetOrder.length,
+                        onReorder: (oldIndex, newIndex) {
+                          setState(() {
+                            if (oldIndex < newIndex) {
+                              newIndex -= 1;
+                            }
+                            final item = _widgetOrder.removeAt(oldIndex);
+                            _widgetOrder.insert(newIndex, item);
+                          });
+                        },
+                      )
+                    else
+                      SliverPadding(
+                        padding: const EdgeInsets.all(16.0),
+                        sliver: SliverGrid(
+                          gridDelegate:
+                              const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent:
+                                    350.0, // Targets ~3 cols on landscape tablet (1024px)
+                                mainAxisSpacing: 16.0,
+                                crossAxisSpacing: 16.0,
+                                childAspectRatio: 1.1,
+                              ),
+                          delegate: SliverChildBuilderDelegate((
+                            context,
+                            index,
+                          ) {
+                            return _getWidgetByKey(_widgetOrder[index]);
+                          }, childCount: _widgetOrder.length),
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),

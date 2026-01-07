@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/material.dart'; // for debugPrint
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_storage/firebase_storage.dart' hide Task;
 import '../../features/tasks/domain/entities/task.dart';
@@ -31,19 +32,24 @@ class OcrService {
       final storagePath = 'temp_ocr/${timestamp}_$fileName';
       final ref = _storage.ref().child(storagePath);
 
+      debugPrint('OCR start: Uploading to $storagePath...');
       await ref.putData(
         imageBytes,
         SettableMetadata(contentType: 'image/jpeg'),
-      ); // Assume jpeg or let auto-detect
+      );
+      debugPrint('OCR: Upload complete.');
 
       // 2. Call Cloud Function
+      debugPrint('OCR: Calling cloud function processWhiteboardImage...');
       final callable = _functions.httpsCallable('processWhiteboardImage');
       final result = await callable.call(<String, dynamic>{
         'imagePath': storagePath,
       });
+      debugPrint('OCR: Function returned.');
 
       // 3. Parse Result
       final data = result.data as Map<dynamic, dynamic>;
+      debugPrint('OCR: Data received: $data');
       final tasksList = data['tasks'] as List<dynamic>;
 
       return tasksList.map((item) {
@@ -62,7 +68,7 @@ class OcrService {
         );
       }).toList();
     } catch (e) {
-      print('Error in OCR Service: $e');
+      debugPrint('Error in OCR Service: $e');
       rethrow;
     }
   }

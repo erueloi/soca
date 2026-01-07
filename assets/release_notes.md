@@ -1,5 +1,7 @@
 ﻿# Release Notes
 
+## v1.5.2
+Afegim varis modificacions a les tasques (Costos, ...). Calendari de tasques. Timeline. Correció carga tasques via OCR. Widget Agenda. Triar la ubicació al mapa al afegir arbre. Petits bugs fix i ajustos.
 ## v1.5.1
 Minor fixes on add tree.
 ## v1.5.0
@@ -33,6 +35,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

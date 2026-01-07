@@ -1,3 +1,5 @@
+import 'package:firebase_auth/firebase_auth.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/config/firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'features/dashboard/presentation/pages/home_page.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'package:intl/date_symbol_data_local.dart';
 
@@ -13,6 +16,15 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('ca_ES', null);
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Authenticate anonymously if not logged in
+  if (FirebaseAuth.instance.currentUser == null) {
+    try {
+      await FirebaseAuth.instance.signInAnonymously();
+    } catch (e) {
+      debugPrint('Error signing in anonymously: $e');
+    }
+  }
 
   // Enable offline persistence
   // Note regarding Blaze Plan (Pay-as-you-go):
@@ -34,6 +46,16 @@ class SocaApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Soca - Molí de Cal Jeroni',
       theme: AppTheme.theme,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('ca', 'ES'),
+        Locale('es', 'ES'),
+        Locale('en', 'US'),
+      ],
       home: const HomePage(),
     );
   }

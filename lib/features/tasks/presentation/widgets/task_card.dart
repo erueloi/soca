@@ -22,7 +22,10 @@ class TaskCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (task.isDone) {
-      return _buildCardContent(context);
+      return GestureDetector(
+        onTap: () => onEdit?.call(task),
+        child: _buildCardContent(context),
+      );
     }
 
     return Dismissible(
@@ -202,23 +205,42 @@ class TaskCard extends StatelessWidget {
                           padding: const EdgeInsets.only(bottom: 2.0),
                           child: Row(
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.circle,
                                 size: 6,
-                                color: Colors.grey,
+                                color: item.isDone ? Colors.grey : Colors.blue,
                               ),
                               const SizedBox(width: 6),
                               Expanded(
                                 child: Text.rich(
                                   TextSpan(
                                     children: [
-                                      TextSpan(text: item.description),
+                                      TextSpan(
+                                        text: item.description,
+                                        style: TextStyle(
+                                          decoration: item.isDone
+                                              ? TextDecoration.lineThrough
+                                              : null,
+                                          color: item.isDone
+                                              ? Colors.grey
+                                              : Colors.black87,
+                                        ),
+                                      ),
                                       if (item.quantity != 1.0)
                                         TextSpan(
                                           text: ' (x${item.quantity})',
                                           style: const TextStyle(
                                             fontWeight: FontWeight.bold,
                                             color: Colors.blueGrey,
+                                          ),
+                                        ),
+                                      if (item.cost > 0)
+                                        TextSpan(
+                                          text:
+                                              ' - ${(item.cost * item.quantity).toStringAsFixed(2)}€',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.green,
                                           ),
                                         ),
                                     ],

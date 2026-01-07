@@ -4,7 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:geolocator/geolocator.dart';
+
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../domain/entities/watering_event.dart';
@@ -14,6 +14,7 @@ import '../../../../core/services/ai_service.dart';
 
 import '../providers/trees_provider.dart';
 import '../pages/watering_page.dart';
+import '../pages/location_picker_page.dart';
 import '../../domain/entities/tree.dart';
 
 class TreeDetail extends ConsumerStatefulWidget {
@@ -363,7 +364,9 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
             locationContext: 'La Floresta, Lleida',
           );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       // Show Confirmation Dialog
       final confirm = await showDialog<bool>(
@@ -453,12 +456,15 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
         }
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Error en l\'anàlisi: $e')));
+      }
     } finally {
-      if (mounted) setState(() => _isAnalyzing = false);
+      if (mounted) {
+        setState(() => _isAnalyzing = false);
+      }
     }
   }
 
@@ -487,10 +493,11 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
       await ref
           .read(treesRepositoryProvider)
           .deleteAIHistoryEntry(widget.tree.id, entryId);
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Registre esborrat')));
+      }
     }
   }
 
@@ -610,7 +617,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
+        color: color.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(4),
         border: Border.all(color: color, width: 0.5),
       ),
@@ -665,8 +672,9 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                           firstDate: DateTime(2000),
                           lastDate: DateTime.now(),
                         );
-                        if (picked != null)
+                        if (picked != null) {
                           setState(() => _plantingDate = picked);
+                        }
                       }
                     : null,
               ),
@@ -768,13 +776,14 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                           final newLoc = await Navigator.push<LatLng>(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => _LocationPickerPage(
+                              builder: (_) => LocationPickerPage(
                                 initialLocation: _location,
                               ),
                             ),
                           );
-                          if (newLoc != null)
+                          if (newLoc != null) {
                             setState(() => _location = newLoc);
+                          }
                         },
                       ),
                     ),
@@ -795,7 +804,9 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                   final url = Uri.parse(
                     'https://www.google.com/maps/search/?api=1&query=${_location.latitude},${_location.longitude}',
                   );
-                  if (await canLaunchUrl(url)) await launchUrl(url);
+                  if (await canLaunchUrl(url)) {
+                    await launchUrl(url);
+                  }
                 },
               ),
             ),
@@ -1060,10 +1071,10 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                     onTap: () => _takeEvolutionPhoto(context),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.indigo.withOpacity(0.1),
+                        color: Colors.indigo.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: Colors.indigo.withOpacity(0.3),
+                          color: Colors.indigo.withValues(alpha: 0.3),
                           style: BorderStyle.solid,
                         ),
                       ),
@@ -1135,7 +1146,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                           horizontal: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.6),
+                          color: Colors.black.withValues(alpha: 0.6),
                           borderRadius: const BorderRadius.only(
                             bottomLeft: Radius.circular(8),
                             bottomRight: Radius.circular(8),
@@ -1172,7 +1183,9 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
   }
 
   void _showComparisonView() {
-    if (_selectedForComparison.length != 2) return;
+    if (_selectedForComparison.length != 2) {
+      return;
+    }
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -1246,7 +1259,9 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
 
   Future<void> _takeEvolutionPhoto(BuildContext context) async {
     final source = await _showImageSourceActionSheet(context);
-    if (source == null) return;
+    if (source == null) {
+      return;
+    }
 
     final picker = ImagePicker();
     final XFile? image = await picker.pickImage(
@@ -1269,7 +1284,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                 image.path,
                 height: 150,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const Icon(Icons.image),
+                errorBuilder: (_, error, stackTrace) => const Icon(Icons.image),
               ), // For web/io compatibility issues, Image.file is usually generic
               const SizedBox(height: 12),
               TextField(
@@ -1295,6 +1310,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
       );
 
       if (confirm == true) {
+        if (!context.mounted) return;
         // Upload and Save
         ScaffoldMessenger.of(
           context,
@@ -1310,15 +1326,17 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
             note: noteController.text,
           );
           await repo.addEvolutionEntry(widget.tree.id, entry);
-          if (context.mounted)
+          if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Foto guardada correctament')),
             );
+          }
         } else {
-          if (context.mounted)
+          if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Error al pujar la foto')),
             );
+          }
         }
       }
     }
@@ -1418,9 +1436,9 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1631,164 +1649,4 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   ) => Container(color: Colors.white, child: _tabBar);
   @override
   bool shouldRebuild(_SliverAppBarDelegate oldDelegate) => false;
-}
-
-class _LocationPickerPage extends StatefulWidget {
-  final LatLng initialLocation;
-  const _LocationPickerPage({required this.initialLocation});
-  @override
-  State<_LocationPickerPage> createState() => _LocationPickerPageState();
-}
-
-class _LocationPickerPageState extends State<_LocationPickerPage> {
-  late LatLng _currentLocation;
-  final MapController _mapController = MapController();
-  int _currentLayerIndex = 0; // 0: Ortho (Sat), 1: Topo (Map)
-  bool _isLoadingLocation = false;
-
-  static const List<String> _layerUrls = [
-    'https://geoserveis.icgc.cat/icc_mapesmultibase/noutm/wmts/orto/GRID3857/{z}/{x}/{y}.jpeg',
-    'https://geoserveis.icgc.cat/icc_mapesmultibase/noutm/wmts/topo/GRID3857/{z}/{x}/{y}.jpeg',
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _currentLocation = widget.initialLocation;
-  }
-
-  Future<void> _moveToCurrentLocation() async {
-    setState(() => _isLoadingLocation = true);
-    try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        throw Exception('Location services are disabled.');
-      }
-
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          throw Exception('Location permissions are denied');
-        }
-      }
-
-      if (permission == LocationPermission.deniedForever) {
-        throw Exception('Location permissions are permanently denied.');
-      }
-
-      Position position = await Geolocator.getCurrentPosition();
-      final newLoc = LatLng(position.latitude, position.longitude);
-      setState(() => _currentLocation = newLoc);
-      _mapController.move(newLoc, 18);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error GPS: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _isLoadingLocation = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Moure el marcador'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.check),
-            onPressed: () => Navigator.pop(context, _currentLocation),
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: widget.initialLocation,
-              initialZoom: 19,
-              onTap: (_, point) {
-                setState(() => _currentLocation = point);
-              },
-            ),
-            children: [
-              TileLayer(
-                urlTemplate: _layerUrls[_currentLayerIndex],
-                userAgentPackageName: 'com.soca.app',
-                maxZoom: 20,
-              ),
-              MarkerLayer(
-                markers: [
-                  Marker(
-                    point: _currentLocation,
-                    child: const Icon(
-                      Icons.location_on,
-                      color: Colors.red,
-                      size: 50,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          // Controls
-          Positioned(
-            top: 20,
-            right: 20,
-            child: Column(
-              children: [
-                FloatingActionButton(
-                  heroTag: 'layer_switch',
-                  mini: true,
-                  backgroundColor: Colors.white,
-                  onPressed: () {
-                    setState(() {
-                      _currentLayerIndex =
-                          (_currentLayerIndex + 1) % _layerUrls.length;
-                    });
-                  },
-                  child: Icon(
-                    _currentLayerIndex == 0 ? Icons.map : Icons.satellite,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                FloatingActionButton(
-                  heroTag: 'my_location',
-                  mini: true,
-                  backgroundColor: Colors.white,
-                  onPressed: _isLoadingLocation ? null : _moveToCurrentLocation,
-                  child: _isLoadingLocation
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.my_location, color: Colors.blue),
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            bottom: 20,
-            left: 20,
-            right: 20,
-            child: ElevatedButton(
-              onPressed: () => Navigator.pop(context, _currentLocation),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: Theme.of(context).primaryColor,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('CONFIRMAR POSICIÓ'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

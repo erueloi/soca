@@ -11,6 +11,7 @@ class TaskColumn extends StatelessWidget {
   final Function(Task task)? onEditTask;
   final Function(Task task)? onDeleteTask;
   final Function(Task task)? onArchiveTask;
+  final Function(int oldIndex, int newIndex)? onReorder;
 
   const TaskColumn({
     super.key,
@@ -22,6 +23,7 @@ class TaskColumn extends StatelessWidget {
     this.onEditTask,
     this.onDeleteTask,
     this.onArchiveTask,
+    this.onReorder,
   });
 
   @override
@@ -84,17 +86,54 @@ class TaskColumn extends StatelessWidget {
               ),
               const Divider(height: 1),
               Expanded(
-                child: ListView(
+                child: ReorderableListView.builder(
                   padding: const EdgeInsets.all(8),
-                  children: tasks.map((task) {
-                    return TaskCard(
-                      task: task,
-                      onToggle: () => onToggleTask(task.id),
-                      onEdit: onEditTask,
-                      onDelete: onDeleteTask,
-                      onArchive: onArchiveTask,
+                  itemCount: tasks.length,
+                  onReorder: (oldIndex, newIndex) {
+                    onReorder?.call(oldIndex, newIndex);
+                  },
+                  proxyDecorator: (child, index, animation) {
+                    return Material(
+                      elevation: 8,
+                      color: Colors.transparent,
+                      child: child,
                     );
-                  }).toList(),
+                  },
+                  itemBuilder: (context, index) {
+                    final task = tasks[index];
+                    return Container(
+                      key: ValueKey(task.id),
+                      child: Stack(
+                        children: [
+                          TaskCard(
+                            task: task,
+                            onToggle: () => onToggleTask(task.id),
+                            onEdit: onEditTask,
+                            onDelete: onDeleteTask,
+                            onArchive: onArchiveTask,
+                          ),
+                          Positioned(
+                            right: 0,
+                            top: 0,
+                            bottom: 0,
+                            child: ReorderableDragStartListener(
+                              index: index,
+                              child: Container(
+                                width: 30,
+                                color: Colors.transparent,
+                                alignment: Alignment.center,
+                                child: const Icon(
+                                  Icons.drag_indicator,
+                                  color: Colors.grey,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ),
               if (onAddTask != null)

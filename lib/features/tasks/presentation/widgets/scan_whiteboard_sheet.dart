@@ -2,6 +2,7 @@ import 'dart:typed_data'; // for Uint8List
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/services/ocr_service.dart';
 import '../../domain/entities/task.dart';
 import '../providers/tasks_provider.dart';
@@ -34,21 +35,40 @@ class _ScanWhiteboardSheetState extends ConsumerState<ScanWhiteboardSheet> {
   ];
 
   Future<void> _pickImage(ImageSource source) async {
-    final pickedFile = await _picker.pickImage(source: source);
-    if (pickedFile != null) {
-      final bytes = await pickedFile.readAsBytes();
-      setState(() {
-        _imageFile = pickedFile;
-        _webImageBytes = bytes;
-        _isProcessing = true;
-      });
-      _analyzeImage();
+    try {
+      final pickedFile = await _picker.pickImage(
+        source: source,
+        maxWidth: 1920, // Limit resolution to FHD to avoid OOM
+        maxHeight: 1920,
+        imageQuality: 85, // Compress slightly
+      );
+      if (pickedFile != null) {
+        final bytes = await pickedFile.readAsBytes();
+        if (!mounted) return;
+        setState(() {
+          _imageFile = pickedFile;
+          _webImageBytes = bytes;
+          _isProcessing = true;
+        });
+        _analyzeImage();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error seleccionant imatge: $e')),
+        );
+      }
     }
   }
 
   Future<void> _analyzeImage() async {
     try {
       if (_imageFile == null) return;
+
+      // Ensure user is authenticated for Cloud Functions
+      if (FirebaseAuth.instance.currentUser == null) {
+        await FirebaseAuth.instance.signInAnonymously();
+      }
 
       final List<Task> tasks = await _ocrService.parseWhiteboardImage(
         _imageFile!,

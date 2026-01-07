@@ -179,7 +179,8 @@ class _WateringPageState extends ConsumerState<WateringPage> {
                         ), // Compact
                         isDense: true,
                       ),
-                      value: _selectedSpecies,
+                      key: ValueKey(_selectedSpecies),
+                      initialValue: _selectedSpecies,
                       items: [
                         const DropdownMenuItem(
                           value: null,
@@ -229,7 +230,7 @@ class _WateringPageState extends ConsumerState<WateringPage> {
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
-                headingRowColor: MaterialStateProperty.all(Colors.blue.shade50),
+                headingRowColor: WidgetStateProperty.all(Colors.blue.shade50),
                 columns: [
                   const DataColumn(
                     label: Text(
@@ -350,9 +351,7 @@ class _WateringPageState extends ConsumerState<WateringPage> {
                       // Append Totals Row
                       ..add(
                         DataRow(
-                          color: MaterialStateProperty.all(
-                            Colors.blue.shade100,
-                          ),
+                          color: WidgetStateProperty.all(Colors.blue.shade100),
                           cells: [
                             const DataCell(
                               Text(
@@ -471,8 +470,9 @@ class _WateringPageState extends ConsumerState<WateringPage> {
                 await ref
                     .read(treesRepositoryProvider)
                     .deleteWateringEvent(treeId, event.id);
-                if (context.mounted)
+                if (context.mounted) {
                   Navigator.pop(context); // Close Edit Dialog
+                }
               }
             },
             child: const Text('ELIMINAR'),

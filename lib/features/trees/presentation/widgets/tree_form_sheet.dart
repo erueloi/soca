@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:latlong2/latlong.dart';
 import '../../domain/entities/tree.dart';
 import '../providers/trees_provider.dart';
+import '../pages/location_picker_page.dart';
 import '../../../../core/services/ai_service.dart';
 import '../../../settings/presentation/providers/settings_provider.dart';
 
@@ -447,6 +449,35 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                             icon: const Icon(Icons.refresh, color: Colors.blue),
                             onPressed: _fetchLocation,
                             tooltip: 'Actualitzar posició',
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.map, color: Colors.blue),
+                            onPressed: () async {
+                              final initial =
+                                  (_latitude != null && _longitude != null)
+                                  ? LatLng(_latitude!, _longitude!)
+                                  : const LatLng(
+                                      41.561580,
+                                      0.931707,
+                                    ); // Default La Floresta
+
+                              final picked = await Navigator.push<LatLng>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => LocationPickerPage(
+                                    initialLocation: initial,
+                                  ),
+                                ),
+                              );
+
+                              if (picked != null) {
+                                setState(() {
+                                  _latitude = picked.latitude;
+                                  _longitude = picked.longitude;
+                                });
+                              }
+                            },
+                            tooltip: 'Triar al mapa',
                           ),
                         ],
                       ),

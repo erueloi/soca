@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
@@ -47,7 +48,7 @@ class TreesRepository {
       final url = await uploadTask.ref.getDownloadURL();
       return url;
     } catch (e) {
-      print('Error uploading tree image: $e');
+      debugPrint('Error uploading tree image: $e');
       return null;
     }
   }
@@ -183,7 +184,7 @@ class TreesRepository {
       );
       return await uploadTask.ref.getDownloadURL();
     } catch (e) {
-      print('Error uploading evolution image: $e');
+      debugPrint('Error uploading evolution image: $e');
       return null;
     }
   }

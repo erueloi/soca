@@ -106,7 +106,7 @@ class _ZoneEditDialogState extends State<ZoneEditDialog> {
                     DateTime.now().millisecondsSinceEpoch.toString(),
                 name: _nameController.text,
                 cropType: _cropTypeController.text,
-                colorHex: _color.value.toRadixString(16).padLeft(8, '0'),
+                colorHex: _color.toARGB32().toRadixString(16).padLeft(8, '0'),
               );
               Navigator.pop(context, newZone);
             }

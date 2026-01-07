@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart' hide Task;
 import '../../domain/entities/task.dart';
@@ -39,7 +40,7 @@ class TasksRepository {
       final url = await uploadTask.ref.getDownloadURL();
       return url;
     } catch (e) {
-      print('Error uploading image: $e');
+      debugPrint('Error uploading image: $e');
       return null;
     }
   }

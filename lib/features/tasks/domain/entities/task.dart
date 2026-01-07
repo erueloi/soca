@@ -13,6 +13,8 @@ class Task {
   final List<String> photoUrls;
   final double? latitude;
   final double? longitude;
+  final int order;
+  final DateTime? completedAt;
 
   const Task({
     required this.id,
@@ -27,6 +29,8 @@ class Task {
     this.photoUrls = const [],
     this.latitude,
     this.longitude,
+    this.order = 0,
+    this.completedAt,
   });
 
   Task copyWith({
@@ -42,6 +46,8 @@ class Task {
     List<String>? photoUrls,
     double? latitude,
     double? longitude,
+    int? order,
+    DateTime? completedAt,
   }) {
     return Task(
       id: id ?? this.id,
@@ -56,6 +62,8 @@ class Task {
       photoUrls: photoUrls ?? this.photoUrls,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
+      order: order ?? this.order,
+      completedAt: completedAt ?? this.completedAt,
     );
   }
 
@@ -72,6 +80,8 @@ class Task {
       'photoUrls': photoUrls,
       'latitude': latitude,
       'longitude': longitude,
+      'order': order,
+      'completedAt': completedAt?.millisecondsSinceEpoch,
     };
   }
 
@@ -93,6 +103,18 @@ class Task {
       photoUrls: List<String>.from(map['photoUrls'] ?? []),
       latitude: map['latitude'],
       longitude: map['longitude'],
+      order: map['order'] ?? 0,
+      completedAt: map['completedAt'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(map['completedAt'])
+          : null,
     );
   }
+
+  // Calculated properties
+  double get totalBudget =>
+      items.fold(0.0, (sum, item) => sum + (item.cost * item.quantity));
+
+  double get totalSpent => items
+      .where((i) => i.isDone)
+      .fold(0.0, (sum, item) => sum + (item.cost * item.quantity));
 }

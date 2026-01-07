@@ -26,7 +26,7 @@ class TreeList extends ConsumerWidget {
 
         return ListTile(
           selected: isSelected,
-          selectedTileColor: Colors.green.withOpacity(0.1),
+          selectedTileColor: Colors.green.withValues(alpha: 0.1),
           leading: Container(
             width: 50,
             height: 50,

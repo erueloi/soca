@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +15,7 @@ class TaskEditSheet extends ConsumerStatefulWidget {
   final String initialBucket;
   final Function(Task) onSave;
   final VoidCallback? onDelete;
+  final bool isReadOnly;
 
   const TaskEditSheet({
     super.key,
@@ -21,6 +23,7 @@ class TaskEditSheet extends ConsumerStatefulWidget {
     required this.initialBucket,
     required this.onSave,
     this.onDelete,
+    this.isReadOnly = false,
   });
 
   @override
@@ -57,17 +60,15 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
     _longitude = widget.task?.longitude;
   }
 
-  void _addItem() {
-    setState(() {
-      _items.add(TaskItem(description: '', quantity: 1.0));
-    });
-  }
-
   Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final firstDate = DateTime(now.year - 1); // Allow past dates up to 1 year
+    final initial = _dueDate ?? now;
+
     final picked = await showDatePicker(
       context: context,
-      initialDate: _dueDate ?? DateTime.now(),
-      firstDate: DateTime.now(),
+      initialDate: initial,
+      firstDate: firstDate.isBefore(initial) ? firstDate : initial,
       lastDate: DateTime(2030),
     );
     if (picked != null) {
@@ -76,14 +77,39 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
   }
 
   Future<void> _pickImage() async {
-    final XFile? pickedFile = await _picker.pickImage(
-      source: ImageSource.camera,
-    );
+    final source = await _showImageSourceActionSheet(context);
+    if (source == null) return;
+
+    final XFile? pickedFile = await _picker.pickImage(source: source);
     if (pickedFile != null) {
       setState(() {
         _imageFile = File(pickedFile.path);
       });
     }
+  }
+
+  Future<ImageSource?> _showImageSourceActionSheet(BuildContext context) async {
+    if (kIsWeb) return ImageSource.gallery;
+    return await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Fer Foto'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Triar de la Galeria'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -116,9 +142,10 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.title),
                     ),
+                    readOnly: widget.isReadOnly,
                   ),
                   const SizedBox(height: 16),
-                  _buildActionButtons(context),
+                  if (!widget.isReadOnly) _buildActionButtons(context),
                   if (_imageFile != null) ...[
                     const SizedBox(height: 8),
                     Container(
@@ -141,7 +168,9 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                               onPressed: () =>
                                   setState(() => _imageFile = null),
                               style: IconButton.styleFrom(
-                                backgroundColor: Colors.white.withOpacity(0.8),
+                                backgroundColor: Colors.white.withValues(
+                                  alpha: 0.8,
+                                ),
                               ),
                             ),
                           ),
@@ -158,6 +187,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                       alignLabelWithHint: true,
                     ),
                     maxLines: 3,
+                    readOnly: widget.isReadOnly,
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -166,7 +196,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                       const SizedBox(width: 16),
                       Expanded(
                         child: InkWell(
-                          onTap: _pickDate,
+                          onTap: widget.isReadOnly ? null : _pickDate,
                           child: InputDecorator(
                             decoration: const InputDecoration(
                               labelText: 'Data Límit',
@@ -191,32 +221,35 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
               ),
             ),
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _isUploading ? null : _saveTask,
-                icon: _isUploading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Icon(Icons.save),
-                label: Text(_isUploading ? 'PUJANT FOTO...' : 'GUARDAR CANVIS'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  textStyle: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+            if (!widget.isReadOnly)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _isUploading ? null : _saveTask,
+                  icon: _isUploading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Icon(Icons.save),
+                  label: Text(
+                    _isUploading ? 'PUJANT FOTO...' : 'GUARDAR CANVIS',
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    textStyle: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
-            ),
             const SizedBox(height: 16),
           ],
         ),
@@ -237,14 +270,18 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
             ),
             const SizedBox(width: 8),
             Text(
-              widget.task == null ? 'Nova Tasca' : 'Editar Tasca',
+              widget.isReadOnly
+                  ? 'Detall de la Tasca'
+                  : (widget.task == null ? 'Nova Tasca' : 'Editar Tasca'),
               style: Theme.of(context).textTheme.headlineSmall,
             ),
           ],
         ),
         Row(
           children: [
-            if (widget.task != null && widget.onDelete != null)
+            if (widget.task != null &&
+                widget.onDelete != null &&
+                !widget.isReadOnly)
               IconButton(
                 icon: const Icon(Icons.delete_outline, color: Colors.red),
                 tooltip: 'Eliminar Tasca',
@@ -353,11 +390,27 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
         DropdownMenuItem(value: 'Manteniment', child: Text('Manteniment 🔧')),
         DropdownMenuItem(value: 'Planificació', child: Text('Planificació 📅')),
       ],
-      onChanged: (val) => setState(() => _phase = val ?? ''),
+      onChanged: widget.isReadOnly
+          ? null
+          : (val) => setState(() => _phase = val ?? ''),
     );
   }
 
   Widget _buildItemsList() {
+    double totalBudget = 0;
+    double totalSpent = 0;
+    double totalPending = 0;
+
+    for (var item in _items) {
+      final itemTotal = item.cost * item.quantity;
+      totalBudget += itemTotal;
+      if (item.isDone) {
+        totalSpent += itemTotal;
+      } else {
+        totalPending += itemTotal;
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -365,12 +418,27 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('Subtasques / Material'),
-            IconButton(
-              icon: const Icon(Icons.add_circle, color: Colors.green),
-              onPressed: _addItem,
-            ),
+            if (!widget.isReadOnly)
+              IconButton(
+                icon: const Icon(Icons.add_circle, color: Colors.green),
+                onPressed: () {
+                  setState(() {
+                    _items.add(
+                      TaskItem(description: '', quantity: 1.0, cost: 0.0),
+                    );
+                  });
+                },
+              ),
           ],
         ),
+        if (_items.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: Text(
+              'Afegeix subtasques per calcular el pressupost.',
+              style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
+            ),
+          ),
         ..._items.asMap().entries.map((entry) {
           final index = entry.key;
           final item = entry.value;
@@ -378,6 +446,20 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
             padding: const EdgeInsets.only(bottom: 8.0),
             child: Row(
               children: [
+                Checkbox(
+                  value: item.isDone,
+                  onChanged: widget.isReadOnly
+                      ? null
+                      : (val) {
+                          setState(() {
+                            final isDone = val ?? false;
+                            _items[index] = item.copyWith(
+                              isDone: isDone,
+                              completedAt: isDone ? DateTime.now() : null,
+                            );
+                          });
+                        },
+                ),
                 Expanded(
                   flex: 3,
                   child: TextFormField(
@@ -387,6 +469,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
+                    readOnly: widget.isReadOnly,
                     onChanged: (val) {
                       _items[index] = item.copyWith(description: val);
                     },
@@ -398,27 +481,135 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                   child: TextFormField(
                     initialValue: item.quantity.toString(),
                     decoration: const InputDecoration(
-                      labelText: 'Quantitat',
+                      labelText: 'Quant.',
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    readOnly: widget.isReadOnly,
                     onChanged: (val) {
                       final quantity = double.tryParse(val);
                       if (quantity != null) {
-                        _items[index] = item.copyWith(quantity: quantity);
+                        setState(() {
+                          _items[index] = item.copyWith(quantity: quantity);
+                        });
                       }
                     },
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  onPressed: () => setState(() => _items.removeAt(index)),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
+                  child: TextFormField(
+                    initialValue: item.cost.toString(),
+                    decoration: const InputDecoration(
+                      labelText: 'Preu U. (€)',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    readOnly: widget.isReadOnly,
+                    onChanged: (val) {
+                      final cost = double.tryParse(val);
+                      if (cost != null) {
+                        setState(() {
+                          _items[index] = item.copyWith(cost: cost);
+                        });
+                      }
+                    },
+                  ),
                 ),
+                if (!widget.isReadOnly)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: () => setState(() => _items.removeAt(index)),
+                  ),
               ],
             ),
           );
         }),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              Column(
+                children: [
+                  const Text(
+                    'PRESSUPOST',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  Text(
+                    '${totalBudget.toStringAsFixed(2)} €',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                  ),
+                ],
+              ),
+              Container(width: 1, height: 30, color: Colors.grey.shade400),
+              Column(
+                children: [
+                  const Text(
+                    'GASTAT',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  Text(
+                    '${totalSpent.toStringAsFixed(2)} €',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: totalSpent > totalBudget
+                          ? Colors.red
+                          : Colors.green,
+                    ),
+                  ),
+                ],
+              ),
+              Container(width: 1, height: 30, color: Colors.grey.shade400),
+              Column(
+                children: [
+                  const Text(
+                    'PENDENT',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  Text(
+                    '${totalPending.toStringAsFixed(2)} €',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -443,15 +634,17 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                 ),
               ),
               selected: isSelected,
-              onSelected: (selected) {
-                setState(() {
-                  if (selected) {
-                    _contactIds.add(contact.id);
-                  } else {
-                    _contactIds.remove(contact.id);
-                  }
-                });
-              },
+              onSelected: widget.isReadOnly
+                  ? null
+                  : (selected) {
+                      setState(() {
+                        if (selected) {
+                          _contactIds.add(contact.id);
+                        } else {
+                          _contactIds.remove(contact.id);
+                        }
+                      });
+                    },
             );
           }).toList(),
         ),

@@ -6,6 +6,8 @@ import '../widgets/task_column.dart';
 import '../widgets/task_edit_sheet.dart';
 import '../widgets/scan_whiteboard_sheet.dart';
 import '../widgets/bucket_management_sheet.dart';
+import 'tasks_calendar_page.dart';
+import 'tasks_timeline_page.dart';
 
 class TasksPage extends ConsumerStatefulWidget {
   final String? initialBucketFilter;
@@ -17,8 +19,8 @@ class TasksPage extends ConsumerStatefulWidget {
 }
 
 class _TasksPageState extends ConsumerState<TasksPage> {
-  final ScrollController _scrollController =
-      ScrollController(); // Added controller
+  final ScrollController _scrollController = ScrollController();
+  bool _showCompleted = false;
 
   @override
   void dispose() {
@@ -49,6 +51,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
       builder: (context) => TaskEditSheet(
         task: task,
         initialBucket: task.bucket,
+        isReadOnly: task.isDone,
         onSave: (updatedTask) {
           ref.read(tasksRepositoryProvider).updateTask(updatedTask);
         },
@@ -65,7 +68,11 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   }
 
   void _toggleTask(Task task) {
-    final updatedTask = task.copyWith(isDone: !task.isDone);
+    final isDone = !task.isDone;
+    final updatedTask = task.copyWith(
+      isDone: isDone,
+      completedAt: isDone ? DateTime.now() : null,
+    );
     ref.read(tasksRepositoryProvider).updateTask(updatedTask);
   }
 
@@ -77,7 +84,10 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   }
 
   void _onArchiveDrop(Task task) {
-    final updatedTask = task.copyWith(isDone: true);
+    final updatedTask = task.copyWith(
+      isDone: true,
+      completedAt: DateTime.now(),
+    );
     ref.read(tasksRepositoryProvider).updateTask(updatedTask);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Tasca "${task.title}" completada! ✅')),
@@ -102,9 +112,44 @@ class _TasksPageState extends ConsumerState<TasksPage> {
         title: const Text('Pissarra de Tasques'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.history, color: Colors.blue),
+            tooltip: 'Històric de Reformes',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TasksTimelinePage()),
+              );
+            },
+          ),
+          IconButton(
+            icon: Icon(
+              _showCompleted
+                  ? Icons.visibility_outlined
+                  : Icons.visibility_off_outlined,
+            ),
+            tooltip: _showCompleted
+                ? 'Amagar tasques completades'
+                : 'Mostrar tasques completades',
+            onPressed: () {
+              setState(() {
+                _showCompleted = !_showCompleted;
+              });
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.view_column_outlined),
             tooltip: 'Gestionar Columnes',
             onPressed: _openBucketManagement,
+          ),
+          IconButton(
+            icon: const Icon(Icons.calendar_month),
+            tooltip: 'Calendari de Tasques',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TasksCalendarPage()),
+              );
+            },
           ),
           IconButton(
             icon: const Icon(Icons.camera_alt_outlined),
@@ -146,9 +191,13 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                       itemCount: activeBuckets.length,
                       itemBuilder: (context, index) {
                         final bucket = activeBuckets[index];
-                        final bucketTasks = tasks
-                            .where((t) => t.bucket == bucket.name)
-                            .toList();
+                        final bucketTasks =
+                            tasks
+                                .where((t) => t.bucket == bucket.name)
+                                .where((t) => _showCompleted || !t.isDone)
+                                .toList()
+                              ..sort((a, b) => a.order.compareTo(b.order));
+
                         return TaskColumn(
                           title: bucket.name,
                           tasks: bucketTasks,
@@ -162,6 +211,27 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                           },
                           onTaskDropped: (task) =>
                               _onTaskDropped(task, bucket.name),
+                          onReorder: (oldIndex, newIndex) {
+                            // Update order of tasks in this bucket
+                            if (oldIndex < newIndex) {
+                              newIndex -= 1;
+                            }
+                            final item = bucketTasks.removeAt(oldIndex);
+                            bucketTasks.insert(newIndex, item);
+
+                            // Initial simple implementation: update all tasks in bucket with new indices
+                            // A more robust way would be using a dedicated usecase/repository method to batch update
+                            for (int i = 0; i < bucketTasks.length; i++) {
+                              if (bucketTasks[i].order != i) {
+                                final updated = bucketTasks[i].copyWith(
+                                  order: i,
+                                );
+                                ref
+                                    .read(tasksRepositoryProvider)
+                                    .updateTask(updated);
+                              }
+                            }
+                          },
                           onAddTask: () => _createTask(bucket.name),
                           onEditTask: _editTask,
                           onDeleteTask: _deleteTask,
