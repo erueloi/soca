@@ -149,6 +149,11 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
           .read(treesRepositoryProvider)
           .migrateTreeReferences();
 
+      // 3. Migrate Evolution to Growth (New)
+      final migratedCount = await ref
+          .read(treesRepositoryProvider)
+          .migrateEvolutionToGrowth();
+
       if (mounted) {
         showDialog(
           context: context,
@@ -157,6 +162,7 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
             content: Text(
               'Prefixos Espècies generats: ${speciesStats['updated']}\n'
               'Arbres actualitzats: ${treeStats['updated']}\n'
+              'Fotos Migrades: $migratedCount\n'
               'Detalls:\n${(treeStats['details'] as List).take(5).join('\n')}...',
             ),
             actions: [

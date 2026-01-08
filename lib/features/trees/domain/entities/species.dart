@@ -7,12 +7,15 @@ class Species {
   final String frostSensitivity; // 'Baixa', 'Mitjana', 'Alta', etc.
   final bool fruit;
   final String? fruitType;
-  final String prefix; // 3-letter code (e.g. OLI)
-
+  final String color; // Hex color
+  final int? iconCode; // Material Icon code point
+  final String? iconName; // e.g. "park"
+  final String? iconFamily;
+  final String prefix;
   final List<int> pruningMonths;
   final List<int> harvestMonths;
   final List<int> floweringMonths;
-  final String sunNeeds; // 'Alt', 'Mitjà', 'Baix'
+  final String sunNeeds;
 
   const Species({
     required this.id,
@@ -28,6 +31,10 @@ class Species {
     this.harvestMonths = const [],
     this.floweringMonths = const [],
     this.sunNeeds = 'Alt',
+    required this.color,
+    this.iconCode,
+    this.iconName,
+    this.iconFamily,
   });
 
   Species copyWith({
@@ -44,6 +51,10 @@ class Species {
     List<int>? harvestMonths,
     List<int>? floweringMonths,
     String? sunNeeds,
+    String? color,
+    int? iconCode,
+    String? iconName,
+    String? iconFamily,
   }) {
     return Species(
       id: id ?? this.id,
@@ -59,6 +70,10 @@ class Species {
       harvestMonths: harvestMonths ?? this.harvestMonths,
       floweringMonths: floweringMonths ?? this.floweringMonths,
       sunNeeds: sunNeeds ?? this.sunNeeds,
+      color: color ?? this.color,
+      iconCode: iconCode ?? this.iconCode,
+      iconName: iconName ?? this.iconName,
+      iconFamily: iconFamily ?? this.iconFamily,
     );
   }
 
@@ -76,6 +91,10 @@ class Species {
       'harvestMonths': harvestMonths,
       'floweringMonths': floweringMonths,
       'sunNeeds': sunNeeds,
+      'color': color,
+      'iconCode': iconCode,
+      'iconName': iconName,
+      'iconFamily': iconFamily,
     };
   }
 
@@ -100,6 +119,10 @@ class Species {
       harvestMonths: List<int>.from(map['harvestMonths'] ?? []),
       floweringMonths: List<int>.from(map['floweringMonths'] ?? []),
       sunNeeds: map['sunNeeds'] ?? 'Alt',
+      color: map['color'] ?? '4CAF50',
+      iconCode: map['iconCode'],
+      iconName: map['iconName'],
+      iconFamily: map['iconFamily'],
     );
   }
 }

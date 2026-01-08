@@ -391,6 +391,7 @@ class _SpeciesSelectorState extends ConsumerState<SpeciesSelector> {
                       sunNeeds: sunNeeds,
                       pruningMonths: parseMonths(pruningCtrl.text),
                       harvestMonths: parseMonths(harvestCtrl.text),
+                      color: '4CAF50',
                     );
 
                     // Add to Repo and get ID
@@ -448,6 +449,7 @@ class _SpeciesSelectorState extends ConsumerState<SpeciesSelector> {
               leafType: '',
               frostSensitivity: '',
               fruit: false,
+              color: '4CAF50',
             );
 
             return [...matches, sentinel];

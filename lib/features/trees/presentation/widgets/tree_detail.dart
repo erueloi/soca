@@ -8,7 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../domain/entities/watering_event.dart';
-import '../../domain/entities/evolution_entry.dart';
+
 import '../../domain/entities/ai_analysis_entry.dart';
 import '../../../../core/services/ai_service.dart';
 import 'species_selector.dart';
@@ -20,6 +20,9 @@ import '../pages/location_picker_page.dart';
 import '../../domain/entities/tree.dart';
 import '../../domain/entities/species.dart';
 import '../pages/species_library_page.dart';
+import '../pages/tree_growth_timeline_page.dart';
+import 'growth_entry_form_sheet.dart';
+import '../../domain/entities/growth_entry.dart';
 
 class TreeDetail extends ConsumerStatefulWidget {
   final Tree tree;
@@ -1111,15 +1114,32 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
               ),
             ),
             if (!_isEditing)
-              TextButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _isComparisonMode = !_isComparisonMode;
-                    _selectedForComparison.clear();
-                  });
-                },
-                icon: Icon(_isComparisonMode ? Icons.close : Icons.compare),
-                label: Text(_isComparisonMode ? 'CANCEL·LAR' : 'COMPARAR'),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              TreeGrowthTimelinePage(tree: widget.tree),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.history),
+                    label: const Text('HISTÒRIC'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _isComparisonMode = !_isComparisonMode;
+                        _selectedForComparison.clear();
+                      });
+                    },
+                    icon: Icon(_isComparisonMode ? Icons.close : Icons.compare),
+                    label: Text(_isComparisonMode ? 'CANCEL·LAR' : 'COMPARAR'),
+                  ),
+                ],
               ),
           ],
         ),
@@ -1148,10 +1168,10 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
             ),
           ),
         const SizedBox(height: 12),
-        StreamBuilder<List<EvolutionEntry>>(
+        StreamBuilder<List<GrowthEntry>>(
           stream: ref
               .watch(treesRepositoryProvider)
-              .getEvolutionStream(widget.tree.id),
+              .getGrowthEntriesStream(widget.tree.id),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -1163,13 +1183,14 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
               final mainUrl = widget.tree.photoUrl!;
               final exists = entries.any((e) => e.photoUrl == mainUrl);
               if (!exists) {
-                final mainEntry = EvolutionEntry(
+                final mainEntry = GrowthEntry(
                   id: 'MAIN_PHOTO',
-                  date: widget
-                      .tree
-                      .plantingDate, // Or now? plantingDate seems safer
+                  date: widget.tree.plantingDate,
                   photoUrl: mainUrl,
-                  note: 'Foto Principal',
+                  height: 0,
+                  trunkDiameter: 0,
+                  healthStatus: 'Inicial',
+                  observations: 'Foto Principal',
                 );
                 entries = [mainEntry, ...entries];
               }
@@ -1395,79 +1416,63 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     );
 
     if (image != null && context.mounted) {
-      // Show Note Dialog? Or just upload?
-      // Simple flow: Dialog to confirm/add note
-      final noteController = TextEditingController();
-      final confirm = await showDialog<bool>(
+      // 1. Show Form Sheet to get details
+      final result = await showModalBottomSheet<Map<String, dynamic>>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Nova Foto Evolució'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Image.network(
-                image.path,
-                height: 150,
-                fit: BoxFit.cover,
-                errorBuilder: (_, error, stackTrace) => const Icon(Icons.image),
-              ), // For web/io compatibility issues, Image.file is usually generic
-              const SizedBox(height: 12),
-              TextField(
-                controller: noteController,
-                decoration: const InputDecoration(
-                  labelText: 'Nota (opcional)',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('CANCEL·LAR'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('GUARDAR'),
-            ),
-          ],
-        ),
+        isScrollControlled: true,
+        builder: (context) => const GrowthEntryFormSheet(),
       );
 
-      if (confirm == true) {
-        if (!context.mounted) return;
-        // Upload and Save
+      if (result == null || !context.mounted) return;
+
+      // 2. Upload Image
+      if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Pujant foto...')));
-        final repo = ref.read(treesRepositoryProvider);
-        final url = await repo.uploadEvolutionImage(image, widget.tree.id);
+        ).showSnackBar(const SnackBar(content: Text('Pujant foto i dades...')));
+      }
 
-        if (url != null) {
-          final entry = EvolutionEntry(
-            id: '', // Generated
-            photoUrl: url,
-            date: DateTime.now(),
-            note: noteController.text,
+      final url = await ref
+          .read(treesRepositoryProvider)
+          .uploadEvolutionImage(image, widget.tree.id);
+
+      if (url != null) {
+        // 3. Create Growth Entry
+        final entry = GrowthEntry(
+          id: '', // Firestore auto-id (handled by add?) No, we use .add() so ID is generated there.
+          // Wait, 'add' method uses .add(map).
+          // But I need to construct the object.
+          // I will pass mock ID here or empty, it's ignored on add() usually if using proper separation, but
+          // TreesRepo.addGrowthEntry calls .add(entry.toMap()).
+          // Firestore generates the ID.
+          date: DateTime.now(),
+          photoUrl: url,
+          height: result['height'],
+          trunkDiameter: result['diameter'],
+          healthStatus: result['status'],
+          observations: result['observations'],
+        );
+
+        await ref
+            .read(treesRepositoryProvider)
+            .addGrowthEntry(widget.tree.id, entry);
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Seguiment registrat correctament!')),
           );
-          await repo.addEvolutionEntry(widget.tree.id, entry);
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Foto guardada correctament')),
-            );
-          }
-        } else {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Error al pujar la foto')),
-            );
-          }
+        }
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Error pujant la imatge.')),
+          );
         }
       }
     }
   }
 
-  void _showEvolutionPhotoDetail(BuildContext context, EvolutionEntry entry) {
+  void _showEvolutionPhotoDetail(BuildContext context, GrowthEntry entry) {
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -1525,10 +1530,10 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                     DateFormat('dd/MM/yyyy HH:mm').format(entry.date),
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  if (entry.note != null && entry.note!.isNotEmpty)
+                  if (entry.observations.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
-                      child: Text(entry.note!),
+                      child: Text(entry.observations),
                     ),
                   const SizedBox(height: 16),
                   if (entry.id != 'MAIN_PHOTO')
@@ -1555,6 +1560,53 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                               content: Text('Foto principal actualitzada'),
                             ),
                           );
+                        }
+                      },
+                    ),
+                  const SizedBox(height: 8),
+                  if (entry.id != 'MAIN_PHOTO')
+                    TextButton.icon(
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      label: const Text(
+                        'ELIMINAR FOTO',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                      onPressed: () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Eliminar foto?'),
+                            content: const Text(
+                              'Aquesta acció no es pot desfer. S\'eliminarà del diari i de l\'històric.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('CANCEL·LAR'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.red,
+                                ),
+                                child: const Text('ELIMINAR'),
+                              ),
+                            ],
+                          ),
+                        );
+
+                        if (confirm == true && context.mounted) {
+                          await ref
+                              .read(treesRepositoryProvider)
+                              .deleteGrowthEntry(widget.tree.id, entry.id);
+                          if (context.mounted) {
+                            Navigator.pop(context); // Close Detail Dialog
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Foto eliminada correctament'),
+                              ),
+                            );
+                          }
                         }
                       },
                     ),

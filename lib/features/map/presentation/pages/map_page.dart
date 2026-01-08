@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/utils/icon_utils.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +12,9 @@ import '../../../trees/domain/entities/tree.dart';
 
 import '../providers/map_layers_provider.dart';
 import '../widgets/layer_controller_sheet.dart';
+import '../widgets/composite_marker.dart';
+import '../../../trees/data/repositories/species_repository.dart';
+import '../../../trees/domain/entities/species.dart';
 import '../../../settings/presentation/providers/settings_provider.dart';
 
 class MapPage extends ConsumerStatefulWidget {
@@ -200,34 +204,86 @@ class _MapPageState extends ConsumerState<MapPage> {
                   Consumer(
                     builder: (context, ref, child) {
                       final treesAsyncValue = ref.watch(treesStreamProvider);
-                      final useHealthColor =
-                          layers[MapLayer.healthStatus] == true;
+                      // We need species data. Let's assume a provider exists or fetch it.
+                      // Since we don't have a stream provider for ALL species handy in the context (maybe),
+                      // let's try to find it or optimize.
+                      // Ideally: ref.watch(speciesListProvider).
+                      // If not found, I'll assume we can add it or just fetch once.
+                      // Let's use FutureBuilder or similar if no provider?
+                      // Wait, usually there's a provider. I'll check `trees_provider.dart` content first?
+                      // Actually, for now, let's assume I can get the repository and fetch.
+                      // BUT `ref.watch` inside build is better.
+                      // Let's assume `speciesListStreamProvider` exists in `species_repository.dart`?
+                      // I need to find the provider.
+
+                      // For this step, I will use a simple Future/Stream interaction or a placeholder
+                      // if I can't find the provider immediately.
+                      // Let's check imports.
+
+                      final speciesStream = ref
+                          .watch(speciesRepositoryProvider)
+                          .getSpecies();
 
                       if (!treesAsyncValue.hasValue) {
                         return const SizedBox.shrink();
                       }
 
-                      return MarkerLayer(
-                        markers: treesAsyncValue.value!.map((t) {
-                          return Marker(
-                            point: LatLng(t.latitude, t.longitude),
-                            width: 45,
-                            height: 45,
-                            child: GestureDetector(
-                              onTap: () => _showTreeOptions(context, ref, t),
-                              child: Icon(
-                                Icons.park,
-                                color: useHealthColor
-                                    ? _getHealthColor(t)
-                                    : Colors.greenAccent[700],
-                                size: 45,
-                                shadows: const [
-                                  Shadow(blurRadius: 5, color: Colors.black54),
-                                ],
-                              ),
-                            ),
+                      return StreamBuilder<List<Species>>(
+                        stream: speciesStream,
+                        builder: (context, speciesSnapshot) {
+                          if (!speciesSnapshot.hasData) {
+                            return const SizedBox.shrink();
+                          }
+
+                          final speciesList = speciesSnapshot.data!;
+                          final speciesMap = {
+                            for (var s in speciesList) s.id: s,
+                          };
+
+                          return MarkerLayer(
+                            markers: treesAsyncValue.value!.map((t) {
+                              final species = speciesMap[t.speciesId];
+                              // Fallback
+                              Color color = Colors.green;
+                              IconData? iconData = Icons.park;
+                              String label = t.reference ?? '???';
+
+                              if (species != null) {
+                                if (species.color.isNotEmpty) {
+                                  try {
+                                    color = Color(
+                                      int.parse(
+                                        '0xFF${species.color.replaceAll('#', '')}',
+                                      ),
+                                    );
+                                  } catch (_) {}
+                                }
+                                if (species.iconCode != null) {
+                                  iconData = IconUtils.resolveIcon(
+                                    species.iconCode!,
+                                    species.iconFamily,
+                                  );
+                                }
+                              }
+
+                              return Marker(
+                                point: LatLng(t.latitude, t.longitude),
+                                width: 60, // Wider for the label
+                                height: 70, // Taller for the pin
+                                child: GestureDetector(
+                                  onTap: () =>
+                                      _showTreeOptions(context, ref, t),
+                                  child: CompositeMarker(
+                                    color: color,
+                                    iconData: iconData,
+                                    label: label,
+                                    size: 50, // Base size of the pin head
+                                  ),
+                                ),
+                              );
+                            }).toList(),
                           );
-                        }).toList(),
+                        },
                       );
                     },
                   ),
@@ -293,20 +349,6 @@ class _MapPageState extends ConsumerState<MapPage> {
         ],
       ),
     );
-  }
-
-  Color _getHealthColor(Tree t) {
-    // Basic heuristic based on strings I recall.
-    // Replace with actual field 'state' or 'health'
-    // If 'state' is the field:
-    // 'Viable' -> Green
-    // 'Malalt' -> Red
-    // 'Mort' -> Grey
-    // 'Mitjà' -> Yellow (if added)
-
-    // I'll try to access `t.state` if it exists.
-    // Since I can't be 100% sure without reading Tree entity, I'll read it first to be safe.
-    return Colors.green; // Skeleton, will fix after reading Tree.
   }
 
   void _showTreeOptions(BuildContext context, WidgetRef ref, Tree tree) {

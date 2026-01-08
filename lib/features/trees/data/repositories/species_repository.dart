@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/material.dart';
 import '../../domain/entities/species.dart';
 
 final speciesRepositoryProvider = Provider((ref) => SpeciesRepository());
@@ -55,6 +56,9 @@ class SpeciesRepository {
       harvestMonths: [11, 12, 1],
       floweringMonths: [5, 6],
       sunNeeds: 'Alt',
+      color: '4CAF50', // Green
+      iconCode: Icons.nature.codePoint, // Broadleaf (Nature)
+      iconName: 'nature',
     ),
     'prunus dulcis': Species(
       id: '',
@@ -69,6 +73,9 @@ class SpeciesRepository {
       harvestMonths: [8, 9], // Aug/Sept
       floweringMonths: [2, 3], // Early bloom
       sunNeeds: 'Alt',
+      color: 'F06292', // Pink
+      iconCode: Icons.park.codePoint, // Generic Tree
+      iconName: 'park',
     ),
     'juglans regia': Species(
       id: '',
@@ -83,6 +90,9 @@ class SpeciesRepository {
       harvestMonths: [9, 10],
       floweringMonths: [4, 5],
       sunNeeds: 'Alt',
+      color: '795548', // Brown
+      iconCode: Icons.park.codePoint, // Icons.park
+      iconName: 'park',
     ),
     'diospyros kaki': Species(
       id: '',
@@ -97,6 +107,9 @@ class SpeciesRepository {
       harvestMonths: [10, 11],
       floweringMonths: [5, 6],
       sunNeeds: 'Alt',
+      color: 'FF9800', // Orange
+      iconCode: Icons.nature.codePoint, // Nature (Round tree)
+      iconName: 'nature',
     ),
     'quercus ilex': Species(
       id: '',
@@ -111,6 +124,9 @@ class SpeciesRepository {
       harvestMonths: [],
       floweringMonths: [4, 5],
       sunNeeds: 'Alt',
+      color: '1B5E20', // Dark Green
+      iconCode: Icons.nature.codePoint, // Nature
+      iconName: 'nature',
     ),
     'quercus pubescens': Species(
       id: '',
@@ -125,6 +141,9 @@ class SpeciesRepository {
       harvestMonths: [],
       floweringMonths: [4, 5],
       sunNeeds: 'Alt',
+      color: '388E3C', // Green
+      iconCode: Icons.nature.codePoint, // Nature
+      iconName: 'nature',
     ),
     'ficus carica': Species(
       id: '',
@@ -139,6 +158,9 @@ class SpeciesRepository {
       harvestMonths: [8, 9, 10],
       floweringMonths: [5, 6],
       sunNeeds: 'Alt',
+      color: '9C27B0', // Purple
+      iconCode: Icons.nature.codePoint, // Nature
+      iconName: 'nature',
     ),
     'vitis vinifera': Species(
       id: '',
@@ -153,6 +175,9 @@ class SpeciesRepository {
       harvestMonths: [9, 10],
       floweringMonths: [5, 6],
       sunNeeds: 'Alt',
+      color: '9C27B0', // Purple
+      iconCode: Icons.nature.codePoint, // Nature (Vine is broadleaf-ish)
+      iconName: 'nature',
     ),
     'prunus avium': Species(
       id: '',
@@ -167,6 +192,9 @@ class SpeciesRepository {
       harvestMonths: [5, 6],
       floweringMonths: [4],
       sunNeeds: 'Alt',
+      color: 'F44336', // Red
+      iconCode: Icons.park.codePoint,
+      iconName: 'park',
     ),
     'cydonia oblonga': Species(
       id: '',
@@ -181,6 +209,9 @@ class SpeciesRepository {
       harvestMonths: [9, 10],
       floweringMonths: [4, 5],
       sunNeeds: 'Alt',
+      color: 'CDDC39', // Lime
+      iconCode: Icons.nature.codePoint,
+      iconName: 'nature',
     ),
     'punica granatum': Species(
       id: '',
@@ -195,6 +226,9 @@ class SpeciesRepository {
       harvestMonths: [9, 10, 11],
       floweringMonths: [5, 6],
       sunNeeds: 'Alt',
+      color: 'E91E63', // Pink/Red
+      iconCode: Icons.park.codePoint, // Park
+      iconName: 'park',
     ),
     'ceratonia siliqua': Species(
       id: '',
@@ -209,6 +243,9 @@ class SpeciesRepository {
       harvestMonths: [9, 10],
       floweringMonths: [8, 9, 10],
       sunNeeds: 'Alt',
+      color: '5D4037', // Dark Brown
+      iconCode: Icons.park.codePoint,
+      iconName: 'park',
     ),
     'cupressus': Species(
       id: '',
@@ -223,6 +260,9 @@ class SpeciesRepository {
       harvestMonths: [],
       floweringMonths: [2, 3],
       sunNeeds: 'Alt',
+      color: '004D40', // Dark Teal
+      iconCode: Icons.forest.codePoint, // Forest (Conifer/Cypress shape)
+      iconName: 'forest',
     ),
     'celtis australis': Species(
       id: '',
@@ -237,6 +277,9 @@ class SpeciesRepository {
       harvestMonths: [],
       floweringMonths: [4, 5],
       sunNeeds: 'Alt',
+      color: '4E342E', // Brown
+      iconCode: Icons.park.codePoint,
+      iconName: 'park',
     ),
     'pinus halepensis': Species(
       id: '',
@@ -251,6 +294,9 @@ class SpeciesRepository {
       harvestMonths: [],
       floweringMonths: [3, 4],
       sunNeeds: 'Alt',
+      color: '2E7D32', // Green
+      iconCode: Icons.forest.codePoint, // Forest (Pine)
+      iconName: 'forest',
     ),
     'malus domestica': Species(
       id: '',
@@ -265,6 +311,9 @@ class SpeciesRepository {
       harvestMonths: [9, 10],
       floweringMonths: [4],
       sunNeeds: 'Alt',
+      color: 'F44336', // Red
+      iconCode: Icons.park.codePoint, // Park
+      iconName: 'park',
     ),
     'pyrus communis': Species(
       id: '',
@@ -279,6 +328,9 @@ class SpeciesRepository {
       harvestMonths: [8, 9],
       floweringMonths: [4],
       sunNeeds: 'Alt',
+      color: '8BC34A', // Light Green
+      iconCode: Icons.park.codePoint, // Park
+      iconName: 'park',
     ),
     'morus alba': Species(
       id: '',
@@ -293,6 +345,9 @@ class SpeciesRepository {
       harvestMonths: [6],
       floweringMonths: [4],
       sunNeeds: 'Alt',
+      color: 'AB47BC', // Purple
+      iconCode: Icons.park.codePoint,
+      iconName: 'park',
     ),
     'prunus armeniaca': Species(
       id: '',
@@ -307,6 +362,9 @@ class SpeciesRepository {
       harvestMonths: [6, 7],
       floweringMonths: [2, 3],
       sunNeeds: 'Alt',
+      color: 'FFB74D', // Orange
+      iconCode: Icons.park.codePoint, // Park
+      iconName: 'park',
     ),
     'cistus': Species(
       id: '',
@@ -321,6 +379,26 @@ class SpeciesRepository {
       harvestMonths: [],
       floweringMonths: [4, 5, 6],
       sunNeeds: 'Alt',
+      color: 'EC407A', // Pink
+      iconCode: Icons.grass.codePoint,
+      iconName: 'grass',
+    ),
+    'ziziphus jujuba': Species(
+      id: '',
+      commonName: 'Ginjoler',
+      scientificName: 'Ziziphus jujuba',
+      kc: 0.65,
+      leafType: 'Caduca',
+      frostSensitivity: 'Baixa',
+      fruit: true,
+      prefix: 'GIN',
+      pruningMonths: [1, 2],
+      harvestMonths: [9, 10],
+      floweringMonths: [5, 6],
+      sunNeeds: 'Alt',
+      color: 'F06292', // Pink
+      iconCode: Icons.park.codePoint, // Generic Tree
+      iconName: 'park',
     ),
   };
 
@@ -339,9 +417,86 @@ class SpeciesRepository {
             s.commonName.toLowerCase() == lowerQuery,
       );
     } catch (_) {
-      return null;
+      // 3. Fallback: Smart Inference from Genus
+      return _inferFromGenus(lowerQuery);
     }
   }
+
+  Species _inferFromGenus(String query) {
+    // Extract Genus (first word)
+    final genus = query.split(' ').first.toLowerCase();
+
+    // Default: "Unknown" setup (will be overwritten if rule matches)
+    String color = '9E9E9E'; // Grey
+    int icon = Icons.park.codePoint;
+    String iconName = 'park';
+
+    // Heuristics
+    if ([
+      'pinus',
+      'cupressus',
+      'abies',
+      'cedrus',
+      'juniperus',
+    ].contains(genus)) {
+      color = '2E7D32'; // Forest Green
+      icon = Icons.forest.codePoint;
+      iconName = 'forest';
+    } else if (['citrus'].contains(genus)) {
+      color = 'FF9800'; // Orange
+      icon = Icons.nature.codePoint;
+      iconName = 'nature';
+    } else if (['prunus', 'malus', 'pyrus'].contains(genus)) {
+      color = 'F06292'; // Pink (Blossom)
+      icon = Icons.park.codePoint;
+      iconName = 'park';
+    } else if (['quercus', 'ficus', 'acer', 'ulmus'].contains(genus)) {
+      color = '795548'; // Brown
+      icon = Icons.nature.codePoint;
+      iconName = 'nature';
+    } else if (['olea'].contains(genus)) {
+      color = '4CAF50'; // Olive Green
+      icon = Icons.nature.codePoint;
+      iconName = 'nature';
+    } else {
+      // Deterministic Color based on Name Hash for consistent "random" colors
+      final hash = query.hashCode;
+      // Normalize to ensure visibility (avoid too dark/bright?)
+      // Simple approach: Use hash to pick from a palette
+      final palette = [
+        'EF5350',
+        'AB47BC',
+        '5C6BC0',
+        '29B6F6',
+        '26A69A',
+        '9CCC65',
+        'FFCA28',
+        'FF7043',
+        '8D6E63',
+      ];
+      color = palette[hash.abs() % palette.length];
+    }
+
+    return Species(
+      id: '',
+      commonName: query, // Temporary placeholder
+      scientificName: query,
+      kc: 0.75, // Default average
+      leafType: 'Fulla',
+      frostSensitivity: 'Mitjana',
+      fruit: true,
+      prefix: query.substring(0, min(3, query.length)).toUpperCase(),
+      pruningMonths: [],
+      harvestMonths: [],
+      floweringMonths: [],
+      sunNeeds: 'Alt',
+      color: color,
+      iconCode: icon,
+      iconName: iconName,
+    );
+  }
+
+  int min(int a, int b) => a < b ? a : b;
 
   Future<void> seedLibrary() async {
     final collection = _firestore.collection('species');

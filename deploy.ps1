@@ -72,7 +72,7 @@ try {
 
     # --- Step 4: Build Android APK ---
     Write-Step "Step 4: Building Android APK"
-    cmd /c "flutter build apk --release"
+    cmd /c "flutter build apk --release --no-tree-shake-icons"
     if ($LASTEXITCODE -ne 0) { throw "Android build failed" }
     Write-Success "APK Built."
 
@@ -97,7 +97,7 @@ try {
 
     # --- Step 6: Build Web ---
     Write-Step "Step 6: Building Web PWA"
-    cmd /c "flutter build web --release"
+    cmd /c "flutter build web --release --no-tree-shake-icons"
     if ($LASTEXITCODE -ne 0) { throw "Web build failed" }
     Write-Success "Web Built."
     

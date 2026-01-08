@@ -6,6 +6,7 @@ import '../../domain/entities/tree.dart';
 import '../../domain/entities/watering_event.dart';
 import '../../domain/entities/evolution_entry.dart';
 import '../../domain/entities/ai_analysis_entry.dart';
+import '../../domain/entities/growth_entry.dart';
 
 class TreesRepository {
   final CollectionReference _treesCollection = FirebaseFirestore.instance
@@ -189,6 +190,28 @@ class TreesRepository {
     }
   }
 
+  // --- Growth Timeline (Seguiment) ---
+
+  Stream<List<GrowthEntry>> getGrowthEntriesStream(String treeId) {
+    return _treesCollection
+        .doc(treeId)
+        .collection('seguiment')
+        .orderBy('date', descending: true)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs.map((doc) {
+            return GrowthEntry.fromMap(doc.data(), doc.id);
+          }).toList();
+        });
+  }
+
+  Future<void> addGrowthEntry(String treeId, GrowthEntry entry) async {
+    await _treesCollection
+        .doc(treeId)
+        .collection('seguiment')
+        .add(entry.toMap());
+  }
+
   // --- AI History ---
 
   Stream<List<AIAnalysisEntry>> getAIHistoryStream(String treeId) {
@@ -345,5 +368,69 @@ class TreesRepository {
 
     await batch.commit();
     return stats;
+  }
+
+  Future<int> migrateEvolutionToGrowth() async {
+    final trees = await _treesCollection.get();
+    final batch = FirebaseFirestore.instance.batch();
+    int count = 0;
+    int itemsMigrated = 0;
+
+    for (var treeDoc in trees.docs) {
+      // 1. Cleanup previous migrations (idempotency)
+      final existingMigrations = await treeDoc.reference
+          .collection('seguiment')
+          .where('estat_salut', isEqualTo: 'Migrat')
+          .get();
+
+      for (var doc in existingMigrations.docs) {
+        batch.delete(doc.reference);
+        count++;
+      }
+
+      // 2. Migrate Evolution
+      final evolutionSnapshot = await treeDoc.reference
+          .collection('evolucio')
+          .get();
+      for (var evoDoc in evolutionSnapshot.docs) {
+        final data = evoDoc.data();
+
+        // Use deterministic ID to avoid duplicates in same run, though cleanup handles re-runs
+        final newEntryRef = treeDoc.reference
+            .collection('seguiment')
+            .doc('MIG_${evoDoc.id}');
+
+        batch.set(newEntryRef, {
+          'date': data['date'],
+          'photoUrl': data['photoUrl'],
+          'alcada': 0.0,
+          'diametre_tronc': 0.0,
+          'estat_salut': 'Migrat',
+          'observacions': data['note'] ?? '',
+        });
+
+        itemsMigrated++;
+        count++;
+
+        if (count >= 400) {
+          await batch.commit();
+          count = 0;
+        }
+      }
+    }
+
+    if (count > 0) {
+      await batch.commit();
+    }
+
+    return itemsMigrated;
+  }
+
+  Future<void> deleteGrowthEntry(String treeId, String entryId) async {
+    await _treesCollection
+        .doc(treeId)
+        .collection('seguiment')
+        .doc(entryId)
+        .delete();
   }
 }

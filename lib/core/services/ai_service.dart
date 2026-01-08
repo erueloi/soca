@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../features/trees/data/repositories/species_repository.dart';
+
 class AIAnalysisResult {
   final String health;
   final String vigor;
@@ -16,6 +18,10 @@ class AIAnalysisResult {
 }
 
 class AIService {
+  final SpeciesRepository _speciesRepository;
+
+  AIService(this._speciesRepository);
+
   Future<AIAnalysisResult> analyzeTree({
     required String photoUrl,
     required String species,
@@ -76,11 +82,33 @@ class AIService {
         options: HttpsCallableOptions(timeout: const Duration(minutes: 1)),
       );
       final result = await callable.call({'speciesName': speciesName});
-      return Map<String, dynamic>.from(result.data);
+      final data = Map<String, dynamic>.from(result.data);
+
+      // Enhance with Local Knowledge (Color & Icon)
+      final sciName = data['nom_cientific'] as String? ?? '';
+      final commonName = data['nom_comu'] as String? ?? '';
+
+      final localMatch =
+          _speciesRepository.findOfflineSpecies(sciName) ??
+          _speciesRepository.findOfflineSpecies(commonName) ??
+          _speciesRepository.findOfflineSpecies(speciesName);
+
+      if (localMatch != null) {
+        if (localMatch.color.isNotEmpty && localMatch.color != '4CAF50') {
+          data['color'] = localMatch.color;
+        }
+        if (localMatch.iconCode != null) {
+          data['iconCode'] = localMatch.iconCode;
+        }
+      }
+
+      return data;
     } catch (e) {
       throw Exception('Error obtenint dades botàniques: $e');
     }
   }
 }
 
-final aiServiceProvider = Provider((ref) => AIService());
+final aiServiceProvider = Provider(
+  (ref) => AIService(ref.read(speciesRepositoryProvider)),
+);

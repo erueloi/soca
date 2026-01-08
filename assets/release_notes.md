@@ -1,5 +1,7 @@
 ﻿# Release Notes
 
+## v1.5.5
+Millora del mapa amb icones i colores i les referencies del arbres. Carreguem icones i colors per especies.
 ## v1.5.4
 Millora als arbres amb la relació d'especies i la seva bibloteca informativa. Afegim a la tasca al finalitzar-la poder triar la data. Referencia unica per cada arbre.
 ## v1.5.3
@@ -39,6 +41,12 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
+
+
+
+
+
 
 
 

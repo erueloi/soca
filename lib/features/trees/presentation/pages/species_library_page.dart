@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/repositories/species_repository.dart';
 import '../../domain/entities/species.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import '../../../../core/services/ai_service.dart';
+import '../../../../core/utils/icon_utils.dart';
 
 class SpeciesLibraryPage extends ConsumerStatefulWidget {
   final String? initialSearchQuery;
@@ -15,6 +17,53 @@ class SpeciesLibraryPage extends ConsumerStatefulWidget {
 class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
   late final TextEditingController _searchController;
   String _searchQuery = '';
+
+  Future<MapEntry<String, IconData>?> _showBotanicalPicker(
+    BuildContext context,
+  ) async {
+    return showDialog<MapEntry<String, IconData>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Tria una icona'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: GridView.builder(
+            shrinkWrap: true,
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 60,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+            ),
+            itemCount: IconUtils.botanicalIcons.length,
+            itemBuilder: (context, index) {
+              final entry = IconUtils.botanicalIcons.entries.elementAt(index);
+              return InkWell(
+                onTap: () => Navigator.pop(ctx, entry),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(entry.value, size: 32, color: Colors.green),
+                    const SizedBox(height: 4),
+                    Text(
+                      entry.key,
+                      style: const TextStyle(fontSize: 10),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Tancar'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -58,6 +107,10 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
     String leaf = existing?.leafType ?? 'Caduca';
     String sunNeeds = existing?.sunNeeds ?? 'Alt';
     bool fruit = existing?.fruit ?? true;
+    String selectedColor = (existing?.color ?? '4CAF50').replaceAll('#', '');
+    int? selectedIconCode = existing?.iconCode;
+    String? selectedIconName = existing?.iconName;
+    String? selectedIconFamily = existing?.iconFamily;
     bool isLoading = false;
 
     showDialog(
@@ -188,6 +241,15 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                                           fruit = true;
                                         }
                                       }
+                                      // New: Visuals
+                                      if (data['color'] != null) {
+                                        selectedColor = data['color']
+                                            .toString()
+                                            .replaceAll('#', '');
+                                      }
+                                      if (data['iconCode'] != null) {
+                                        selectedIconCode = data['iconCode'];
+                                      }
                                       isLoading = false;
                                     });
                                   } catch (e) {
@@ -217,6 +279,192 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                       textCapitalization: TextCapitalization.characters,
                       maxLength: 3,
                     ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Color del Marcador',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    // Pro Color Picker Trigger
+                    GestureDetector(
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Tria el color'),
+                            content: SingleChildScrollView(
+                              child: ColorPicker(
+                                pickerColor: Color(
+                                  int.parse('0xFF$selectedColor'),
+                                ),
+                                onColorChanged: (color) {
+                                  // Update state with valid Hex string (no alpha)
+                                  final hex = color
+                                      .toARGB32()
+                                      .toRadixString(16)
+                                      .toUpperCase()
+                                      .substring(2);
+                                  setStateDialog(() => selectedColor = hex);
+                                },
+                                enableAlpha: false,
+                                displayThumbColor: true,
+                                labelTypes: const [
+                                  ColorLabelType.hex,
+                                  ColorLabelType.rgb,
+                                  ColorLabelType.hsv,
+                                ],
+                                paletteType: PaletteType.hsvWithHue,
+                                pickerAreaHeightPercent: 0.8,
+                              ),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(ctx).pop(),
+                                child: const Text('Fet'),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Color(int.parse('0xFF$selectedColor')),
+                                border: Border.all(color: Colors.grey.shade300),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Color del Marcador',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text('#$selectedColor'),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.colorize),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Icona del Mapa',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    // 1. Quick Select Row (Botanical Filter)
+                    // 1. Quick Select Row (Botanical Filter)
+                    Builder(
+                      builder: (context) {
+                        final List<IconData> defaultIcons = [
+                          Icons.park,
+                          Icons.nature,
+                          Icons.forest,
+                          Icons.grass,
+                          Icons.local_florist,
+                          Icons.agriculture,
+                          Icons.spa,
+                          Icons.eco,
+                        ];
+
+                        final displayIcons = List<IconData>.from(defaultIcons);
+                        if (selectedIconCode != null &&
+                            !defaultIcons.any(
+                              (i) => i.codePoint == selectedIconCode,
+                            )) {
+                          displayIcons.add(
+                            IconUtils.resolveIcon(
+                              selectedIconCode!,
+                              selectedIconFamily,
+                            ),
+                          );
+                        }
+
+                        return Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: displayIcons.map((icon) {
+                            final isSelected =
+                                selectedIconCode == icon.codePoint;
+                            return GestureDetector(
+                              onTap: () => setStateDialog(
+                                () => selectedIconCode = icon.codePoint,
+                              ),
+                              child: Column(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? Colors.green.shade100
+                                          : Colors.grey.shade100,
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? Colors.green
+                                            : Colors.grey.shade300,
+                                        width: 2,
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(
+                                      icon,
+                                      color: isSelected
+                                          ? Colors.green
+                                          : Colors.black87,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+
+                    // 2. Full Library Search
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.search),
+                        label: Text(
+                          selectedIconCode != null
+                              ? 'Cercar una altra icona...' // "Search another..."
+                              : 'Cercar a la llibreria completa',
+                        ), // "Search full library"
+                        onPressed: () async {
+                          final result = await _showBotanicalPicker(context);
+
+                          if (result != null) {
+                            setStateDialog(() {
+                              selectedIconCode = result.value.codePoint;
+                              selectedIconName = result.key;
+                              selectedIconFamily = result.value.fontFamily;
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // UI logic is now inline above.
                     Row(
                       children: [
                         Expanded(
@@ -322,6 +570,10 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                       prefix: prefixCtrl.text.toUpperCase(),
                       pruningMonths: parseMonths(pruningCtrl.text),
                       harvestMonths: parseMonths(harvestCtrl.text),
+                      color: selectedColor,
+                      iconCode: selectedIconCode,
+                      iconName: selectedIconName, // Persist the name
+                      iconFamily: selectedIconFamily,
                     );
 
                     if (existing == null) {
@@ -385,6 +637,7 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
     final s = sensitivity.toLowerCase();
     if (s.contains('alta')) return '❄️❄️❄️';
     if (s.contains('mitjana')) return '❄️❄️';
+    if (s.contains('baixa')) return '❄️';
     if (s.contains('baixa')) return '❄️';
     return sensitivity;
   }
@@ -458,6 +711,8 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                       columnSpacing: 20,
                       columns: const [
                         DataColumn(label: Text('Nom Comú')),
+                        DataColumn(label: Text('Icona')),
+                        DataColumn(label: Text('Color')),
                         DataColumn(
                           label: Text(
                             'Cod.',
@@ -473,6 +728,23 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                         DataColumn(label: Text('Fruit')),
                       ],
                       rows: filtered.map((s) {
+                        Color speciesColor = Colors.grey;
+                        if (s.color.isNotEmpty) {
+                          try {
+                            speciesColor = Color(
+                              int.parse('0xFF${s.color.replaceAll('#', '')}'),
+                            );
+                          } catch (_) {}
+                        }
+
+                        IconData icon = Icons.help_outline;
+                        if (s.iconCode != null) {
+                          icon = IconUtils.resolveIcon(
+                            s.iconCode!,
+                            s.iconFamily,
+                          );
+                        }
+
                         return DataRow(
                           cells: [
                             DataCell(
@@ -480,6 +752,20 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                                 s.commonName,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            DataCell(Icon(icon, size: 20)),
+                            DataCell(
+                              Container(
+                                width: 20,
+                                height: 20,
+                                decoration: BoxDecoration(
+                                  color: speciesColor,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.grey.shade400,
+                                  ),
                                 ),
                               ),
                             ),
