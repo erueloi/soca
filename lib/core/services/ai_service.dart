@@ -21,14 +21,20 @@ class AIService {
     required String species,
     required String format,
     required String locationContext,
+    required DateTime date,
+    required String leafType, // 'Caduca' or 'Perenne'
+    required String age, // e.g. "2 anys"
   }) async {
     try {
       final callable = FirebaseFunctions.instance.httpsCallable('analyzeTree');
       final result = await callable.call({
-        'imagePath': photoUrl, // Function handles parsing the URL
+        'imagePath': photoUrl,
         'species': species,
         'format': format,
         'location': locationContext,
+        'date': date.toIso8601String().split('T')[0],
+        'leafType': leafType,
+        'age': age,
       });
 
       final data = Map<String, dynamic>.from(result.data);
@@ -60,6 +66,19 @@ class AIService {
       return Map<String, dynamic>.from(result.data);
     } catch (e) {
       throw Exception('Error identificant arbre: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> getBotanicalData(String speciesName) async {
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable(
+        'getBotanicalDataFromText',
+        options: HttpsCallableOptions(timeout: const Duration(minutes: 1)),
+      );
+      final result = await callable.call({'speciesName': speciesName});
+      return Map<String, dynamic>.from(result.data);
+    } catch (e) {
+      throw Exception('Error obtenint dades botàniques: $e');
     }
   }
 }

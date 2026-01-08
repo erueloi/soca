@@ -73,7 +73,7 @@ class MeteocatService {
           _obsRateLimit,
         );
       } catch (e) {
-        print("Meteocat Obs Error: $e");
+        // print("Meteocat Obs Error: $e");
         // Fallback: Try to load cached data ignoring expiry if available
         final cachedObs = prefs.getString(_keyCachedObs);
         if (cachedObs != null) {
@@ -92,7 +92,7 @@ class MeteocatService {
           _forecastRateLimit,
         );
       } catch (e) {
-        print("Meteocat Forecast Error: $e");
+        // print("Meteocat Forecast Error: $e");
         final cachedForecast = prefs.getString(_keyCachedForecast);
         if (cachedForecast != null) {
           forecast = jsonDecode(cachedForecast);
@@ -105,7 +105,7 @@ class MeteocatService {
         'station': stationCode,
       };
     } catch (e) {
-      print('Meteocat Error: $e');
+      // print('Meteocat Error: $e');
       // Return cached data if available even if expired, or rethrow
       return {};
     }
@@ -130,7 +130,7 @@ class MeteocatService {
     }
 
     // Fetch new
-    print('Fetching new data for $dataKey');
+    // print('Fetching new data for $dataKey');
     final data = await fetcher();
     await prefs.setString(dataKey, jsonEncode(data));
     await prefs.setString(timeKey, DateTime.now().toIso8601String());
@@ -180,13 +180,13 @@ class MeteocatService {
       } else {
         // throw Exception('Failed to load stations: ${response.statusCode}');
         // Fallback instead of crashing
-        print(
-          'Failed to load stations: ${response.statusCode}. Using Fallback.',
-        );
+        // print(
+        //   'Failed to load stations: ${response.statusCode}. Using Fallback.',
+        // );
         return 'X1'; // Les Borges Blanques
       }
     } catch (e) {
-      print('Meteocat Lookup Error: $e. Using Fallback Station X1.');
+      // print('Meteocat Lookup Error: $e. Using Fallback Station X1.');
       return 'X1'; // Les Borges Blanques (Fallback)
     }
   }
@@ -220,9 +220,9 @@ class MeteocatService {
   /// Useful for historical charts and cold hours estimation.
   Future<List<dynamic>> getDailyHistory(DateTime from, DateTime to) async {
     if (await isQuotaSaverEnabled) {
-      print(
-        '⚠️ Quota Saver Mode Active: Skipping XEMA API call for $from - $to',
-      );
+      // print(
+      //   '⚠️ Quota Saver Mode Active: Skipping XEMA API call for $from - $to',
+      // );
       return []; // Return empty to force usage of local DB only
     }
 
@@ -260,7 +260,7 @@ class MeteocatService {
         }
       } catch (e) {
         if (e.toString().contains('429')) {
-          print("Rate Limit Hit (429). Aborting batch fetch.");
+          // print("Rate Limit Hit (429). Aborting batch fetch.");
           break; // Stop loop to protect quota
         }
         // Continue for other errors
@@ -316,7 +316,7 @@ class MeteocatService {
     } catch (e) {
       // Rethrow 429 so loop can catch it
       if (e.toString().contains('429')) rethrow;
-      print("Error fetching date $date: $e");
+      // print("Error fetching date $date: $e");
     }
     return {};
   }

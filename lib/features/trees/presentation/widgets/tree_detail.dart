@@ -11,11 +11,15 @@ import '../../domain/entities/watering_event.dart';
 import '../../domain/entities/evolution_entry.dart';
 import '../../domain/entities/ai_analysis_entry.dart';
 import '../../../../core/services/ai_service.dart';
+import 'species_selector.dart';
 
 import '../providers/trees_provider.dart';
+import '../../data/repositories/species_repository.dart';
 import '../pages/watering_page.dart';
 import '../pages/location_picker_page.dart';
 import '../../domain/entities/tree.dart';
+import '../../domain/entities/species.dart';
+import '../pages/species_library_page.dart';
 
 class TreeDetail extends ConsumerStatefulWidget {
   final Tree tree;
@@ -46,6 +50,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
   late LatLng _location;
   late String _status;
   String? _vigor;
+  String? _selectedSpeciesId; // Added for Species Library Link
 
   int _aiHistoryLimit = 3;
 
@@ -75,6 +80,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     _location = LatLng(widget.tree.latitude, widget.tree.longitude);
     _status = widget.tree.status;
     _vigor = widget.tree.vigor;
+    _selectedSpeciesId = widget.tree.speciesId; // Init from tree
   }
 
   @override
@@ -104,6 +110,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
       longitude: _location.longitude,
       status: _status,
       vigor: _vigor,
+      speciesId: _selectedSpeciesId, // Included in update
     );
 
     await ref.read(treesRepositoryProvider).updateTree(updatedTree);
@@ -187,30 +194,36 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                background: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if (widget.tree.photoUrl != null)
-                      GestureDetector(
-                        onTap: () =>
-                            _showFullImage(context, widget.tree.photoUrl!),
-                        child: Image.network(
+                background: GestureDetector(
+                  onTap: () {
+                    if (widget.tree.photoUrl != null) {
+                      _showFullImage(context, widget.tree.photoUrl!);
+                    }
+                  },
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (widget.tree.photoUrl != null)
+                        Image.network(
                           widget.tree.photoUrl!,
                           fit: BoxFit.cover,
-                        ),
-                      )
-                    else
-                      Container(color: Colors.green),
-                    const DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Colors.transparent, Colors.black54],
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(color: Colors.green);
+                          },
+                        )
+                      else
+                        Container(color: Colors.green),
+                      const DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Colors.transparent, Colors.black54],
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -242,6 +255,14 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
       ),
     );
   }
+
+  // ... (rest of methods)
+
+  // Skip down to _showFullImage update
+  // Since replace_file_content must be contiguous, and these are far apart (header at ~200, _showFullImage at ~1646),
+  // I must use multi_replace_file_content.
+  // Wait, I am using replace_file_content tool here. I cannot do both.
+  // I'll cancel this tool call and use multi_replace_file_content.
 
   // --- TABS ---
 
@@ -355,6 +376,31 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     setState(() => _isAnalyzing = true);
 
     try {
+      // 1. Gather Context
+      String leafType = 'Desconegut';
+      if (widget.tree.speciesId != null) {
+        final species = await ref
+            .read(speciesRepositoryProvider)
+            .getSpeciesById(widget.tree.speciesId!);
+        if (species != null) {
+          leafType = species.leafType;
+        }
+      } else {
+        // Fallback: Try offline lookup by name if ID missing
+        final offline = ref
+            .read(speciesRepositoryProvider)
+            .findOfflineSpecies(widget.tree.species);
+        if (offline != null) {
+          leafType = offline.leafType;
+        }
+      }
+
+      final ageDays = DateTime.now()
+          .difference(widget.tree.plantingDate)
+          .inDays;
+      final ageYears = (ageDays / 365).toStringAsFixed(1);
+      final ageStr = '$ageYears anys';
+
       final result = await ref
           .read(aiServiceProvider)
           .analyzeTree(
@@ -362,6 +408,9 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
             species: widget.tree.species,
             format: widget.tree.plantingFormat ?? 'Desconegut',
             locationContext: 'La Floresta, Lleida',
+            date: DateTime.now(),
+            leafType: leafType,
+            age: ageStr,
           );
 
       if (!mounted) {
@@ -637,15 +686,74 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
+          if (!_isEditing) ...[
+            if (widget.tree.reference != null)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 24),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                decoration: BoxDecoration(
+                  color: Colors.indigo.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.indigo.shade100),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      'REFERÈNCIA',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.indigo.shade300,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.tree.reference!,
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.indigo.shade900,
+                        letterSpacing: 2.0,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            _buildBotanicalInfo(),
+          ],
           if (_isEditing) ...[
             TextField(
               controller: _commonNameController,
               decoration: const InputDecoration(labelText: 'Nom Comú'),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _speciesController,
-              decoration: const InputDecoration(labelText: 'Espècie'),
+            SpeciesSelector(
+              initialValue: _speciesController.text,
+              onChanged: (val) {
+                setState(() {
+                  _speciesController.text = val;
+                  _selectedSpeciesId = null; // Unlink if manual typing
+                });
+              },
+              onSpeciesSelected: (species) {
+                setState(() {
+                  _speciesController.text = species.scientificName;
+                  _commonNameController.text = species.commonName;
+                  _selectedSpeciesId = species.id;
+                  _ecologicalFuncController.text = species.fruit
+                      ? 'Fruit'
+                      : 'Ornamental';
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Vinculat a: ${species.commonName} (Kc: ${species.kc})',
+                    ),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 24),
           ],
@@ -1048,7 +1156,24 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
-            final entries = snapshot.data ?? [];
+            var entries = snapshot.data ?? [];
+
+            // Prepend Main Image if exists and not already in list (simple check by url)
+            if (widget.tree.photoUrl != null) {
+              final mainUrl = widget.tree.photoUrl!;
+              final exists = entries.any((e) => e.photoUrl == mainUrl);
+              if (!exists) {
+                final mainEntry = EvolutionEntry(
+                  id: 'MAIN_PHOTO',
+                  date: widget
+                      .tree
+                      .plantingDate, // Or now? plantingDate seems safer
+                  photoUrl: mainUrl,
+                  note: 'Foto Principal',
+                );
+                entries = [mainEntry, ...entries];
+              }
+            }
 
             if (entries.isEmpty) {
               return _buildEmptyGalleryState();
@@ -1346,31 +1471,50 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     showDialog(
       context: context,
       builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Stack(
-              children: [
-                Image.network(
-                  entry.photoUrl,
-                  fit: BoxFit.cover,
-                  height: 300,
-                  width: double.infinity,
-                ),
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: IconButton(
-                    icon: const Icon(
-                      Icons.close,
-                      color: Colors.white,
-                      shadows: [Shadow(color: Colors.black, blurRadius: 4)],
+            Container(
+              height: 400,
+              color: Colors.black, // Dark background for better contrast
+              child: Stack(
+                children: [
+                  Center(
+                    child: InteractiveViewer(
+                      minScale: 0.5,
+                      maxScale: 4.0,
+                      child: Image.network(
+                        entry.photoUrl,
+                        fit: BoxFit.contain, // Ensure full image is visible
+                        width: double.infinity,
+                        height: double.infinity,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        },
+                      ),
                     ),
-                    onPressed: () => Navigator.pop(context),
                   ),
-                ),
-              ],
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: Colors.black45,
+                        shape: BoxShape.circle,
+                      ),
+                      child: IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             Padding(
               padding: const EdgeInsets.all(16),
@@ -1387,32 +1531,33 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                       child: Text(entry.note!),
                     ),
                   const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.wallpaper),
-                    label: const Text('ESTABLIR COM A FOTO PRINCIPAL'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(double.infinity, 44),
-                    ),
-                    onPressed: () async {
-                      // Update Tree Main Photo
-                      final updatedTree = widget.tree.copyWith(
-                        photoUrl: entry.photoUrl,
-                      );
-                      await ref
-                          .read(treesRepositoryProvider)
-                          .updateTree(updatedTree);
-                      if (context.mounted) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Foto principal actualitzada'),
-                          ),
+                  if (entry.id != 'MAIN_PHOTO')
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.wallpaper),
+                      label: const Text('ESTABLIR COM A FOTO PRINCIPAL'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(double.infinity, 44),
+                      ),
+                      onPressed: () async {
+                        // Update Tree Main Photo
+                        final updatedTree = widget.tree.copyWith(
+                          photoUrl: entry.photoUrl,
                         );
-                      }
-                    },
-                  ),
+                        await ref
+                            .read(treesRepositoryProvider)
+                            .updateTree(updatedTree);
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Foto principal actualitzada'),
+                            ),
+                          );
+                        }
+                      },
+                    ),
                 ],
               ),
             ),
@@ -1618,18 +1763,222 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Stack(
-          alignment: Alignment.topRight,
-          children: [
-            InteractiveViewer(child: Image.network(url, fit: BoxFit.contain)),
-            IconButton(
-              icon: const Icon(Icons.close, color: Colors.white, size: 30),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ],
+        insetPadding: const EdgeInsets.all(16),
+        child: Container(
+          height: 400,
+          color: Colors.black, // Dark background for better contrast
+          child: Stack(
+            children: [
+              Center(
+                child: InteractiveViewer(
+                  minScale: 0.5,
+                  maxScale: 4.0,
+                  child: Image.network(
+                    url,
+                    fit: BoxFit.contain,
+                    width: double.infinity,
+                    height: double.infinity,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return const Center(child: CircularProgressIndicator());
+                    },
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.black45,
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  // --- BOTANICAL CARD ---
+
+  Widget _buildBotanicalInfo() {
+    return FutureBuilder<Species?>(
+      future: _fetchSpecies(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox.shrink();
+        final species = snapshot.data!;
+
+        return Card(
+          elevation: 2,
+          margin: const EdgeInsets.only(bottom: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          color: Colors.indigo.shade50,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                InkWell(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => SpeciesLibraryPage(
+                          initialSearchQuery: species.scientificName,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Text(
+                    species.scientificName,
+                    style: TextStyle(
+                      fontStyle: FontStyle.italic,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: Colors.indigo.shade900,
+                      decoration: TextDecoration.underline,
+                      decorationColor: Colors.indigo.shade200,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                Text(
+                  species.commonName,
+                  style: TextStyle(color: Colors.grey.shade700),
+                ),
+                const Divider(),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildBotIcon(
+                      species.leafType == 'Perenne' ? Icons.park : Icons.nature,
+                      species.leafType,
+                    ),
+                    _buildBotIcon(
+                      _getSunIconData(species.sunNeeds),
+                      species.sunNeeds,
+                    ),
+                    _buildBotIcon(
+                      Icons.ac_unit,
+                      species.frostSensitivity.split(' ').first,
+                    ), // Shorten
+                    _buildBotIcon(
+                      species.fruit ? Icons.restaurant : Icons.no_food,
+                      species.fruit
+                          ? (species.fruitType?.isNotEmpty == true
+                                ? species.fruitType!
+                                : 'Fruit')
+                          : 'No',
+                    ),
+                    _buildBotIcon(Icons.water, 'Kc: ${species.kc}'),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildTimeline('Poda', species.pruningMonths, Colors.orange),
+                const SizedBox(height: 8),
+                _buildTimeline('Collita', species.harvestMonths, Colors.green),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<Species?> _fetchSpecies() async {
+    if (widget.tree.speciesId != null) {
+      return ref
+          .read(speciesRepositoryProvider)
+          .getSpeciesById(widget.tree.speciesId!);
+    }
+    return ref
+        .read(speciesRepositoryProvider)
+        .findOfflineSpecies(widget.tree.species);
+  }
+
+  IconData _getSunIconData(String s) {
+    if (s.toLowerCase().contains('alt')) return Icons.wb_sunny;
+    if (s.toLowerCase().contains('baix')) return Icons.cloud;
+    return Icons.wb_twilight;
+  }
+
+  Widget _buildBotIcon(IconData icon, String label) {
+    return Column(
+      children: [
+        Icon(icon, color: Colors.indigo.shade400, size: 28),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTimeline(String title, List<int> months, Color color) {
+    const letters = [
+      'G',
+      'F',
+      'M',
+      'A',
+      'M',
+      'J',
+      'J',
+      'A',
+      'S',
+      'O',
+      'N',
+      'D',
+    ];
+    return Row(
+      children: [
+        SizedBox(
+          width: 50,
+          child: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+          ),
+        ),
+        Expanded(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(12, (i) {
+              final active = months.contains(i + 1);
+              return Container(
+                width: 20,
+                height: 20,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: active ? color : Colors.transparent,
+                  border: Border.all(
+                    color: active ? color : Colors.grey.shade400,
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  letters[i],
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: active ? Colors.white : Colors.grey,
+                    fontWeight: active ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+      ],
     );
   }
 }

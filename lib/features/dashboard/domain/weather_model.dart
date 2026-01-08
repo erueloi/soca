@@ -5,6 +5,7 @@ class WeatherModel {
   final int rainProbability;
   final String irrigationAdvice;
   final String stationName;
+  final List<SafetyAlert> alerts;
 
   WeatherModel({
     required this.temperature,
@@ -13,6 +14,7 @@ class WeatherModel {
     required this.rainProbability,
     required this.irrigationAdvice,
     required this.stationName,
+    this.alerts = const [],
   });
 
   factory WeatherModel.empty() {
@@ -23,6 +25,15 @@ class WeatherModel {
       rainProbability: 0,
       irrigationAdvice: 'Carregant...',
       stationName: '',
+      alerts: [],
     );
   }
+}
+
+class SafetyAlert {
+  final String title;
+  final String message;
+  final String icon; // Asset or Material Icon name
+
+  SafetyAlert({required this.title, required this.message, required this.icon});
 }

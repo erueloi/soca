@@ -11,6 +11,8 @@ import '../pages/location_picker_page.dart';
 import '../../../../core/services/ai_service.dart';
 import '../../../settings/presentation/providers/settings_provider.dart';
 
+import 'species_selector.dart';
+
 class TreeFormSheet extends ConsumerStatefulWidget {
   final Tree? tree;
 
@@ -28,13 +30,16 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
   late TextEditingController _providerController;
   late TextEditingController _priceController;
   late TextEditingController _padrinoController;
+
   late TextEditingController _maintenanceTipsController;
+  late TextEditingController _referenceController;
 
   late DateTime _plantingDate;
   late String _status;
   String? _ecologicalFunction;
   String? _plantingFormat;
   String? _vigor;
+  String? _selectedSpeciesId; // For Species Library Link
 
   double? _latitude;
   double? _longitude;
@@ -116,6 +121,9 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
     _maintenanceTipsController = TextEditingController(
       text: widget.tree?.maintenanceTips ?? '',
     );
+    _referenceController = TextEditingController(
+      text: widget.tree?.reference ?? '',
+    );
 
     _plantingDate = widget.tree?.plantingDate ?? DateTime.now();
     _status = widget.tree?.status ?? 'Viable';
@@ -124,6 +132,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
     _vigor = widget.tree?.vigor;
     _latitude = widget.tree?.latitude;
     _longitude = widget.tree?.longitude;
+    _selectedSpeciesId = widget.tree?.speciesId;
 
     if (widget.tree == null) {
       _fetchLocation();
@@ -138,7 +147,9 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
     _providerController.dispose();
     _priceController.dispose();
     _padrinoController.dispose();
+
     _maintenanceTipsController.dispose();
+    _referenceController.dispose();
     super.dispose();
   }
 
@@ -272,6 +283,11 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
           ? null
           : _maintenanceTipsController.text,
       vigor: _vigor,
+
+      speciesId: _selectedSpeciesId,
+      reference: _referenceController.text.isEmpty
+          ? null
+          : _referenceController.text,
     );
 
     if (widget.tree == null) {
@@ -340,38 +356,70 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                           color: Colors.grey[200],
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: Colors.grey),
-                          image: _imageFile != null
-                              ? DecorationImage(
-                                  image: kIsWeb
-                                      ? NetworkImage(_imageFile!.path)
-                                      : FileImage(File(_imageFile!.path))
-                                            as ImageProvider,
-                                  fit: BoxFit.cover,
-                                )
-                              : (widget.tree?.photoUrl != null)
-                              ? DecorationImage(
-                                  image: NetworkImage(widget.tree!.photoUrl!),
-                                  fit: BoxFit.cover,
-                                )
-                              : null,
                         ),
-                        child:
-                            _imageFile == null && widget.tree?.photoUrl == null
-                            ? const Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.camera_alt,
-                                    size: 50,
-                                    color: Colors.grey,
-                                  ),
-                                  Text(
-                                    'Clica per fer foto',
-                                    style: TextStyle(color: Colors.grey),
-                                  ),
-                                ],
-                              )
-                            : null,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: _imageFile != null
+                              ? kIsWeb
+                                    ? Image.network(
+                                        _imageFile!.path,
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                const Icon(
+                                                  Icons.broken_image,
+                                                  size: 50,
+                                                  color: Colors.grey,
+                                                ),
+                                      )
+                                    : Image.file(
+                                        File(_imageFile!.path),
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                const Icon(
+                                                  Icons.broken_image,
+                                                  size: 50,
+                                                  color: Colors.grey,
+                                                ),
+                                      )
+                              : (widget.tree?.photoUrl != null)
+                              ? Image.network(
+                                  widget.tree!.photoUrl!,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return const Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.broken_image,
+                                          size: 50,
+                                          color: Colors.grey,
+                                        ),
+                                        Text(
+                                          'Error carregant imatge',
+                                          style: TextStyle(color: Colors.grey),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                )
+                              : const Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.camera_alt,
+                                      size: 50,
+                                      color: Colors.grey,
+                                    ),
+                                    Text(
+                                      'Clica per fer foto',
+                                      style: TextStyle(color: Colors.grey),
+                                    ),
+                                  ],
+                                ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -494,15 +542,51 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                       validator: (v) => v!.isEmpty ? 'Cal posar un nom' : null,
                     ),
                     const SizedBox(height: 16),
+                    // Species Autocomplete
+                    // Species Autocomplete
+                    SpeciesSelector(
+                      initialValue: _speciesController.text,
+                      onChanged: (val) {
+                        _speciesController.text = val;
+                        _selectedSpeciesId = null; // Unlink
+                      },
+                      onSpeciesSelected: (species) async {
+                        setState(() {
+                          _speciesController.text = species.scientificName;
+                          _commonNameController.text = species.commonName;
+                          _selectedSpeciesId = species.id;
+                          _ecologicalFunction ??= species.fruit
+                              ? 'Fruit'
+                              : 'Ornamental';
+                        });
+
+                        // Generate Reference automatically
+                        final refStr = await ref
+                            .read(treesRepositoryProvider)
+                            .generateTreeReference(species.prefix);
+
+                        if (context.mounted) {
+                          // Only update if empty (don't overwrite custom input)
+                          if (_referenceController.text.isEmpty) {
+                            _referenceController.text = refStr;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Referència suggerida: $refStr'),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
                     TextFormField(
-                      controller: _speciesController,
+                      controller: _referenceController,
                       decoration: const InputDecoration(
-                        labelText: 'Espècie (Científic)',
+                        labelText: 'Referència (ex: OLI-005)',
                         border: OutlineInputBorder(),
+                        helperText: 'Codi únic per etiqueta',
                       ),
-                      textCapitalization: TextCapitalization.words,
-                      validator: (v) =>
-                          v!.isEmpty ? 'Cal posar l\'espècie' : null,
+                      textCapitalization: TextCapitalization.characters,
                     ),
 
                     const SizedBox(height: 16),

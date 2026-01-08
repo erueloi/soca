@@ -67,31 +67,60 @@ class _TasksPageState extends ConsumerState<TasksPage> {
     );
   }
 
-  void _toggleTask(Task task) {
+  Future<void> _toggleTask(Task task) async {
     final isDone = !task.isDone;
+    DateTime? completionDate;
+
+    if (isDone) {
+      completionDate = await _promptCompletionDate(task.title);
+      // If user cancelled the dialog, we don't complete the task
+      if (completionDate == null) return;
+    }
+
     final updatedTask = task.copyWith(
       isDone: isDone,
-      completedAt: isDone ? DateTime.now() : null,
+      completedAt: isDone ? completionDate : null,
     );
     ref.read(tasksRepositoryProvider).updateTask(updatedTask);
   }
 
-  void _onTaskDropped(Task task, String newBucket) {
+  Future<void> _onTaskDropped(Task task, String newBucket) async {
     if (task.bucket != newBucket) {
       final updatedTask = task.copyWith(bucket: newBucket);
       ref.read(tasksRepositoryProvider).updateTask(updatedTask);
     }
   }
 
-  void _onArchiveDrop(Task task) {
+  Future<void> _onArchiveDrop(Task task) async {
+    final completionDate = await _promptCompletionDate(task.title);
+    if (completionDate == null) return;
+
     final updatedTask = task.copyWith(
       isDone: true,
-      completedAt: DateTime.now(),
+      completedAt: completionDate,
     );
     ref.read(tasksRepositoryProvider).updateTask(updatedTask);
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Tasca "${task.title}" completada! ✅')),
     );
+  }
+
+  Future<DateTime?> _promptCompletionDate(String taskTitle) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: DateTime(2020),
+      lastDate: now,
+      helpText: 'FINALITZACIÓ DE TASCA',
+      confirmText: 'COMPLETAR',
+      cancelText: 'CANCEL·LAR',
+      fieldLabelText: 'Data de finalització',
+    );
+    return picked != null
+        ? DateTime(picked.year, picked.month, picked.day, now.hour, now.minute)
+        : null;
   }
 
   void _openBucketManagement() {

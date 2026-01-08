@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/services/meteocat_service.dart';
 import '../../domain/climate_model.dart';
+import 'package:soca/core/calculators/et0_calculator.dart';
 import '../../data/repositories/climate_repository.dart';
+import 'package:soca/features/settings/presentation/providers/settings_provider.dart';
 
 // final climateRepositoryProvider = Provider((ref) => ClimateRepository());
 
@@ -31,7 +33,7 @@ final climateComparisonProvider = FutureProvider<ClimateMonthComparison>((
 ) async {
   final selectedDate = ref.watch(selectedMonthProvider);
   final repository = ref.watch(climateRepositoryProvider);
-  final service = ref.watch(meteocatServiceProvider);
+  // final service = ref.watch(meteocatServiceProvider); // Unused
 
   // 1. Define Ranges
   // Current Month
@@ -137,12 +139,42 @@ class ManualClimateController {
 
         final rawData = await service.fetchDailyObservation(date);
 
+        // 0. Fetch Farm Config for Lat (Ideally fetch once outside loop, but here is fine for now or fetch above)
+        final config = await _ref.read(farmConfigStreamProvider.future);
+
         if (rawData.isNotEmpty && rawData.containsKey('data_list')) {
           final List<dynamic> list = rawData['data_list'];
           final newItems = list.map((item) {
-            return ClimateDailyData.fromMeteocat(
-              DateTime.parse(item['date']),
-              item['data'],
+            final d = DateTime.parse(item['date']);
+
+            // Create temp object to extract values easily (or parse manual)
+            // We'll trust fromMeteocat to parse values, but we need those values for ET0.
+            // Option A: Parse to object, then Calculate ET0, then Update object (copyWith or recreate).
+
+            final tempObj = ClimateDailyData.fromMeteocat(d, item['data']);
+
+            // Calculate ET0
+            final et0 = ET0Calculator.calculate(
+              lat: config.latitude,
+              date: d,
+              tMax: tempObj.maxTemp,
+              tMin: tempObj.minTemp,
+              rhMean: tempObj.humidity > 0 ? tempObj.humidity : null,
+              windSpeed: tempObj.windSpeed > 0 ? tempObj.windSpeed : null,
+              radiation: tempObj.radiation > 0 ? tempObj.radiation : null,
+            );
+
+            return ClimateDailyData(
+              date: tempObj.date,
+              maxTemp: tempObj.maxTemp,
+              minTemp: tempObj.minTemp,
+              rain: tempObj.rain,
+              rainAccumulated: tempObj.rainAccumulated,
+              humidity: tempObj.humidity,
+              radiation: tempObj.radiation,
+              windSpeed: tempObj.windSpeed,
+              et0: et0,
+              isMock: false,
             );
           }).toList();
 
@@ -151,7 +183,7 @@ class ManualClimateController {
           downloaded++;
         }
       } catch (e) {
-        print("Error syncing date $date: $e");
+        // debugPrint("Error syncing date $date: $e");
         // Continue to next day even if one fails
       }
     }
@@ -161,6 +193,20 @@ class ManualClimateController {
     _ref.invalidate(climateHistoryProvider);
 
     return downloaded;
+  }
+
+  Future<void> generateMocks(DateTime start, DateTime end) async {
+    final repository = _ref.read(climateRepositoryProvider);
+    await repository.generateMockDataRange(start, end);
+    _ref.invalidate(climateComparisonProvider);
+    _ref.invalidate(climateHistoryProvider);
+  }
+
+  Future<void> deleteMocks() async {
+    final repository = _ref.read(climateRepositoryProvider);
+    await repository.deleteMocks();
+    _ref.invalidate(climateComparisonProvider);
+    _ref.invalidate(climateHistoryProvider);
   }
 }
 
@@ -174,7 +220,7 @@ final climateHistoryProvider = FutureProvider<List<ClimateDailyData>>((
   // But this provider logic was specific for Hydro Year context.
   // Let's keep it simple for now to avoid breaking Dashboard.
 
-  final service = ref.watch(meteocatServiceProvider);
+  // final service = ref.watch(meteocatServiceProvider); // Unused
   final repository = ref.watch(climateRepositoryProvider);
   final now = DateTime.now();
 

@@ -1,5 +1,7 @@
 ﻿# Release Notes
 
+## v1.5.4
+Millora als arbres amb la relació d'especies i la seva bibloteca informativa. Afegim a la tasca al finalitzar-la poder triar la data. Referencia unica per cada arbre.
 ## v1.5.3
 Sincronitzem amb el Meteocat. Widget de tems real. Pagina de Clima amb informació real de l'estació mes proxima.
 ## v1.5.2
@@ -37,6 +39,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

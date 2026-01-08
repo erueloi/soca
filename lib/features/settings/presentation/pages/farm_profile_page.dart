@@ -4,10 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:soca/features/settings/domain/entities/farm_config.dart';
 import '../../../../core/services/meteocat_service.dart';
-import '../../../climate/data/repositories/climate_repository.dart';
 import '../providers/settings_provider.dart';
 
 import 'package:soca/features/settings/presentation/widgets/zone_edit_dialog.dart';
+import '../../../trees/data/repositories/species_repository.dart';
+import '../../../trees/presentation/providers/trees_provider.dart'; // Ensure treesRepositoryProvider is here
 
 class FarmProfilePage extends ConsumerStatefulWidget {
   const FarmProfilePage({super.key});
@@ -129,6 +130,52 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Error guardant: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _migrateData() async {
+    setState(() => _isSaving = true); // Repurpose loading state
+    try {
+      // 1. Fix Species Prefixes
+      final speciesStats = await ref
+          .read(speciesRepositoryProvider)
+          .fixMissingPrefixes();
+
+      // 2. Fix Tree References
+      final treeStats = await ref
+          .read(treesRepositoryProvider)
+          .migrateTreeReferences();
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Migració Completada'),
+            content: Text(
+              'Prefixos Espècies generats: ${speciesStats['updated']}\n'
+              'Arbres actualitzats: ${treeStats['updated']}\n'
+              'Detalls:\n${(treeStats['details'] as List).take(5).join('\n')}...',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+        debugPrint(
+          'Migració completada: ${treeStats['updated']} arbres actualitzats.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error en migració: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -307,6 +354,30 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
                 ),
 
                 const SizedBox(height: 24),
+                const Divider(),
+                const Text(
+                  'Manteniment de Dades',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange,
+                  ),
+                ),
+                const Text(
+                  'Accions massives per a la base de dades.',
+                  style: TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _isSaving ? null : _migrateData,
+                  icon: const Icon(Icons.build, color: Colors.orange),
+                  label: const Text('MIGRAR REFERÈNCIES ARBRES (1-Click)'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.orange,
+                  ),
+                ),
+
+                const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -472,21 +543,6 @@ class _MeteocatSectionState extends ConsumerState<_MeteocatSection> {
                     onPressed: _refreshStation,
                     icon: const Icon(Icons.refresh),
                     label: const Text('Actualitzar estació (segons mapa)'),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton.icon(
-                    onPressed: () async {
-                      final repo = ref.read(climateRepositoryProvider);
-                      await repo.generateMockData();
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Dades Mock Generades! 🧪'),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.science, color: Colors.orange),
-                    label: const Text('Generar Dades Test (Mock)'),
                   ),
                 ],
               ),

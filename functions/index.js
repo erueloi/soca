@@ -372,19 +372,27 @@ exports.analyzeTree = functions.https.onCall(async (data, context) => {
     const species = data.species || "Unknown";
     const format = data.format || "Unknown";
     const location = data.location || "Unknown location";
+    const date = data.date || new Date().toISOString().split('T')[0]; // Current date context
+    const leafType = data.leafType || "Unknown"; // Caduca/Perenne
+    const age = data.age || "Unknown"; // e.g. "2 years"
 
     const prompt = `
     Act as an expert arborist. Analyze the health of this tree based on the image and context.
     
-    Context:
+    CRITICAL CONTEXT:
     - Species: ${species}
-    - Format/Age: ${format}
+    - Leaf Type: ${leafType} (If 'Caduca' and date is winter, leafless is normal)
+    - Date of Analysis: ${date}
+    - Age/Format: ${format}, planted approx ${age} ago.
     - Location: ${location}
+
+    Analyze the image considering the season and species characteristics.
+    If it is winter and the tree is deciduous ('Caduca'), do NOT mark as 'Mort' or 'Malalt' just because it has no leaves, unless there are other signs of disease (bark issues, broken branches).
 
     Return a strict JSON object (no markdown) with:
     - health: One of "Viable", "Malalt", "Mort".
     - vigor: One of "Alt", "Mitjà", "Baix".
-    - advice: A paragraph of advice and diagnosis in Catalan (Català). Mention specific visual indicators observed in the photo.
+    - advice: A paragraph of advice and diagnosis in Catalan (Català). Mention specific visual indicators observed in the photo and relate them to the season/species context.
 
     Example JSON:
     {
@@ -411,5 +419,51 @@ exports.analyzeTree = functions.https.onCall(async (data, context) => {
     } catch (error) {
         console.error("Gemini Analysis Error:", error);
         throw new functions.https.HttpsError("internal", "AI Analysis Failed", error.message);
+    }
+});
+
+exports.getBotanicalDataFromText = functions.https.onCall(async (data, context) => {
+    // Input: { speciesName: string }
+    const speciesName = data.speciesName;
+
+    if (!speciesName) {
+        throw new functions.https.HttpsError("invalid-argument", "The function must be called with a valid speciesName.");
+    }
+
+    // Initialize Gemini
+    const apiKey = process.env.GEMINI_API_KEY || functions.config().gemini.key;
+    if (!apiKey) {
+        throw new functions.https.HttpsError("failed-precondition", "Gemini API Key not configured.");
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+    const prompt = `
+    Ets un expert botànic agrícola de Catalunya. Per a l'espècie "${speciesName}", retorna EXCLUSIVAMENT un objecte JSON amb aquests camps:
+    - nom_cientific: (text) Nom científic oficial.
+    - nom_comu: (text) Nom comú principal en Català.
+    - kc: (float) Coeficient de cultiu mitjà.
+    - fulla: "Caduca" o "Perenne".
+    - sensibilitat_gelada: (text) Descripció curta amb temperatura crítica, ex: "Alta (0ºC)" o "Baixa (-10ºC)".
+    - mesos_poda: (array d'ints) Mesos numèrics (1-12) ideals per podar a Lleida.
+    - mesos_collita: (array d'ints) Mesos numèrics (1-12) de collita a Lleida.
+    - sol: Un d'aquests emojis segons necessitat: ☀️, 🌤️, ☁️.
+    - fruit: (boolean) Si fa fruit comestible o aprofitable o no.
+    - nom_fruit: (text) Nom del fruit (ex: "Poma", "Oliva", "Gla") o null si no en té.
+
+    Ajusta els valors per al clima de les Garrigues/Lleida (Hivern fred, Estiu calorós).
+    Retorna només el JSON, sense markdown.
+    `;
+
+    try {
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        return JSON.parse(jsonStr);
+    } catch (error) {
+        console.error("Gemini Botany Error:", error);
+        throw new functions.https.HttpsError("internal", "Failed to fetch botanical data.", error.message);
     }
 });

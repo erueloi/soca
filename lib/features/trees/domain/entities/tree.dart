@@ -43,6 +43,9 @@ class Tree {
   final String? padrino; // Responsible
   final String? maintenanceTips; // AI or Manual
   final String? vigor; // Alt, Mitjà, Baix
+  final double? kc; // Crop Coefficient (coeficient_kc)
+  final String? speciesId; // Link to Species Library
+  final String? reference; // e.g. OLI-001
   final List<TreeEvent> timeline;
 
   const Tree({
@@ -62,6 +65,9 @@ class Tree {
     this.padrino,
     this.maintenanceTips,
     this.vigor,
+    this.kc,
+    this.speciesId,
+    this.reference,
     this.timeline = const [],
   });
 
@@ -81,6 +87,9 @@ class Tree {
     String? padrino,
     String? maintenanceTips,
     String? vigor,
+    double? kc,
+    String? speciesId,
+    String? reference,
     List<TreeEvent>? timeline,
   }) {
     return Tree(
@@ -100,6 +109,9 @@ class Tree {
       padrino: padrino ?? this.padrino,
       maintenanceTips: maintenanceTips ?? this.maintenanceTips,
       vigor: vigor ?? this.vigor,
+      kc: kc ?? this.kc,
+      speciesId: speciesId ?? this.speciesId,
+      reference: reference ?? this.reference,
       timeline: timeline ?? this.timeline,
     );
   }
@@ -121,6 +133,9 @@ class Tree {
       'padrino': padrino,
       'maintenanceTips': maintenanceTips,
       'vigor': vigor,
+      'coeficient_kc': kc,
+      'speciesId': speciesId,
+      'reference': reference,
       'timeline': timeline.map((e) => e.toMap()).toList(),
     };
   }
@@ -144,6 +159,10 @@ class Tree {
       padrino: map['padrino'],
       maintenanceTips: map['maintenanceTips'],
       vigor: map['vigor'],
+      kc: (map['coeficient_kc'] as num?)
+          ?.toDouble(), // Mapped from coeficient_kc
+      speciesId: map['speciesId'],
+      reference: map['reference'],
       timeline: map['timeline'] != null
           ? (map['timeline'] as List<dynamic>)
                 .map((e) => TreeEvent.fromMap(e as Map<String, dynamic>))

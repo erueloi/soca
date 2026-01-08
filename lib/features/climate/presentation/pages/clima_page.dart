@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../presentation/providers/climate_provider.dart';
 import '../../domain/climate_model.dart';
-import '../../data/repositories/climate_repository.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../../../../core/services/meteocat_service.dart';
 
 class ClimaPage extends ConsumerWidget {
   const ClimaPage({super.key});
@@ -204,9 +202,57 @@ class ClimaPage extends ConsumerWidget {
             tooltip: 'Descarregar dades manualment',
             onPressed: () => _downloadData(context, ref, selectedDate),
           ),
-          IconButton(
-            icon: const Icon(Icons.bug_report),
-            onPressed: () => _showDebugDialog(context, ref),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.build_circle_outlined),
+            onSelected: (value) async {
+              if (value == 'mock') {
+                final picked = await showDateRangePicker(
+                  context: context,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime(2030),
+                );
+                if (picked != null) {
+                  await ref
+                      .read(climateControllerProvider)
+                      .generateMocks(picked.start, picked.end);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Mocks generats! 🧪')),
+                    );
+                  }
+                }
+              }
+              if (value == 'clear_mock') {
+                await ref.read(climateControllerProvider).deleteMocks();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Mocks eliminats! 🗑️')),
+                  );
+                }
+              }
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(
+                value: 'mock',
+                child: Row(
+                  children: [
+                    Icon(Icons.science, color: Colors.purple),
+                    SizedBox(width: 8),
+                    Text('Generar Mock Data'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'clear_mock',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_sweep, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Eliminar Mocks'),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -555,8 +601,9 @@ class ClimaPage extends ConsumerWidget {
             tooltipPadding: EdgeInsets.zero,
             tooltipMargin: 2,
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
-              if (rodIndex == 0)
+              if (rodIndex == 0) {
                 return null; // Ignore ghost rod tooltip logic here, simpler
+              }
               final currentVal = group.barRods[1].toY;
               final prevVal = group.barRods[0].toY;
 
@@ -624,99 +671,6 @@ class ClimaPage extends ConsumerWidget {
         gridData: const FlGridData(show: true, drawVerticalLine: false),
         borderData: FlBorderData(show: false),
       ),
-    );
-  }
-
-  void _showDebugDialog(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Debug Clima'),
-          content: const Text('Utilitats per arreglar dades incorrectes.'),
-          actions: [
-            TextButton(
-              child: const Text('Esborrar Històric i Recarregar'),
-              onPressed: () async {
-                Navigator.pop(ctx);
-                // 1. Clear Firestore
-                final repo = ref.read(climateRepositoryProvider);
-                await repo.clearHistory();
-
-                // Trigger invalidation
-                ref.invalidate(climateHistoryProvider);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'S\'ha esborrat l\'històric i s\'està recarregant...',
-                      ),
-                    ),
-                  );
-                }
-              },
-            ),
-            TextButton(
-              child: const Text('Test Jan 5 (Log)'),
-              onPressed: () async {
-                Navigator.pop(ctx);
-                final service = ref.read(meteocatServiceProvider);
-                final jan5 = DateTime(2026, 1, 5);
-                final data = await service.getDailyHistory(jan5, jan5);
-
-                String details = "Buit";
-                if (data.isNotEmpty) {
-                  details = data.first.toString();
-                }
-
-                if (context.mounted) {
-                  showDialog(
-                    context: context,
-                    builder: (_) => AlertDialog(
-                      content: SingleChildScrollView(
-                        child: SelectableText(details),
-                      ),
-                    ),
-                  );
-                }
-              },
-            ),
-            TextButton(
-              child: const Text('Test Data (Escollir dia) 📅'),
-              onPressed: () async {
-                Navigator.pop(ctx);
-                final picked = await showDatePicker(
-                  context: context,
-                  initialDate: DateTime.now(),
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime(2030),
-                );
-                if (picked != null) {
-                  final service = ref.read(meteocatServiceProvider);
-                  final data = await service.getDailyHistory(picked, picked);
-                  String details = "Cap dada trobada per $picked";
-                  if (data.isNotEmpty) {
-                    details = data.first.toString();
-                  }
-                  if (context.mounted) {
-                    showDialog(
-                      context: context,
-                      builder: (_) => AlertDialog(
-                        title: Text(
-                          "Dades: ${picked.toIso8601String().split('T')[0]}",
-                        ),
-                        content: SingleChildScrollView(
-                          child: SelectableText(details),
-                        ),
-                      ),
-                    );
-                  }
-                }
-              },
-            ),
-          ],
-        );
-      },
     );
   }
 }

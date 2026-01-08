@@ -1,0 +1,547 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/repositories/species_repository.dart';
+import '../../domain/entities/species.dart';
+import '../../../../core/services/ai_service.dart';
+
+class SpeciesLibraryPage extends ConsumerStatefulWidget {
+  final String? initialSearchQuery;
+  const SpeciesLibraryPage({super.key, this.initialSearchQuery});
+
+  @override
+  ConsumerState<SpeciesLibraryPage> createState() => _SpeciesLibraryPageState();
+}
+
+class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
+  late final TextEditingController _searchController;
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchQuery = widget.initialSearchQuery ?? '';
+    _searchController = TextEditingController(text: _searchQuery);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _showAddSpeciesDialog([Species? existing]) {
+    final formKey = GlobalKey<FormState>();
+
+    // Controllers
+    final commonCtrl = TextEditingController(text: existing?.commonName ?? '');
+    final sciCtrl = TextEditingController(text: existing?.scientificName ?? '');
+    final kcCtrl = TextEditingController(
+      text: (existing?.kc ?? 0.7).toString(),
+    );
+    final prefixCtrl = TextEditingController(text: existing?.prefix ?? '');
+    final fruitTypeCtrl = TextEditingController(
+      text: existing?.fruitType ?? '',
+    );
+    final frostCtrl = TextEditingController(
+      text: existing?.frostSensitivity ?? 'Baixa',
+    );
+    // Helper to format months
+    String formatList(List<int>? l) => l?.join(', ') ?? '';
+    final pruningCtrl = TextEditingController(
+      text: formatList(existing?.pruningMonths),
+    );
+    final harvestCtrl = TextEditingController(
+      text: formatList(existing?.harvestMonths),
+    );
+
+    // State Variables
+    String leaf = existing?.leafType ?? 'Caduca';
+    String sunNeeds = existing?.sunNeeds ?? 'Alt';
+    bool fruit = existing?.fruit ?? true;
+    bool isLoading = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    existing == null ? 'Afegir Espècie' : 'Editar Espècie',
+                  ),
+                ),
+                if (isLoading)
+                  const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
+            content: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: commonCtrl,
+                      decoration: const InputDecoration(labelText: 'Nom Comú'),
+                      validator: (v) => v!.isEmpty ? 'Cal un nom' : null,
+                    ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: sciCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Nom Científic (Prioritari)',
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.auto_awesome,
+                            color: Colors.indigo,
+                          ),
+                          tooltip: 'Omplir amb IA',
+                          onPressed: isLoading
+                              ? null
+                              : () async {
+                                  // Prioritize Sci Name, fallback to Common
+                                  final query = sciCtrl.text.isNotEmpty
+                                      ? sciCtrl.text
+                                      : commonCtrl.text;
+
+                                  if (query.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Escriu un nom per buscar',
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  setStateDialog(() => isLoading = true);
+
+                                  try {
+                                    final data = await ref
+                                        .read(aiServiceProvider)
+                                        .getBotanicalData(query);
+
+                                    setStateDialog(() {
+                                      // Update Names if missing/different
+                                      if (data['nom_cientific'] != null &&
+                                          sciCtrl.text.isEmpty) {
+                                        sciCtrl.text = data['nom_cientific'];
+                                      }
+                                      if (data['nom_comu'] != null &&
+                                          commonCtrl.text.isEmpty) {
+                                        commonCtrl.text = data['nom_comu'];
+                                      }
+
+                                      // Update Controllers & State
+                                      if (data['kc'] != null) {
+                                        kcCtrl.text = data['kc'].toString();
+                                      }
+                                      if (data['fulla'] != null) {
+                                        leaf = data['fulla'] == 'Perenne'
+                                            ? 'Perenne'
+                                            : 'Caduca';
+                                      }
+                                      if (data['sensibilitat_gelada'] != null) {
+                                        frostCtrl.text =
+                                            data['sensibilitat_gelada'];
+                                      }
+                                      if (data['mesos_poda'] != null) {
+                                        pruningCtrl.text =
+                                            (data['mesos_poda'] as List).join(
+                                              ', ',
+                                            );
+                                      }
+                                      if (data['mesos_collita'] != null) {
+                                        harvestCtrl.text =
+                                            (data['mesos_collita'] as List)
+                                                .join(', ');
+                                      }
+                                      if (data['sol'] != null) {
+                                        final s = data['sol'].toString();
+                                        if (s.contains('☀️')) sunNeeds = 'Alt';
+                                        if (s.contains('🌤️')) {
+                                          sunNeeds = 'Mitjà';
+                                        }
+                                        if (s.contains('☁️')) {
+                                          sunNeeds = 'Baix';
+                                        }
+                                      }
+                                      if (data['fruit'] != null) {
+                                        fruit = data['fruit'] == true;
+                                      }
+                                      if (data['nom_fruit'] != null) {
+                                        fruitTypeCtrl.text = data['nom_fruit'];
+                                        if (fruitTypeCtrl.text.isNotEmpty) {
+                                          fruit = true;
+                                        }
+                                      }
+                                      isLoading = false;
+                                    });
+                                  } catch (e) {
+                                    setStateDialog(() => isLoading = false);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'Error IA: ${e.toString()}',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
+                        ),
+                      ],
+                    ),
+                    TextFormField(
+                      controller: prefixCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Prefix (3 Lletres)',
+                        hintText: 'EX: OLI',
+                      ),
+                      textCapitalization: TextCapitalization.characters,
+                      maxLength: 3,
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: kcCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Kc (Coeficient)',
+                            ),
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            key: ValueKey(sunNeeds),
+                            initialValue: sunNeeds,
+                            decoration: const InputDecoration(labelText: 'Sol'),
+                            items: ['Alt', 'Mitjà', 'Baix']
+                                .map(
+                                  (e) => DropdownMenuItem(
+                                    value: e,
+                                    child: Text(e),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) =>
+                                setStateDialog(() => sunNeeds = v!),
+                          ),
+                        ),
+                      ],
+                    ),
+                    DropdownButtonFormField<String>(
+                      key: ValueKey(leaf),
+                      initialValue: leaf,
+                      decoration: const InputDecoration(labelText: 'Fulla'),
+                      items: ['Perenne', 'Caduca']
+                          .map(
+                            (e) => DropdownMenuItem(value: e, child: Text(e)),
+                          )
+                          .toList(),
+                      onChanged: (v) => setStateDialog(() => leaf = v!),
+                    ),
+                    TextFormField(
+                      controller: frostCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Sensibilitat Gelada',
+                      ),
+                    ),
+                    TextFormField(
+                      controller: pruningCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Mesos Poda (ex: 12, 1)',
+                      ),
+                    ),
+                    TextFormField(
+                      controller: harvestCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Mesos Collita (ex: 9, 10)',
+                      ),
+                    ),
+                    CheckboxListTile(
+                      title: const Text('Té Fruit?'),
+                      value: fruit,
+                      onChanged: (v) =>
+                          setStateDialog(() => fruit = v ?? false),
+                    ),
+                    if (fruit)
+                      TextFormField(
+                        controller: fruitTypeCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Nom del Fruit (ex: Poma)',
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('CANCEL·LAR'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (formKey.currentState!.validate()) {
+                    // Helper to parse months
+                    List<int> parseMonths(String t) => t
+                        .split(',')
+                        .map((e) => int.tryParse(e.trim()) ?? 0)
+                        .where((e) => e > 0)
+                        .toList();
+
+                    final newSpecies = Species(
+                      id: existing?.id ?? '',
+                      commonName: commonCtrl.text,
+                      scientificName: sciCtrl.text,
+                      kc: double.tryParse(kcCtrl.text) ?? 0.7,
+                      leafType: leaf,
+                      frostSensitivity: frostCtrl.text,
+                      fruit: fruit,
+                      fruitType: fruit ? fruitTypeCtrl.text : null,
+                      sunNeeds: sunNeeds,
+                      prefix: prefixCtrl.text.toUpperCase(),
+                      pruningMonths: parseMonths(pruningCtrl.text),
+                      harvestMonths: parseMonths(harvestCtrl.text),
+                    );
+
+                    if (existing == null) {
+                      await ref
+                          .read(speciesRepositoryProvider)
+                          .addSpecies(newSpecies);
+                    } else {
+                      await ref
+                          .read(speciesRepositoryProvider)
+                          .updateSpecies(newSpecies);
+                    }
+                    if (context.mounted) Navigator.pop(context);
+                  }
+                },
+                child: const Text('GUARDAR'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  String _formatMonths(List<int> months) {
+    if (months.isEmpty) return '-';
+    months.sort();
+    // Simple logic: if contiguous (allowing wrap 12->1), show range.
+    // Full logic is complex, let's just list short names for now or simplified range.
+    const names = [
+      '',
+      'Gen',
+      'Feb',
+      'Mar',
+      'Abr',
+      'Mai',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Set',
+      'Oct',
+      'Nov',
+      'Des',
+    ];
+    return months.map((m) => names[m]).join(', ');
+  }
+
+  String _getSunIcon(String needs) {
+    switch (needs.toLowerCase()) {
+      case 'alt':
+        return '☀️';
+      case 'mitjà':
+        return '🌤️';
+      case 'baix':
+        return '☁️';
+      default:
+        return '☀️';
+    }
+  }
+
+  String _getFrostIcon(String sensitivity) {
+    final s = sensitivity.toLowerCase();
+    if (s.contains('alta')) return '❄️❄️❄️';
+    if (s.contains('mitjana')) return '❄️❄️';
+    if (s.contains('baixa')) return '❄️';
+    return sensitivity;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final speciesStream = ref.watch(speciesRepositoryProvider).getSpecies();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Biblioteca d\'Espècies'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.cloud_download),
+            tooltip: 'Carregar Inicials (Lleida)',
+            onPressed: () async {
+              await ref.read(speciesRepositoryProvider).seedLibrary();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'S\'ha intentat carregar les dades inicials.',
+                    ),
+                  ),
+                );
+              }
+            },
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                labelText: 'Cercar...',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+            ),
+          ),
+          Expanded(
+            child: StreamBuilder<List<Species>>(
+              stream: speciesStream,
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                final allSpecies = snapshot.data ?? [];
+                final filtered = allSpecies.where((s) {
+                  return s.commonName.toLowerCase().contains(_searchQuery) ||
+                      s.scientificName.toLowerCase().contains(_searchQuery) ||
+                      (s.fruitType ?? '').toLowerCase().contains(_searchQuery);
+                }).toList();
+
+                if (filtered.isEmpty) {
+                  return const Center(child: Text('Cap espècie trobada.'));
+                }
+
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SingleChildScrollView(
+                    child: DataTable(
+                      columnSpacing: 20,
+                      columns: const [
+                        DataColumn(label: Text('Nom Comú')),
+                        DataColumn(
+                          label: Text(
+                            'Cod.',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        DataColumn(label: Text('Científic')),
+                        DataColumn(label: Text('Kc')),
+                        DataColumn(label: Text('Sol')),
+                        DataColumn(label: Text('Gelada')),
+                        DataColumn(label: Text('Poda')),
+                        DataColumn(label: Text('Collita')),
+                        DataColumn(label: Text('Fruit')),
+                      ],
+                      rows: filtered.map((s) {
+                        return DataRow(
+                          cells: [
+                            DataCell(
+                              Text(
+                                s.commonName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            DataCell(Text(s.prefix)),
+                            DataCell(
+                              Text(
+                                s.scientificName,
+                                style: const TextStyle(
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ),
+                            DataCell(Text(s.kc.toString())),
+                            DataCell(Text(_getSunIcon(s.sunNeeds))),
+                            DataCell(Text(_getFrostIcon(s.frostSensitivity))),
+                            DataCell(
+                              SizedBox(
+                                width: 100,
+                                child: Text(
+                                  _formatMonths(s.pruningMonths),
+                                  style: const TextStyle(fontSize: 12),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              SizedBox(
+                                width: 100,
+                                child: Text(
+                                  _formatMonths(s.harvestMonths),
+                                  style: const TextStyle(fontSize: 12),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                s.fruitType?.isNotEmpty == true
+                                    ? s.fruitType!
+                                    : (s.fruit ? 'Sí' : '-'),
+                              ),
+                            ),
+                          ],
+                          onSelectChanged: (selected) {
+                            if (selected == true) {
+                              _showAddSpeciesDialog(s);
+                            }
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showAddSpeciesDialog(),
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}

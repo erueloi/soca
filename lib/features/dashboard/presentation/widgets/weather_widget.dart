@@ -79,7 +79,7 @@ class WeatherWidget extends ConsumerWidget {
                   decoration: BoxDecoration(
                     color: _getAdviceColor(
                       weather.irrigationAdvice,
-                    ).withOpacity(0.2),
+                    ).withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: _getAdviceColor(weather.irrigationAdvice),
@@ -98,7 +98,7 @@ class WeatherWidget extends ConsumerWidget {
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: _getAdviceColor(
                             weather.irrigationAdvice,
-                          ).withOpacity(1.0), // solid
+                          ).withValues(alpha: 1.0), // solid
                           fontWeight: FontWeight.bold,
                         ),
                         textAlign: TextAlign.center,

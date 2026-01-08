@@ -18,29 +18,45 @@ class ClimateRepository {
     await batch.commit();
   }
 
-  /// Generates mock data for testing UI without API quota
-  Future<void> generateMockData() async {
-    final now = DateTime.now();
+  /// Generates mock data for a specific range [Mock 2.0]
+  Future<void> generateMockDataRange(DateTime start, DateTime end) async {
     final List<ClimateDailyData> mocks = [];
+    final days = end.difference(start).inDays + 1;
 
-    // Generate last 7 days of fake data
-    for (int i = 0; i < 7; i++) {
-      final date = now.subtract(Duration(days: i));
-      // Random-ish data for testing visuals
+    for (int i = 0; i < days; i++) {
+      final date = start.add(Duration(days: i));
+      // Random-ish data
+      final rand = (i % 5) * 1.0;
       mocks.add(
         ClimateDailyData(
           date: date,
-          maxTemp: 20.0 + (i % 3),
-          minTemp: 10.0 - (i % 2),
-          rain: (i == 1) ? 15.5 : (i == 3 ? 5.2 : 0.0), // Some rain yesterday
-          rainAccumulated: 0.0, // Will be recalculated by provider if needed
-          humidity: 60.0 + i,
-          radiation: 15.0,
-          windSpeed: 5.0 + i,
+          maxTemp: 22.0 + rand,
+          minTemp: 12.0 - (i % 2),
+          rain: (i % 7 == 0) ? 12.5 : 0.0, // Rain every week
+          rainAccumulated: 0.0,
+          humidity: 60.0 + rand * 2,
+          radiation: 15.0 + rand,
+          windSpeed: 5.0 + rand,
+          et0: 3.5 + (rand / 5), // Fake ET0
+          isMock: true,
         ),
       );
     }
     await saveHistory(mocks);
+  }
+
+  /// Deletes all mock data
+  Future<void> deleteMocks() async {
+    final snapshot = await _firestore
+        .collection(_collection)
+        .where('isMock', isEqualTo: true)
+        .get();
+
+    final batch = _firestore.batch();
+    for (var doc in snapshot.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
   }
 
   /// Get history between two dates (inclusive)

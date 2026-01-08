@@ -5,6 +5,7 @@ import '../providers/trees_provider.dart';
 import '../widgets/tree_list.dart';
 import '../widgets/tree_detail.dart';
 import '../widgets/tree_form_sheet.dart';
+import 'species_library_page.dart';
 
 class TreesPage extends ConsumerStatefulWidget {
   const TreesPage({super.key});
@@ -30,9 +31,30 @@ class _TreesPageState extends ConsumerState<TreesPage> {
     final selectedTree = ref.watch(selectedTreeProvider);
     final isLargeScreen = MediaQuery.of(context).size.width > 600;
 
+    ref.listen(selectedTreeProvider, (previous, next) {
+      if (next != null && !isLargeScreen) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => TreeDetail(tree: next)),
+        );
+      }
+    });
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Arbres de la Soca'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.local_florist),
+            tooltip: 'Biblioteca d\'Espècies',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SpeciesLibraryPage()),
+              );
+            },
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
           child: Padding(

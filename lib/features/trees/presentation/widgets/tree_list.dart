@@ -27,29 +27,58 @@ class TreeList extends ConsumerWidget {
         return ListTile(
           selected: isSelected,
           selectedTileColor: Colors.green.withValues(alpha: 0.1),
-          leading: Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              image: DecorationImage(
-                image: (tree.photoUrl != null && tree.photoUrl!.isNotEmpty)
-                    ? NetworkImage(tree.photoUrl!)
-                    : const AssetImage('assets/images/placeholder_tree.png')
-                          as ImageProvider, // Placeholder needed
-                fit: BoxFit.cover,
-                // Fallback icon if image fails or placeholder missing (handled via errorBuilder if using Image.network)
-                // But simplified here for specific requested style "Thumbnail"
-              ),
+          leading: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              width: 50,
+              height: 50,
               color: Colors.grey[300],
+              child: (tree.photoUrl != null && tree.photoUrl!.isNotEmpty)
+                  ? Image.network(
+                      tree.photoUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(Icons.park, color: Colors.green);
+                      },
+                    )
+                  : Image.asset(
+                      'assets/images/placeholder_tree.png',
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(Icons.park, color: Colors.green);
+                      },
+                    ),
             ),
-            child: (tree.photoUrl == null || tree.photoUrl!.isEmpty)
-                ? const Icon(Icons.park, color: Colors.green)
-                : null,
           ),
-          title: Text(
-            tree.commonName,
-            style: const TextStyle(fontWeight: FontWeight.bold),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (tree.reference != null && tree.reference!.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  margin: const EdgeInsets.only(bottom: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.indigo.shade50,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.indigo.shade200),
+                  ),
+                  child: Text(
+                    tree.reference!,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.indigo.shade800,
+                    ),
+                  ),
+                ),
+              Text(
+                tree.commonName,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
           ),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

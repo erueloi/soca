@@ -67,7 +67,11 @@ class WateringFiltersNotifier extends Notifier<WateringFilters> {
   }
 
   void setTreeId(String? id) {
-    state = state.copyWith(treeId: id);
+    state = WateringFilters(
+      startDate: state.startDate,
+      endDate: state.endDate,
+      treeId: id,
+    );
   }
 }
 
