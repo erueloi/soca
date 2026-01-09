@@ -1,5 +1,7 @@
 ﻿# Release Notes
 
+## v1.6.0
+Millora del mapa amb capes per especies d'arbres. Nova pantalla d'obres amb els pisos i planolss.
 ## v1.5.5
 Millora del mapa amb icones i colores i les referencies del arbres. Carreguem icones i colors per especies.
 ## v1.5.4
@@ -41,6 +43,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

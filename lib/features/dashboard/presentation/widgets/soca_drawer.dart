@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../features/climate/presentation/pages/clima_page.dart';
 import '../../../tasks/presentation/pages/tasks_page.dart';
 import '../../../contacts/presentation/pages/contacts_page.dart';
+import '../../../construction/presentation/pages/construction_page.dart';
 import '../../../map/presentation/pages/map_page.dart';
 import '../../../trees/presentation/pages/trees_page.dart';
 import '../../../trees/presentation/pages/watering_page.dart';
@@ -105,6 +106,11 @@ class SocaDrawer extends StatelessWidget {
                   title: const Text('Obres'),
                   onTap: () {
                     Navigator.pop(context);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const ConstructionPage(),
+                      ),
+                    );
                   },
                 ),
                 ListTile(

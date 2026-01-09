@@ -14,6 +14,7 @@ import '../../../map/presentation/pages/map_page.dart';
 import '../../../trees/presentation/pages/trees_page.dart';
 import '../../../trees/presentation/pages/watering_page.dart';
 import '../../../settings/presentation/pages/farm_profile_page.dart';
+import '../../../construction/presentation/pages/construction_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -191,6 +192,12 @@ class _HomePageState extends State<HomePage> {
                     } else if (index == 4) {
                       // Arbres index
                       _navigateToTrees(context);
+                    } else if (index == 5) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const ConstructionPage(),
+                        ),
+                      );
                     } else if (index == 6) {
                       _navigateToTasks(context);
                     } else if (index == 7) {

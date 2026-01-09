@@ -13,22 +13,42 @@ final treesStreamProvider = StreamProvider<List<Tree>>((ref) {
   return repository.getTreesStream();
 });
 
+class _Sentinel {
+  const _Sentinel();
+}
+
+const _sentinel = _Sentinel();
+
 class WateringFilters {
   final DateTime? startDate;
   final DateTime? endDate;
   final String? treeId;
+  final String? species;
+  final String? reference;
 
-  const WateringFilters({this.startDate, this.endDate, this.treeId});
+  const WateringFilters({
+    this.startDate,
+    this.endDate,
+    this.treeId,
+    this.species,
+    this.reference,
+  });
 
   WateringFilters copyWith({
-    DateTime? startDate,
-    DateTime? endDate,
-    String? treeId,
+    Object? startDate = _sentinel,
+    Object? endDate = _sentinel,
+    Object? treeId = _sentinel,
+    Object? species = _sentinel,
+    Object? reference = _sentinel,
   }) {
     return WateringFilters(
-      startDate: startDate ?? this.startDate,
-      endDate: endDate ?? this.endDate,
-      treeId: treeId ?? this.treeId,
+      startDate: startDate == _sentinel
+          ? this.startDate
+          : startDate as DateTime?,
+      endDate: endDate == _sentinel ? this.endDate : endDate as DateTime?,
+      treeId: treeId == _sentinel ? this.treeId : treeId as String?,
+      species: species == _sentinel ? this.species : species as String?,
+      reference: reference == _sentinel ? this.reference : reference as String?,
     );
   }
 }
@@ -46,11 +66,25 @@ class WateringFiltersNotifier extends Notifier<WateringFilters> {
       startDate: now.subtract(const Duration(days: 6)),
       endDate: now,
       treeId: null,
+      species: null,
+      reference: null,
     );
   }
 
-  void updateFilters({DateTime? start, DateTime? end, String? treeId}) {
-    state = state.copyWith(startDate: start, endDate: end, treeId: treeId);
+  void updateFilters({
+    DateTime? start,
+    DateTime? end,
+    String? treeId,
+    String? species,
+    String? reference,
+  }) {
+    state = state.copyWith(
+      startDate: start,
+      endDate: end,
+      treeId: treeId,
+      species: species,
+      reference: reference,
+    );
   }
 
   void reset() {
@@ -59,6 +93,8 @@ class WateringFiltersNotifier extends Notifier<WateringFilters> {
       startDate: now.subtract(const Duration(days: 6)),
       endDate: now,
       treeId: null,
+      species: null,
+      reference: null,
     );
   }
 
@@ -67,11 +103,15 @@ class WateringFiltersNotifier extends Notifier<WateringFilters> {
   }
 
   void setTreeId(String? id) {
-    state = WateringFilters(
-      startDate: state.startDate,
-      endDate: state.endDate,
-      treeId: id,
-    );
+    state = state.copyWith(treeId: id);
+  }
+
+  void setSpecies(String? species) {
+    state = state.copyWith(species: species);
+  }
+
+  void setReference(String? reference) {
+    state = state.copyWith(reference: reference);
   }
 }
 

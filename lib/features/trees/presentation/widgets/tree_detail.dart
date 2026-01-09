@@ -47,6 +47,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
   late TextEditingController _priceController;
   late TextEditingController _ecologicalFuncController;
   late TextEditingController _plantingFormatController;
+  late TextEditingController _referenceController;
 
   // State
   late DateTime _plantingDate;
@@ -78,12 +79,23 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     _plantingFormatController = TextEditingController(
       text: widget.tree.plantingFormat,
     );
+    _referenceController = TextEditingController(
+      text: widget.tree.reference ?? '',
+    );
 
     _plantingDate = widget.tree.plantingDate;
     _location = LatLng(widget.tree.latitude, widget.tree.longitude);
     _status = widget.tree.status;
     _vigor = widget.tree.vigor;
     _selectedSpeciesId = widget.tree.speciesId; // Init from tree
+  }
+
+  @override
+  void didUpdateWidget(TreeDetail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.tree.id != oldWidget.tree.id) {
+      _initializeControllers();
+    }
   }
 
   @override
@@ -96,10 +108,34 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     _priceController.dispose();
     _ecologicalFuncController.dispose();
     _plantingFormatController.dispose();
+    _referenceController.dispose();
     super.dispose();
   }
 
   Future<void> _saveChanges() async {
+    // Check for duplicate reference
+    final newRef = _referenceController.text.trim().toUpperCase();
+    if (newRef.isNotEmpty) {
+      final trees = await ref.read(treesStreamProvider.future);
+      final isDuplicate = trees.any(
+        (t) => t.reference == newRef && t.id != widget.tree.id,
+      );
+
+      if (isDuplicate) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Referència "$newRef" ja existeix useu-ne una altra.',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
     final updatedTree = widget.tree.copyWith(
       commonName: _commonNameController.text,
       species: _speciesController.text,
@@ -114,14 +150,20 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
       status: _status,
       vigor: _vigor,
       speciesId: _selectedSpeciesId, // Included in update
+      reference: newRef.isEmpty ? null : newRef,
     );
 
     await ref.read(treesRepositoryProvider).updateTree(updatedTree);
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Canvis guardats correctament')),
-      );
+      try {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Canvis guardats correctament')),
+        );
+      } catch (e) {
+        // Ignore context errors if widget is deactivated
+        debugPrint('Error showing snackbar: $e');
+      }
       setState(() {
         _isEditing = false;
       });
@@ -727,6 +769,37 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
             _buildBotanicalInfo(),
           ],
           if (_isEditing) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 24),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.indigo.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.indigo.shade200),
+              ),
+              child: TextField(
+                controller: _referenceController,
+                textCapitalization: TextCapitalization.characters,
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.indigo.shade900,
+                  letterSpacing: 2.0,
+                ),
+                textAlign: TextAlign.center,
+                decoration: InputDecoration(
+                  labelText: 'REFERÈNCIA ÚNICA',
+                  hintText: 'EX: OLI-005',
+                  labelStyle: TextStyle(
+                    color: Colors.indigo.shade400,
+                    letterSpacing: 1.0,
+                    fontSize: 14,
+                  ),
+                  border: InputBorder.none,
+                  prefixIcon: const Icon(Icons.tag, color: Colors.indigo),
+                ),
+              ),
+            ),
             TextField(
               controller: _commonNameController,
               decoration: const InputDecoration(labelText: 'Nom Comú'),

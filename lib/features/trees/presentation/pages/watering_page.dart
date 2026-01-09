@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -15,11 +16,13 @@ class WateringPage extends ConsumerStatefulWidget {
 }
 
 class _WateringPageState extends ConsumerState<WateringPage> {
-  String? _selectedSpecies;
+  late TextEditingController _referenceController;
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
+    _referenceController = TextEditingController();
     // Handle Deep Link
     if (widget.initialTreeId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -28,6 +31,13 @@ class _WateringPageState extends ConsumerState<WateringPage> {
             .setTreeId(widget.initialTreeId);
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _referenceController.dispose();
+    _debounce?.cancel();
+    super.dispose();
   }
 
   @override
@@ -68,9 +78,6 @@ class _WateringPageState extends ConsumerState<WateringPage> {
 
   Widget _buildMatrix(List<Tree> trees, List<WateringEvent> events) {
     // 0. Initialize Deep Link (once)
-    // We do this in build/didChangeDependencies or initState.
-    // simpler to do check in build with a flag or just rely on the provider defaults if we set them in initState.
-    // Better: use WidgetsBinding to set it once if needed.
     // logic moved to initState.
 
     // 1. Filter Trees
@@ -78,9 +85,22 @@ class _WateringPageState extends ConsumerState<WateringPage> {
     var filteredTrees = trees;
 
     // Filter by Species
-    if (_selectedSpecies != null) {
+    if (filters.species != null) {
       filteredTrees = filteredTrees
-          .where((t) => t.species == _selectedSpecies)
+          .where((t) => t.species == filters.species)
+          .toList();
+    }
+
+    // Filter by Reference
+    if (filters.reference != null && filters.reference!.isNotEmpty) {
+      filteredTrees = filteredTrees
+          .where(
+            (t) =>
+                t.reference != null &&
+                t.reference!.toLowerCase().contains(
+                  filters.reference!.toLowerCase(),
+                ),
+          )
           .toList();
     }
 
@@ -92,9 +112,6 @@ class _WateringPageState extends ConsumerState<WateringPage> {
     }
 
     // 2. Prepare Data Structure
-    // Map<TreeId, Map<DateString, List<WateringEvent>>>
-    // We store the list of events to handle multiple waterings per day if needed,
-    // and to access their IDs for editing/deleting.
     final Map<String, Map<String, List<WateringEvent>>> data = {};
 
     // Initialize dates based on provider
@@ -131,23 +148,33 @@ class _WateringPageState extends ConsumerState<WateringPage> {
     return Column(
       children: [
         // Filter Header
-        // Filters Row
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
                   // Date Filter
                   Expanded(
                     flex: 2,
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.date_range),
-                      label: Text(
-                        '${DateFormat('dd/MM').format(start)} - ${DateFormat('dd/MM').format(end)}',
-                        overflow: TextOverflow.ellipsis,
+                    child: TextFormField(
+                      readOnly: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Dates',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 0,
+                        ),
+                        isDense: true,
+                        prefixIcon: Icon(Icons.date_range, size: 20),
                       ),
-                      onPressed: () async {
+                      controller: TextEditingController(
+                        text:
+                            '${DateFormat('dd/MM').format(start)} - ${DateFormat('dd/MM').format(end)}',
+                      ),
+                      onTap: () async {
                         final range = await showDateRangePicker(
                           context: context,
                           firstDate: DateTime(2020),
@@ -168,7 +195,7 @@ class _WateringPageState extends ConsumerState<WateringPage> {
                   const SizedBox(width: 8),
                   // Species Filter
                   Expanded(
-                    flex: 3,
+                    flex: 2,
                     child: DropdownButtonFormField<String>(
                       decoration: const InputDecoration(
                         labelText: 'Espècie',
@@ -176,11 +203,12 @@ class _WateringPageState extends ConsumerState<WateringPage> {
                         contentPadding: EdgeInsets.symmetric(
                           horizontal: 10,
                           vertical: 0,
-                        ), // Compact
+                        ),
                         isDense: true,
+                        prefixIcon: Icon(Icons.forest, size: 20),
                       ),
-                      key: ValueKey(_selectedSpecies),
-                      initialValue: _selectedSpecies,
+                      key: ValueKey(filters.species),
+                      initialValue: filters.species,
                       items: [
                         const DropdownMenuItem(
                           value: null,
@@ -193,29 +221,94 @@ class _WateringPageState extends ConsumerState<WateringPage> {
                           ),
                         ),
                       ],
-                      onChanged: (v) => setState(() => _selectedSpecies = v),
+                      onChanged: (v) {
+                        ref
+                            .read(wateringFiltersProvider.notifier)
+                            .setSpecies(v);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Reference Filter
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: _referenceController,
+                      decoration: const InputDecoration(
+                        labelText: 'Ref',
+                        hintText: 'Cercar...',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 0,
+                        ),
+                        isDense: true,
+                        prefixIcon: Icon(Icons.tag, size: 20),
+                      ),
+                      onChanged: (v) {
+                        if (_debounce?.isActive ?? false) _debounce!.cancel();
+                        _debounce = Timer(
+                          const Duration(milliseconds: 500),
+                          () {
+                            ref
+                                .read(wateringFiltersProvider.notifier)
+                                .setReference(v.isEmpty ? null : v);
+                          },
+                        );
+                      },
                     ),
                   ),
                 ],
               ),
-              // Active Filters Chips (specifically Tree ID)
-              if (filters.treeId != null)
+              // Active Filters Chips (Breadcrumbs)
+              if (filters.treeId != null ||
+                  filters.species != null ||
+                  (filters.reference != null && filters.reference!.isNotEmpty))
                 Padding(
                   padding: const EdgeInsets.only(top: 8.0),
-                  child: Row(
+                  child: Wrap(
+                    spacing: 8.0,
                     children: [
-                      InputChip(
-                        label: Text(
-                          'Arbre: ${trees.any((t) => t.id == filters.treeId) ? trees.firstWhere((t) => t.id == filters.treeId).commonName : "Desconegut"}',
+                      // Tree Chip
+                      if (filters.treeId != null)
+                        InputChip(
+                          label: Text(
+                            'Arbre: ${trees.any((t) => t.id == filters.treeId) ? trees.firstWhere((t) => t.id == filters.treeId).commonName : "Desconegut"}',
+                          ),
+                          onDeleted: () {
+                            ref
+                                .read(wateringFiltersProvider.notifier)
+                                .setTreeId(null);
+                          },
+                          deleteIcon: const Icon(Icons.close, size: 18),
+                          backgroundColor: Colors.blue.shade100,
                         ),
-                        onDeleted: () {
-                          ref
-                              .read(wateringFiltersProvider.notifier)
-                              .setTreeId(null);
-                        },
-                        deleteIcon: const Icon(Icons.close, size: 18),
-                        backgroundColor: Colors.blue.shade100,
-                      ),
+                      // Species Chip
+                      if (filters.species != null)
+                        InputChip(
+                          label: Text('Espècie: ${filters.species}'),
+                          onDeleted: () {
+                            ref
+                                .read(wateringFiltersProvider.notifier)
+                                .setSpecies(null);
+                          },
+                          deleteIcon: const Icon(Icons.close, size: 18),
+                          backgroundColor: Colors.green.shade100,
+                        ),
+                      // Reference Chip
+                      if (filters.reference != null &&
+                          filters.reference!.isNotEmpty)
+                        InputChip(
+                          label: Text('Ref: "${filters.reference}"'),
+                          onDeleted: () {
+                            _referenceController.clear();
+                            ref
+                                .read(wateringFiltersProvider.notifier)
+                                .setReference(null);
+                          },
+                          deleteIcon: const Icon(Icons.close, size: 18),
+                          backgroundColor: Colors.orange.shade100,
+                        ),
                     ],
                   ),
                 ),
@@ -231,6 +324,8 @@ class _WateringPageState extends ConsumerState<WateringPage> {
               scrollDirection: Axis.horizontal,
               child: DataTable(
                 headingRowColor: WidgetStateProperty.all(Colors.blue.shade50),
+                dataRowMinHeight: 60,
+                dataRowMaxHeight: 80,
                 columns: [
                   const DataColumn(
                     label: Text(
@@ -325,6 +420,16 @@ class _WateringPageState extends ConsumerState<WateringPage> {
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
+                                  if (tree.reference != null &&
+                                      tree.reference!.isNotEmpty)
+                                    Text(
+                                      tree.reference!,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.indigo.shade400,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
                                   Text(
                                     tree.species,
                                     style: TextStyle(

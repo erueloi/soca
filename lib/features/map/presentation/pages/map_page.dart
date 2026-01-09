@@ -13,6 +13,7 @@ import '../../../trees/domain/entities/tree.dart';
 import '../providers/map_layers_provider.dart';
 import '../widgets/layer_controller_sheet.dart';
 import '../widgets/composite_marker.dart';
+import '../providers/species_filter_provider.dart';
 import '../../../trees/data/repositories/species_repository.dart';
 import '../../../trees/domain/entities/species.dart';
 import '../../../settings/presentation/providers/settings_provider.dart';
@@ -204,6 +205,8 @@ class _MapPageState extends ConsumerState<MapPage> {
                   Consumer(
                     builder: (context, ref, child) {
                       final treesAsyncValue = ref.watch(treesStreamProvider);
+                      final hiddenSpecies = ref.watch(hiddenSpeciesProvider);
+
                       // We need species data. Let's assume a provider exists or fetch it.
                       // Since we don't have a stream provider for ALL species handy in the context (maybe),
                       // let's try to find it or optimize.
@@ -241,47 +244,56 @@ class _MapPageState extends ConsumerState<MapPage> {
                           };
 
                           return MarkerLayer(
-                            markers: treesAsyncValue.value!.map((t) {
-                              final species = speciesMap[t.speciesId];
-                              // Fallback
-                              Color color = Colors.green;
-                              IconData? iconData = Icons.park;
-                              String label = t.reference ?? '???';
+                            markers: treesAsyncValue.value!
+                                .where(
+                                  (t) => !hiddenSpecies.contains(t.species),
+                                )
+                                .map((t) {
+                                  final species = speciesMap[t.speciesId];
+                                  // Fallback
+                                  Color color = Colors.green;
+                                  IconData? iconData = Icons.park;
+                                  String label = t.reference ?? '???';
 
-                              if (species != null) {
-                                if (species.color.isNotEmpty) {
-                                  try {
-                                    color = Color(
-                                      int.parse(
-                                        '0xFF${species.color.replaceAll('#', '')}',
+                                  if (species != null) {
+                                    if (species.color.isNotEmpty) {
+                                      try {
+                                        color = Color(
+                                          int.parse(
+                                            '0xFF${species.color.replaceAll('#', '')}',
+                                          ),
+                                        );
+                                      } catch (_) {}
+                                    }
+                                    if (species.iconCode != null) {
+                                      iconData = IconUtils.resolveIcon(
+                                        species.iconCode!,
+                                        species.iconFamily,
+                                      );
+                                    }
+                                  }
+
+                                  return Marker(
+                                    point: LatLng(t.latitude, t.longitude),
+                                    width: 60, // Wider for the label
+                                    height: 70, // Taller for the pin
+                                    child: GestureDetector(
+                                      onTap: () => _showTreeOptions(
+                                        context,
+                                        ref,
+                                        t,
+                                        species,
                                       ),
-                                    );
-                                  } catch (_) {}
-                                }
-                                if (species.iconCode != null) {
-                                  iconData = IconUtils.resolveIcon(
-                                    species.iconCode!,
-                                    species.iconFamily,
+                                      child: CompositeMarker(
+                                        color: color,
+                                        iconData: iconData,
+                                        label: label,
+                                        size: 50, // Base size of the pin head
+                                      ),
+                                    ),
                                   );
-                                }
-                              }
-
-                              return Marker(
-                                point: LatLng(t.latitude, t.longitude),
-                                width: 60, // Wider for the label
-                                height: 70, // Taller for the pin
-                                child: GestureDetector(
-                                  onTap: () =>
-                                      _showTreeOptions(context, ref, t),
-                                  child: CompositeMarker(
-                                    color: color,
-                                    iconData: iconData,
-                                    label: label,
-                                    size: 50, // Base size of the pin head
-                                  ),
-                                ),
-                              );
-                            }).toList(),
+                                })
+                                .toList(),
                           );
                         },
                       );
@@ -351,7 +363,16 @@ class _MapPageState extends ConsumerState<MapPage> {
     );
   }
 
-  void _showTreeOptions(BuildContext context, WidgetRef ref, Tree tree) {
+  void _showTreeOptions(
+    BuildContext context,
+    WidgetRef ref,
+    Tree tree,
+    Species? species,
+  ) {
+    final currentMonth = DateTime.now().month;
+    final isPruning = species?.pruningMonths.contains(currentMonth) ?? false;
+    final isHarvest = species?.harvestMonths.contains(currentMonth) ?? false;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -365,10 +386,10 @@ class _MapPageState extends ConsumerState<MapPage> {
             children: [
               ListTile(
                 leading: Container(
-                  width: 40,
-                  height: 40,
+                  width: 50,
+                  height: 50,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(4),
+                    shape: BoxShape.circle,
                     image: tree.photoUrl != null
                         ? DecorationImage(
                             image: NetworkImage(tree.photoUrl!),
@@ -376,16 +397,65 @@ class _MapPageState extends ConsumerState<MapPage> {
                           )
                         : null,
                     color: Colors.grey[200],
+                    border: Border.all(color: Colors.grey.shade300),
                   ),
                   child: tree.photoUrl == null
-                      ? const Icon(Icons.park, color: Colors.green)
+                      ? Icon(
+                          IconUtils.resolveIcon(
+                            species?.iconCode ?? Icons.park.codePoint,
+                            species?.iconFamily,
+                          ),
+                          color: Colors.green.shade700,
+                          size: 30,
+                        )
                       : null,
                 ),
-                title: Text(
-                  tree.commonName,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                title: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        tree.commonName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
-                subtitle: Text(tree.species),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 4),
+                    Text(
+                      '${tree.species}${tree.reference != null ? ' • ${tree.reference}' : ''}',
+                      style: TextStyle(color: Colors.grey[800], fontSize: 14),
+                    ),
+                    const SizedBox(height: 8),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildStatusBadge(tree.status),
+                          const SizedBox(width: 8),
+                          if (tree.vigor != null) ...[
+                            _buildVigorBadge(tree.vigor!),
+                            const SizedBox(width: 8),
+                          ],
+                          if (isPruning)
+                            _buildTaskBadge('Poda', Icons.cut, Colors.orange),
+                          if (isHarvest)
+                            _buildTaskBadge(
+                              'Collita',
+                              Icons.agriculture,
+                              Colors.purple,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
                 trailing: IconButton(
                   icon: const Icon(Icons.info_outline),
                   onPressed: () {
@@ -399,26 +469,145 @@ class _MapPageState extends ConsumerState<MapPage> {
                 ),
               ),
               const Divider(),
-              const Padding(
-                padding: EdgeInsets.all(8.0),
-                child: Text(
-                  'Reg Ràpid',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                child: Row(
+                  children: [
+                    const Text(
+                      'Reg Ràpid',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    if (species != null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Text(
+                          'Kc: ${species.kc}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.blue.shade800,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildWaterOption(context, ref, tree, 2),
-                  _buildWaterOption(context, ref, tree, 5),
-                  _buildWaterOption(context, ref, tree, 8),
-                  _buildCustomWaterOption(context, ref, tree),
-                ],
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildWaterOption(context, ref, tree, 2),
+                    _buildWaterOption(context, ref, tree, 5),
+                    _buildWaterOption(context, ref, tree, 8),
+                    _buildCustomWaterOption(context, ref, tree),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(String status) {
+    Color color;
+    IconData icon;
+    switch (status.toLowerCase()) {
+      case 'mort':
+        color = Colors.grey;
+        icon = Icons.sentiment_very_dissatisfied;
+        break;
+      case 'malalt':
+        color = Colors.orange;
+        icon = Icons.healing;
+        break;
+      default:
+        color = Colors.green;
+        icon = Icons.check_circle_outline;
+    }
+    return _buildMiniBadge(status, icon, color);
+  }
+
+  Widget _buildVigorBadge(String vigor) {
+    Color color;
+    IconData icon;
+    switch (vigor.toLowerCase()) {
+      case 'baix':
+        color = Colors.red;
+        icon = Icons.battery_alert;
+        break;
+      case 'mitjà':
+        color = Colors.orange;
+        icon = Icons.battery_5_bar;
+        break;
+      default: // Alt
+        color = Colors.green;
+        icon = Icons.battery_full;
+    }
+    return _buildMiniBadge('Vigor $vigor', icon, color);
+  }
+
+  Widget _buildTaskBadge(String label, IconData icon, Color color) {
+    return Container(
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniBadge(String text, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: TextStyle(fontSize: 12, color: color.withValues(alpha: 0.8)),
+          ),
+        ],
       ),
     );
   }
