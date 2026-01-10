@@ -25,16 +25,26 @@ class _GrowthEntryFormSheetState extends State<GrowthEntryFormSheet> {
   }
 
   void _submit() {
+    debugPrint('Modal: Submit clicked');
     if (_formKey.currentState!.validate()) {
-      final height = double.tryParse(_heightController.text) ?? 0.0;
-      final diameter = double.tryParse(_diameterController.text) ?? 0.0;
+      debugPrint('Modal: Form Validated');
+      final heightStr = _heightController.text.replaceAll(',', '.');
+      final diameterStr = _diameterController.text.replaceAll(',', '.');
 
+      final height = double.tryParse(heightStr) ?? 0.0;
+      final diameter = double.tryParse(diameterStr) ?? 0.0;
+
+      debugPrint('Modal: Parsed values - H: $height, D: $diameter');
+
+      debugPrint('Modal: Popping with result...');
       Navigator.pop(context, {
         'height': height,
         'diameter': diameter,
         'status': _selectedStatus,
         'observations': _observationsController.text,
       });
+    } else {
+      debugPrint('Modal: Form Validation Failed');
     }
   }
 

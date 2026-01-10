@@ -138,7 +138,7 @@ class _ConstructionPageState extends ConsumerState<ConstructionPage> {
                       .read(constructionRepositoryProvider)
                       .deleteFloorPlan(floorId);
                 } catch (e) {
-                  if (context.mounted) {
+                  if (mounted) {
                     ScaffoldMessenger.of(
                       context,
                     ).showSnackBar(SnackBar(content: Text('Error: $e')));

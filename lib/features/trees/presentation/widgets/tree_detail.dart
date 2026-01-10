@@ -1287,7 +1287,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                 if (_isEditing && index == 0) {
                   // Add Button
                   return InkWell(
-                    onTap: () => _takeEvolutionPhoto(context),
+                    onTap: () => _takeEvolutionPhoto(),
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.indigo.withValues(alpha: 0.1),
@@ -1465,7 +1465,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
             if (_isEditing) ...[
               const SizedBox(height: 12),
               ElevatedButton.icon(
-                onPressed: () => _takeEvolutionPhoto(context),
+                onPressed: () => _takeEvolutionPhoto(),
                 icon: const Icon(Icons.add_a_photo),
                 label: const Text('AFEGIR PRIMERA FOTO'),
               ),
@@ -1476,7 +1476,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     );
   }
 
-  Future<void> _takeEvolutionPhoto(BuildContext context) async {
+  Future<void> _takeEvolutionPhoto() async {
     final source = await _showImageSourceActionSheet(context);
     if (source == null) {
       return;
@@ -1488,7 +1488,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
       imageQuality: 80,
     );
 
-    if (image != null && context.mounted) {
+    if (image != null && mounted) {
       // 1. Show Form Sheet to get details
       final result = await showModalBottomSheet<Map<String, dynamic>>(
         context: context,
@@ -1496,10 +1496,14 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
         builder: (context) => const GrowthEntryFormSheet(),
       );
 
-      if (result == null || !context.mounted) return;
+      if (result == null) {
+        return;
+      }
+
+      // Proceed with upload even if context unmounted (common on Android transitions)
 
       // 2. Upload Image
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Pujant foto i dades...')));
@@ -1510,14 +1514,14 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
           .uploadEvolutionImage(image, widget.tree.id);
 
       if (url != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Guardant dades...')));
+        }
         // 3. Create Growth Entry
         final entry = GrowthEntry(
-          id: '', // Firestore auto-id (handled by add?) No, we use .add() so ID is generated there.
-          // Wait, 'add' method uses .add(map).
-          // But I need to construct the object.
-          // I will pass mock ID here or empty, it's ignored on add() usually if using proper separation, but
-          // TreesRepo.addGrowthEntry calls .add(entry.toMap()).
-          // Firestore generates the ID.
+          id: '',
           date: DateTime.now(),
           photoUrl: url,
           height: result['height'],
@@ -1530,13 +1534,13 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
             .read(treesRepositoryProvider)
             .addGrowthEntry(widget.tree.id, entry);
 
-        if (context.mounted) {
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Seguiment registrat correctament!')),
           );
         }
       } else {
-        if (context.mounted) {
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Error pujant la imatge.')),
           );

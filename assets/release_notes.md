@@ -1,5 +1,7 @@
 ﻿# Release Notes
 
+## v1.6.1
+Minor bugfix al guardar històric del arbres.
 ## v1.6.0
 Millora del mapa amb capes per especies d'arbres. Nova pantalla d'obres amb els pisos i planolss.
 ## v1.5.5
@@ -43,6 +45,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

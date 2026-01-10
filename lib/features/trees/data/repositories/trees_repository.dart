@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -41,13 +42,24 @@ class TreesRepository {
       final ref = _storage.ref().child(
         'tree_images/$treeId/${DateTime.now().millisecondsSinceEpoch}.jpg',
       );
-      final bytes = await imageFile.readAsBytes();
-      final uploadTask = await ref.putData(
-        bytes,
-        SettableMetadata(contentType: 'image/jpeg'),
-      );
-      final url = await uploadTask.ref.getDownloadURL();
-      return url;
+
+      UploadTask uploadTask;
+      if (kIsWeb) {
+        final bytes = await imageFile.readAsBytes();
+        uploadTask = ref.putData(
+          bytes,
+          SettableMetadata(contentType: 'image/jpeg'),
+        );
+      } else {
+        final file = File(imageFile.path);
+        uploadTask = ref.putFile(
+          file,
+          SettableMetadata(contentType: 'image/jpeg'),
+        );
+      }
+
+      final snapshot = await uploadTask;
+      return await snapshot.ref.getDownloadURL();
     } catch (e) {
       debugPrint('Error uploading tree image: $e');
       return null;
@@ -175,15 +187,34 @@ class TreesRepository {
 
   Future<String?> uploadEvolutionImage(XFile imageFile, String treeId) async {
     try {
+      debugPrint('Repo: uploadEvolutionImage started for tree $treeId');
       final ref = _storage.ref().child(
         'evolution_images/$treeId/${DateTime.now().millisecondsSinceEpoch}.jpg',
       );
-      final bytes = await imageFile.readAsBytes();
-      final uploadTask = await ref.putData(
-        bytes,
-        SettableMetadata(contentType: 'image/jpeg'),
-      );
-      return await uploadTask.ref.getDownloadURL();
+
+      UploadTask uploadTask;
+      if (kIsWeb) {
+        debugPrint('Repo: Uploading as bytes (Web)');
+        final bytes = await imageFile.readAsBytes();
+        uploadTask = ref.putData(
+          bytes,
+          SettableMetadata(contentType: 'image/jpeg'),
+        );
+      } else {
+        debugPrint('Repo: Uploading as File (Mobile): ${imageFile.path}');
+        final file = File(imageFile.path);
+        if (!await file.exists()) {
+          debugPrint('Repo ERROR: File does not exist at path!');
+        }
+        uploadTask = ref.putFile(
+          file,
+          SettableMetadata(contentType: 'image/jpeg'),
+        );
+      }
+
+      final snapshot = await uploadTask;
+      debugPrint('Repo: Upload task completed. State: ${snapshot.state}');
+      return await snapshot.ref.getDownloadURL();
     } catch (e) {
       debugPrint('Error uploading evolution image: $e');
       return null;
