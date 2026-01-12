@@ -7,6 +7,7 @@ class FarmConfig {
   final double zoom;
   final List<FarmZone> zones;
   final String? meteocatStationCode;
+  final double mapMarkerSize;
 
   const FarmConfig({
     required this.name,
@@ -17,6 +18,7 @@ class FarmConfig {
     required this.zoom,
     required this.zones,
     this.meteocatStationCode,
+    required this.mapMarkerSize,
   });
 
   factory FarmConfig.empty() {
@@ -29,6 +31,7 @@ class FarmConfig {
       zoom: 16.0,
       zones: [],
       meteocatStationCode: null,
+      mapMarkerSize: 20.0,
     );
   }
 
@@ -42,6 +45,7 @@ class FarmConfig {
       'zoom': zoom,
       'zones': zones.map((z) => z.toMap()).toList(),
       'meteocatStationCode': meteocatStationCode,
+      'mapMarkerSize': mapMarkerSize,
     };
   }
 
@@ -59,6 +63,7 @@ class FarmConfig {
               .toList() ??
           [],
       meteocatStationCode: map['meteocatStationCode'],
+      mapMarkerSize: (map['mapMarkerSize'] as num?)?.toDouble() ?? 20.0,
     );
   }
 
@@ -71,6 +76,7 @@ class FarmConfig {
     double? zoom,
     List<FarmZone>? zones,
     String? meteocatStationCode,
+    double? mapMarkerSize,
   }) {
     return FarmConfig(
       name: name ?? this.name,
@@ -81,6 +87,7 @@ class FarmConfig {
       zoom: zoom ?? this.zoom,
       zones: zones ?? this.zones,
       meteocatStationCode: meteocatStationCode ?? this.meteocatStationCode,
+      mapMarkerSize: mapMarkerSize ?? this.mapMarkerSize,
     );
   }
 }

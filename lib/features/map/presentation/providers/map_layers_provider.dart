@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum MapLayer { tasks, irrigationZones, healthStatus }
+enum MapLayer { tasks, irrigationZones, healthStatus, treeLabels }
 
 class MapLayersNotifier extends Notifier<Map<MapLayer, bool>> {
   @override
@@ -11,6 +11,7 @@ class MapLayersNotifier extends Notifier<Map<MapLayer, bool>> {
       MapLayer.tasks: true,
       MapLayer.irrigationZones: false,
       MapLayer.healthStatus: false,
+      MapLayer.treeLabels: false,
     };
   }
 
@@ -22,9 +23,9 @@ class MapLayersNotifier extends Notifier<Map<MapLayer, bool>> {
         MapLayer.irrigationZones:
             prefs.getBool('layer_irrigationZones') ?? false,
         MapLayer.healthStatus: prefs.getBool('layer_healthStatus') ?? false,
+        MapLayer.treeLabels: prefs.getBool('layer_treeLabels') ?? false,
       };
     } catch (e) {
-      // Gracefully handle missing plugin or other errors
       // Gracefully handle missing plugin or other errors
       // print('Error loading map preferences: $e'); // Disabled for production rules
     }

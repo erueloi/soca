@@ -58,9 +58,26 @@ class ConstructionRepository {
         return {};
       }
       final data = snapshot.data() as Map<String, dynamic>;
-      // Expecting structure: { "Planta Baixa": "url1", "Planta 1": "url2" }
-      return Map<String, String>.from(data);
+      // Filter out null values or convert to String safely
+      // Map<String, String>.from might fail if values are not strings.
+      // Better manual conversion:
+      final result = <String, String>{};
+      data.forEach((key, value) {
+        if (value is String) {
+          result[key] = value;
+        } else {
+          // Treat null/other as empty string or ignore?
+          // If we want it to show up, we need a key.
+          result[key] = "";
+        }
+      });
+      return result;
     });
+  }
+
+  Future<void> addEmptyFloor(String floorId) async {
+    // Store empty string to indicate "no image" but "exists"
+    await _floorsConfigDoc.set({floorId: ""}, SetOptions(merge: true));
   }
 
   Future<void> saveFloorPlan(String floorId, XFile imageFile) async {
@@ -83,6 +100,39 @@ class ConstructionRepository {
       await _floorsConfigDoc.set({floorId: url}, SetOptions(merge: true));
     } catch (e) {
       debugPrint('Error uploading floor plan: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> renameFloor(String oldName, String newName) async {
+    try {
+      final docSnapshot = await _floorsConfigDoc.get();
+      if (!docSnapshot.exists) return;
+
+      final data = docSnapshot.data() as Map<String, dynamic>;
+      final url = data[oldName];
+
+      if (url != null) {
+        final batch = FirebaseFirestore.instance.batch();
+
+        // 1. Update Config: Remove old key, add new key
+        batch.update(_floorsConfigDoc, {
+          oldName: FieldValue.delete(),
+          newName: url,
+        });
+
+        // 2. Update all Points
+        final pointsSnapshot = await _pointsCollection
+            .where('floorId', isEqualTo: oldName)
+            .get();
+        for (final doc in pointsSnapshot.docs) {
+          batch.update(doc.reference, {'floorId': newName});
+        }
+
+        await batch.commit();
+      }
+    } catch (e) {
+      debugPrint('Error renaming floor: $e');
       rethrow;
     }
   }

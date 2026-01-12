@@ -5,20 +5,27 @@ class CompositeMarker extends StatelessWidget {
   final IconData? iconData;
   final String label;
   final double size;
+  final bool showLabel;
 
   const CompositeMarker({
     super.key,
     required this.color,
     this.iconData,
     required this.label,
-    this.size = 50.0,
+    this.size = 20.0,
+    this.showLabel = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      size: Size(size, size * 1.2), // Taller for the text tag
-      painter: _MarkerPainter(color: color, iconData: iconData, label: label),
+      size: Size(size, size), // Icon area square, text overflows
+      painter: _MarkerPainter(
+        color: color,
+        iconData: iconData,
+        label: label,
+        showLabel: showLabel,
+      ),
     );
   }
 }
@@ -27,8 +34,14 @@ class _MarkerPainter extends CustomPainter {
   final Color color;
   final IconData? iconData;
   final String label;
+  final bool showLabel;
 
-  _MarkerPainter({required this.color, this.iconData, required this.label});
+  _MarkerPainter({
+    required this.color,
+    this.iconData,
+    required this.label,
+    required this.showLabel,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -39,20 +52,20 @@ class _MarkerPainter extends CustomPainter {
     if (iconData != null) {
       // Create a style with shadow to ensure visibility on map
       final textStyle = TextStyle(
-        fontSize: w * 0.8, // Make icon larger (80% of width)
+        fontSize: w * 0.9, // Make icon larger (90% of width)
         fontFamily: iconData!.fontFamily,
         package: iconData!.fontPackage,
         color: color, // Species Color
         shadows: const [
           Shadow(
             offset: Offset(0, 0),
-            blurRadius: 3.0,
+            blurRadius: 2.0,
             color: Colors.white, // White Glow/Halo
           ),
           Shadow(
             offset: Offset(1, 1),
-            blurRadius: 4.0,
-            color: Colors.black54, // Drop Shadow
+            blurRadius: 2.0,
+            color: Colors.black45, // Drop Shadow
           ),
         ],
       );
@@ -68,11 +81,11 @@ class _MarkerPainter extends CustomPainter {
       iconPainter.layout();
 
       // Center icon horizontally, place somewhat up
-      iconPainter.paint(canvas, Offset((w - iconPainter.width) / 2, h * 0.1));
+      iconPainter.paint(canvas, Offset((w - iconPainter.width) / 2, 0));
     }
 
     // 2. Draw Label Tag (Reference) at the bottom
-    if (label.isNotEmpty) {
+    if (showLabel && label.isNotEmpty) {
       final tagBgPaint = Paint()
         ..color = Colors.white.withValues(alpha: 0.9)
         ..style = PaintingStyle.fill;
@@ -98,7 +111,7 @@ class _MarkerPainter extends CustomPainter {
       final tagW = textPainter.width + 8;
       final tagH = textPainter.height + 4;
       final tagX = (w - tagW) / 2;
-      final tagY = h - tagH; // At the very bottom
+      final tagY = h; // Below the icon
 
       final tagRect = RRect.fromRectAndRadius(
         Rect.fromLTWH(tagX, tagY, tagW, tagH),

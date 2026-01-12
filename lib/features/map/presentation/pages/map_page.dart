@@ -9,6 +9,8 @@ import '../../../trees/presentation/providers/trees_provider.dart';
 import '../../../trees/presentation/widgets/tree_detail.dart';
 import '../../../trees/domain/entities/watering_event.dart';
 import '../../../trees/domain/entities/tree.dart';
+import '../../../tasks/domain/entities/task.dart';
+import '../../../tasks/presentation/widgets/task_edit_sheet.dart';
 
 import '../providers/map_layers_provider.dart';
 import '../widgets/layer_controller_sheet.dart';
@@ -151,6 +153,10 @@ class _MapPageState extends ConsumerState<MapPage> {
                     Consumer(
                       builder: (context, ref, child) {
                         final tasksAsyncValue = ref.watch(tasksStreamProvider);
+                        final configAsync = ref.watch(farmConfigStreamProvider);
+                        final markerSize =
+                            configAsync.asData?.value.mapMarkerSize ?? 20.0;
+
                         List<Marker> markers = [];
                         if (tasksAsyncValue.hasValue) {
                           markers.addAll(
@@ -163,34 +169,29 @@ class _MapPageState extends ConsumerState<MapPage> {
                                   final isReforest = t.bucket == 'Reforestació';
                                   return Marker(
                                     point: LatLng(t.latitude!, t.longitude!),
-                                    width: 40,
-                                    height: 40,
-                                    child: GestureDetector(
-                                      onTap: () {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              '${t.title} (${t.bucket})',
+                                    // Use consistent container size for stability
+                                    width: 120.0,
+                                    height: 120.0,
+                                    alignment: Alignment.center,
+                                    child: Center(
+                                      child: GestureDetector(
+                                        onTap: () =>
+                                            _showTaskOptions(context, ref, t),
+                                        child: Icon(
+                                          isReforest
+                                              ? Icons.forest
+                                              : Icons.check_circle,
+                                          color: isReforest
+                                              ? Colors.green[800]
+                                              : Colors.orange,
+                                          size: markerSize * 0.9,
+                                          shadows: const [
+                                            Shadow(
+                                              blurRadius: 5,
+                                              color: Colors.black54,
                                             ),
-                                          ),
-                                        );
-                                      },
-                                      child: Icon(
-                                        isReforest
-                                            ? Icons.forest
-                                            : Icons.check_circle,
-                                        color: isReforest
-                                            ? Colors.green[800]
-                                            : Colors.orange,
-                                        size: 40,
-                                        shadows: const [
-                                          Shadow(
-                                            blurRadius: 5,
-                                            color: Colors.black54,
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   );
@@ -273,22 +274,37 @@ class _MapPageState extends ConsumerState<MapPage> {
                                     }
                                   }
 
+                                  final showLabels =
+                                      layers[MapLayer.treeLabels] ?? false;
+                                  final configAsync = ref.watch(
+                                    farmConfigStreamProvider,
+                                  );
+                                  final markerSize =
+                                      configAsync.asData?.value.mapMarkerSize ??
+                                      20.0;
+
                                   return Marker(
                                     point: LatLng(t.latitude, t.longitude),
-                                    width: 60, // Wider for the label
-                                    height: 70, // Taller for the pin
-                                    child: GestureDetector(
-                                      onTap: () => _showTreeOptions(
-                                        context,
-                                        ref,
-                                        t,
-                                        species,
-                                      ),
-                                      child: CompositeMarker(
-                                        color: color,
-                                        iconData: iconData,
-                                        label: label,
-                                        size: 50, // Base size of the pin head
+                                    // Use a fixed extensive container to ensure stability
+                                    // The visual marker (icon) is centered in this container
+                                    width: 120.0,
+                                    height: 120.0,
+                                    alignment: Alignment.center,
+                                    child: Center(
+                                      child: GestureDetector(
+                                        onTap: () => _showTreeOptions(
+                                          context,
+                                          ref,
+                                          t,
+                                          species,
+                                        ),
+                                        child: CompositeMarker(
+                                          color: color,
+                                          iconData: iconData,
+                                          label: label,
+                                          size: markerSize,
+                                          showLabel: showLabels,
+                                        ),
                                       ),
                                     ),
                                   );
@@ -359,6 +375,93 @@ class _MapPageState extends ConsumerState<MapPage> {
             child: const Icon(Icons.remove),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showTaskOptions(BuildContext context, WidgetRef ref, Task task) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(
+                  task.bucket == 'Reforestació'
+                      ? Icons.forest
+                      : Icons.check_circle,
+                  color: task.bucket == 'Reforestació'
+                      ? Colors.green[800]
+                      : Colors.orange,
+                  size: 40,
+                ),
+                title: Text(
+                  task.title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      task.bucket,
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    ),
+                    if (task.description.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        task.description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+                trailing: IconButton(
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      builder: (context) => TaskEditSheet(
+                        task: task,
+                        initialBucket: task.bucket,
+                        onSave: (updatedTask) {
+                          ref
+                              .read(tasksRepositoryProvider)
+                              .updateTask(updatedTask);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Tasca actualitzada!'),
+                            ),
+                          );
+                        },
+                        onDelete: () {
+                          ref.read(tasksRepositoryProvider).deleteTask(task.id);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Tasca eliminada 🗑️'),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
       ),
     );
   }

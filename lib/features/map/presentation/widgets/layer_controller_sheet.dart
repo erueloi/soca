@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../settings/presentation/providers/settings_provider.dart';
 import '../../../trees/presentation/providers/trees_provider.dart';
-import '../providers/species_filter_provider.dart';
 import '../providers/map_layers_provider.dart';
+import '../providers/species_filter_provider.dart';
 
 class LayerControllerSheet extends ConsumerWidget {
   const LayerControllerSheet({super.key});
@@ -42,6 +44,43 @@ class LayerControllerSheet extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 16),
+            Consumer(
+              builder: (context, ref, child) {
+                final configAsync = ref.watch(farmConfigStreamProvider);
+                final config = configAsync.asData?.value;
+                final currentSize = config?.mapMarkerSize ?? 20.0;
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Text(
+                        'Mida Icones: ${currentSize.toInt()}px',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                    Slider(
+                      value: currentSize,
+                      min: 10,
+                      max: 50,
+                      divisions: 8,
+                      label: '${currentSize.toInt()}px',
+                      onChanged: config == null
+                          ? null
+                          : (val) {
+                              ref
+                                  .read(settingsRepositoryProvider)
+                                  .saveFarmConfig(
+                                    config.copyWith(mapMarkerSize: val),
+                                  );
+                            },
+                    ),
+                  ],
+                );
+              },
+            ),
+            const Divider(),
             SwitchListTile(
               title: const Text('Tasques'),
               subtitle: const Text('Mostra marcadors de tasques pendents'),
@@ -68,6 +107,13 @@ class LayerControllerSheet extends ConsumerWidget {
               secondary: const Icon(Icons.health_and_safety, color: Colors.red),
               value: layers[MapLayer.healthStatus] ?? false,
               onChanged: (val) => notifier.toggleLayer(MapLayer.healthStatus),
+            ),
+            SwitchListTile(
+              title: const Text('IDs dels Arbres'),
+              subtitle: const Text('Mostra etiquetes amb el codi de l\'arbe'),
+              secondary: const Icon(Icons.tag, color: Colors.grey),
+              value: layers[MapLayer.treeLabels] ?? false,
+              onChanged: (val) => notifier.toggleLayer(MapLayer.treeLabels),
             ),
             const SizedBox(height: 24),
             if (allSpecies.isNotEmpty) ...[

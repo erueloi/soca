@@ -29,7 +29,7 @@ class _PathologySheetModalState extends ConsumerState<PathologySheetModal> {
 
   InjuryType _selectedType = InjuryType.fisica;
   double _severity = 5;
-  List<String> _photoUrls = [];
+  List<PathologyPhoto> _photos = [];
   bool _isUploading = false;
 
   @override
@@ -45,7 +45,7 @@ class _PathologySheetModalState extends ConsumerState<PathologySheetModal> {
     _actionController = TextEditingController(text: p?.recommendedAction ?? '');
     _selectedType = p?.type ?? InjuryType.fisica;
     _severity = p?.severity.toDouble() ?? 5.0;
-    _photoUrls = List.from(p?.photoUrls ?? []);
+    _photos = List.from(p?.photos ?? []);
   }
 
   @override
@@ -71,7 +71,7 @@ class _PathologySheetModalState extends ConsumerState<PathologySheetModal> {
 
       if (url != null) {
         setState(() {
-          _photoUrls.add(url);
+          _photos.add(PathologyPhoto(url: url, date: DateTime.now()));
         });
       }
 
@@ -184,32 +184,7 @@ class _PathologySheetModalState extends ConsumerState<PathologySheetModal> {
             _buildPhotosSection(),
             const SizedBox(height: 24),
             ElevatedButton(
-              onPressed: () {
-                final pathology = PathologySheet(
-                  title: _titleController.text,
-                  type: _selectedType,
-                  description: _descriptionController.text,
-                  photoUrls: _photoUrls,
-                  causes: _causesController.text,
-                  currentState: _currentStateController.text,
-                  recommendedAction: _actionController.text,
-                  severity: _severity.toInt(),
-                );
-
-                final updatedPoint = ConstructionPoint(
-                  id: widget.point.id,
-                  floorId: widget.point.floorId,
-                  xPercent: widget.point.xPercent,
-                  yPercent: widget.point.yPercent,
-                  createdAt: widget.point.createdAt,
-                  pathology: pathology,
-                  status:
-                      widget.point.status, // Preserve status or update logic
-                );
-
-                widget.onSave(updatedPoint);
-                Navigator.pop(context);
-              },
+              onPressed: _handleSave,
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.all(16),
                 backgroundColor: Theme.of(context).primaryColor,
@@ -221,6 +196,72 @@ class _PathologySheetModalState extends ConsumerState<PathologySheetModal> {
         ),
       ),
     );
+  }
+
+  void _handleSave() {
+    final oldPathology = widget.point.pathology;
+    final List<HistoryEntry> newHistory = List.from(
+      oldPathology?.history ?? [],
+    );
+    final DateTime now = DateTime.now();
+    const currentUser =
+        'Usuari Actual'; // Replace with actual user provider if available
+
+    // 1. Check for Status Change
+    final oldState = oldPathology?.currentState ?? '';
+    final newState = _currentStateController.text;
+    if (oldState != newState && newState.isNotEmpty) {
+      newHistory.add(
+        HistoryEntry(
+          date: now,
+          action: "Canvi d'estat",
+          user: currentUser,
+          comment: oldState.isEmpty
+              ? 'Estat inicial: "$newState"'
+              : 'De "$oldState" a "$newState"',
+        ),
+      );
+    }
+
+    // 2. Check for New Photos
+    final oldPhotoCount = oldPathology?.photos.length ?? 0;
+    final newPhotoCount = _photos.length;
+    if (newPhotoCount > oldPhotoCount) {
+      newHistory.add(
+        HistoryEntry(
+          date: now,
+          action: 'Noves fotos',
+          user: currentUser,
+          comment: "S'han afegit ${newPhotoCount - oldPhotoCount} fotos.",
+        ),
+      );
+    }
+
+    final pathology = PathologySheet(
+      title: _titleController.text,
+      type: _selectedType,
+      description: _descriptionController.text,
+      photos: _photos,
+      causes: _causesController.text,
+      currentState: _currentStateController.text,
+      recommendedAction: _actionController.text,
+      severity: _severity.toInt(),
+      subActions: oldPathology?.subActions ?? [],
+      history: newHistory,
+    );
+
+    final updatedPoint = ConstructionPoint(
+      id: widget.point.id,
+      floorId: widget.point.floorId,
+      xPercent: widget.point.xPercent,
+      yPercent: widget.point.yPercent,
+      createdAt: widget.point.createdAt,
+      pathology: pathology,
+      status: widget.point.status,
+    );
+
+    widget.onSave(updatedPoint);
+    Navigator.pop(context);
   }
 
   Widget _buildPhotosSection() {
@@ -239,17 +280,17 @@ class _PathologySheetModalState extends ConsumerState<PathologySheetModal> {
         ),
         if (_isUploading) const LinearProgressIndicator(),
         const SizedBox(height: 8),
-        if (_photoUrls.isEmpty)
+        if (_photos.isEmpty)
           const Text(
             'Cap fotografia afegida',
             style: TextStyle(color: Colors.grey),
           ),
-        if (_photoUrls.isNotEmpty)
+        if (_photos.isNotEmpty)
           SizedBox(
             height: 100,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              itemCount: _photoUrls.length,
+              itemCount: _photos.length,
               itemBuilder: (context, index) {
                 return Padding(
                   padding: const EdgeInsets.only(right: 8.0),
@@ -258,7 +299,7 @@ class _PathologySheetModalState extends ConsumerState<PathologySheetModal> {
                     child: Stack(
                       children: [
                         Image.network(
-                          _photoUrls[index],
+                          _photos[index].url,
                           width: 100,
                           height: 100,
                           fit: BoxFit.cover,
@@ -269,7 +310,7 @@ class _PathologySheetModalState extends ConsumerState<PathologySheetModal> {
                           child: GestureDetector(
                             onTap: () {
                               setState(() {
-                                _photoUrls.removeAt(index);
+                                _photos.removeAt(index);
                               });
                             },
                             child: Container(
