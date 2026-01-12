@@ -17,6 +17,8 @@ class SpeciesLibraryPage extends ConsumerStatefulWidget {
 class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
   late final TextEditingController _searchController;
   String _searchQuery = '';
+  int? _sortColumnIndex;
+  bool _sortAscending = true;
 
   Future<MapEntry<String, IconData>?> _showBotanicalPicker(
     BuildContext context,
@@ -78,6 +80,17 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
     super.dispose();
   }
 
+  void _sort<T>(
+    Comparable<T> Function(Species d) getField,
+    int columnIndex,
+    bool ascending,
+  ) {
+    setState(() {
+      _sortColumnIndex = columnIndex;
+      _sortAscending = ascending;
+    });
+  }
+
   void _showAddSpeciesDialog([Species? existing]) {
     final formKey = GlobalKey<FormState>();
 
@@ -102,10 +115,25 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
     final harvestCtrl = TextEditingController(
       text: formatList(existing?.harvestMonths),
     );
+    // New Fields
+    final plantingCtrl = TextEditingController(
+      text: formatList(existing?.plantingMonths),
+    );
+    final heightCtrl = TextEditingController(
+      text: (existing?.adultHeight ?? 0.0).toString(),
+    );
+    final diameterCtrl = TextEditingController(
+      text: (existing?.adultDiameter ?? 0.0).toString(),
+    );
 
     // State Variables
     String leaf = existing?.leafType ?? 'Caduca';
     String sunNeeds = existing?.sunNeeds ?? 'Alt';
+
+    // New State
+    String growthRate = existing?.growthRate ?? 'Mig'; // Lent, Mig, Ràpid
+    int droughtResistance = existing?.droughtResistance ?? 3; // 1-5
+
     bool fruit = existing?.fruit ?? true;
     String selectedColor = (existing?.color ?? '4CAF50').replaceAll('#', '');
     int? selectedIconCode = existing?.iconCode;
@@ -250,6 +278,36 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                                       if (data['iconCode'] != null) {
                                         selectedIconCode = data['iconCode'];
                                       }
+
+                                      // New: Extended Data
+                                      if (data['alcada_adulta'] != null) {
+                                        heightCtrl.text = data['alcada_adulta']
+                                            .toString();
+                                      }
+                                      if (data['diametre_adult'] != null) {
+                                        diameterCtrl.text =
+                                            data['diametre_adult'].toString();
+                                      }
+                                      if (data['ritme_creixement'] != null) {
+                                        final r = data['ritme_creixement'];
+                                        if ([
+                                          'Lent',
+                                          'Mig',
+                                          'Ràpid',
+                                        ].contains(r)) {
+                                          growthRate = r;
+                                        }
+                                      }
+                                      if (data['resistencia_sequera'] != null) {
+                                        droughtResistance =
+                                            data['resistencia_sequera'];
+                                      }
+                                      if (data['mesos_plantacio'] != null) {
+                                        plantingCtrl.text =
+                                            (data['mesos_plantacio'] as List)
+                                                .join(', ');
+                                      }
+
                                       isLoading = false;
                                     });
                                   } catch (e) {
@@ -470,16 +528,14 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                         Expanded(
                           child: TextFormField(
                             controller: kcCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Kc (Coeficient)',
-                            ),
+                            decoration: const InputDecoration(labelText: 'Kc'),
                             keyboardType: TextInputType.number,
                           ),
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            key: ValueKey(sunNeeds),
+                            key: ValueKey('sun_$sunNeeds'),
                             initialValue: sunNeeds,
                             decoration: const InputDecoration(labelText: 'Sol'),
                             items: ['Alt', 'Mitjà', 'Baix']
@@ -494,18 +550,72 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                                 setStateDialog(() => sunNeeds = v!),
                           ),
                         ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            key: ValueKey('growth_$growthRate'),
+                            initialValue: growthRate,
+                            decoration: const InputDecoration(
+                              labelText: 'Creixement',
+                            ),
+                            items: ['Lent', 'Mig', 'Ràpid']
+                                .map(
+                                  (e) => DropdownMenuItem(
+                                    value: e,
+                                    child: Text(e),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) =>
+                                setStateDialog(() => growthRate = v!),
+                          ),
+                        ),
                       ],
                     ),
-                    DropdownButtonFormField<String>(
-                      key: ValueKey(leaf),
-                      initialValue: leaf,
-                      decoration: const InputDecoration(labelText: 'Fulla'),
-                      items: ['Perenne', 'Caduca']
-                          .map(
-                            (e) => DropdownMenuItem(value: e, child: Text(e)),
-                          )
-                          .toList(),
-                      onChanged: (v) => setStateDialog(() => leaf = v!),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            key: ValueKey('leaf_$leaf'),
+                            initialValue: leaf,
+                            decoration: const InputDecoration(
+                              labelText: 'Fulla',
+                            ),
+                            items: ['Perenne', 'Caduca']
+                                .map(
+                                  (e) => DropdownMenuItem(
+                                    value: e,
+                                    child: Text(e),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) => setStateDialog(() => leaf = v!),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Sequera ($droughtResistance/5)',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              Slider(
+                                value: droughtResistance.toDouble(),
+                                min: 1,
+                                max: 5,
+                                divisions: 4,
+                                label: droughtResistance.toString(),
+                                onChanged: (v) => setStateDialog(
+                                  () => droughtResistance = v.toInt(),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                     TextFormField(
                       controller: frostCtrl,
@@ -513,16 +623,50 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                         labelText: 'Sensibilitat Gelada',
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: heightCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Alçada (m)',
+                            ),
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextFormField(
+                            controller: diameterCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Ø Adult (m)',
+                            ),
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: plantingCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Mesos Plantació (ex: 3, 4)',
+                        prefixIcon: Icon(Icons.calendar_month, size: 16),
+                      ),
+                    ),
                     TextFormField(
                       controller: pruningCtrl,
                       decoration: const InputDecoration(
                         labelText: 'Mesos Poda (ex: 12, 1)',
+                        prefixIcon: Icon(Icons.cut, size: 16),
                       ),
                     ),
                     TextFormField(
                       controller: harvestCtrl,
                       decoration: const InputDecoration(
                         labelText: 'Mesos Collita (ex: 9, 10)',
+                        prefixIcon: Icon(Icons.shopping_basket, size: 16),
                       ),
                     ),
                     CheckboxListTile(
@@ -570,10 +714,15 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                       prefix: prefixCtrl.text.toUpperCase(),
                       pruningMonths: parseMonths(pruningCtrl.text),
                       harvestMonths: parseMonths(harvestCtrl.text),
+                      plantingMonths: parseMonths(plantingCtrl.text),
                       color: selectedColor,
                       iconCode: selectedIconCode,
                       iconName: selectedIconName, // Persist the name
                       iconFamily: selectedIconFamily,
+                      adultHeight: double.tryParse(heightCtrl.text) ?? 0.0,
+                      adultDiameter: double.tryParse(diameterCtrl.text) ?? 0.0,
+                      growthRate: growthRate,
+                      droughtResistance: droughtResistance,
                     );
 
                     if (existing == null) {
@@ -642,6 +791,104 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
     return sensitivity;
   }
 
+  void _showLegendDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Llegenda'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildLegendItem(
+                Icons.wb_sunny,
+                'Necessitat de Sol',
+                '☀️ (Alt), 🌤️ (Mitjà), ☁️ (Baix)',
+              ),
+              const Divider(),
+              _buildLegendItem(
+                Icons.ac_unit,
+                'Sensibilitat a Gelades',
+                '❄️❄️❄️ (Alta), ❄️❄️ (Mitjana), ❄️ (Baixa)',
+              ),
+              const Divider(),
+              _buildLegendItem(
+                Icons.cut,
+                'Mesos de Poda',
+                'Mesos ideals per podar (ex: Gen, Feb)',
+              ),
+              const Divider(),
+              _buildLegendItem(
+                Icons.shopping_basket,
+                'Mesos de Collita',
+                'Mesos de recol·lecció del fruit',
+              ),
+              const Divider(),
+              _buildLegendItem(
+                Icons.apple,
+                'Fruit',
+                'Si produeix fruit comestible/aprofit.',
+              ),
+              const Divider(),
+              _buildLegendItem(Icons.height, 'Alçada Adulta', 'En metres (m)'),
+              const Divider(),
+              _buildLegendItem(
+                Icons.circle_outlined,
+                'Diàmetre',
+                'En metres (m)',
+              ),
+              const Divider(),
+              _buildLegendItem(Icons.speed, 'Creixement', 'Lent, Mig o Ràpid'),
+              const Divider(),
+              _buildLegendItem(
+                Icons.calendar_month,
+                'Mesos Plantació',
+                'Època ideal',
+              ),
+              const Divider(),
+              _buildLegendItem(
+                Icons.water_drop,
+                'Resistència Sequera',
+                'De 1 (Poca) a 5 (Molta)',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('TANCAR'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegendItem(IconData icon, String title, String desc) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 24, color: Colors.indigo),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(desc, style: const TextStyle(fontSize: 12)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final speciesStream = ref.watch(speciesRepositoryProvider).getSpecies();
@@ -650,6 +897,22 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
       appBar: AppBar(
         title: const Text('Biblioteca d\'Espècies'),
         actions: [
+          if (_sortColumnIndex != null)
+            IconButton(
+              icon: const Icon(Icons.restore),
+              tooltip: 'Restablir ordre original',
+              onPressed: () {
+                setState(() {
+                  _sortColumnIndex = null;
+                  _sortAscending = true;
+                });
+              },
+            ),
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            tooltip: 'Llegenda',
+            onPressed: _showLegendDialog,
+          ),
           IconButton(
             icon: const Icon(Icons.cloud_download),
             tooltip: 'Carregar Inicials (Lleida)',
@@ -674,10 +937,19 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
             padding: const EdgeInsets.all(8.0),
             child: TextField(
               controller: _searchController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Cercar...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      )
+                    : null,
+                border: const OutlineInputBorder(),
               ),
               onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
             ),
@@ -694,11 +966,57 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                 }
 
                 final allSpecies = snapshot.data ?? [];
-                final filtered = allSpecies.where((s) {
-                  return s.commonName.toLowerCase().contains(_searchQuery) ||
-                      s.scientificName.toLowerCase().contains(_searchQuery) ||
-                      (s.fruitType ?? '').toLowerCase().contains(_searchQuery);
+                var filtered = allSpecies.where((s) {
+                  final q = _searchQuery; // Already lowercased in onChanged
+                  return s.commonName.toLowerCase().contains(q) ||
+                      s.scientificName.toLowerCase().contains(q) ||
+                      s.prefix.toLowerCase().contains(q) ||
+                      (s.fruitType ?? '').toLowerCase().contains(q);
                 }).toList();
+
+                if (_sortColumnIndex != null) {
+                  filtered.sort((a, b) {
+                    int cmp = 0;
+                    switch (_sortColumnIndex) {
+                      case 0:
+                        cmp = a.commonName.compareTo(b.commonName);
+                        break;
+                      case 4:
+                        cmp = a.scientificName.compareTo(b.scientificName);
+                        break;
+                      case 5:
+                        cmp = a.kc.compareTo(b.kc);
+                        break;
+                      case 11:
+                        cmp = a.adultHeight.compareTo(b.adultHeight);
+                        break;
+                      case 12:
+                        cmp = a.adultDiameter.compareTo(b.adultDiameter);
+                        break;
+                      case 13:
+                        const map = {'Lent': 1, 'Mig': 2, 'Ràpid': 3};
+                        final va = map[a.growthRate] ?? 0;
+                        final vb = map[b.growthRate] ?? 0;
+                        cmp = va.compareTo(vb);
+                        break;
+                      case 14:
+                        final ma = a.plantingMonths.isEmpty
+                            ? 99
+                            : a.plantingMonths.first;
+                        final mb = b.plantingMonths.isEmpty
+                            ? 99
+                            : b.plantingMonths.first;
+                        cmp = ma.compareTo(mb);
+                        break;
+                      case 15:
+                        cmp = a.droughtResistance.compareTo(
+                          b.droughtResistance,
+                        );
+                        break;
+                    }
+                    return _sortAscending ? cmp : -cmp;
+                  });
+                }
 
                 if (filtered.isEmpty) {
                   return const Center(child: Text('Cap espècie trobada.'));
@@ -708,24 +1026,148 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                   scrollDirection: Axis.horizontal,
                   child: SingleChildScrollView(
                     child: DataTable(
+                      sortColumnIndex: _sortColumnIndex,
+                      sortAscending: _sortAscending,
                       columnSpacing: 20,
-                      columns: const [
-                        DataColumn(label: Text('Nom Comú')),
-                        DataColumn(label: Text('Icona')),
-                        DataColumn(label: Text('Color')),
+                      columns: [
                         DataColumn(
+                          label: const Text('Nom Comú'),
+                          onSort: (idx, asc) =>
+                              _sort<String>((d) => d.commonName, idx, asc),
+                        ),
+                        const DataColumn(label: Text('Icona')),
+                        const DataColumn(label: Text('Color')),
+                        const DataColumn(
                           label: Text(
                             'Cod.',
                             style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
-                        DataColumn(label: Text('Científic')),
-                        DataColumn(label: Text('Kc')),
-                        DataColumn(label: Text('Sol')),
-                        DataColumn(label: Text('Gelada')),
-                        DataColumn(label: Text('Poda')),
-                        DataColumn(label: Text('Collita')),
-                        DataColumn(label: Text('Fruit')),
+                        DataColumn(
+                          label: const Text('Científic'),
+                          onSort: (idx, asc) =>
+                              _sort<String>((d) => d.scientificName, idx, asc),
+                        ),
+                        DataColumn(
+                          label: const Text('Kc'),
+                          onSort: (idx, asc) =>
+                              _sort<num>((d) => d.kc, idx, asc),
+                        ),
+                        DataColumn(
+                          label: Tooltip(
+                            message: 'Necessitat de Sol',
+                            child: Icon(
+                              Icons.wb_sunny,
+                              size: 20,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Tooltip(
+                            message: 'Sensibilitat a Gelades',
+                            child: Icon(
+                              Icons.ac_unit,
+                              size: 20,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Tooltip(
+                            message: 'Mesos de Poda',
+                            child: Icon(
+                              Icons.cut,
+                              size: 20,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Tooltip(
+                            message: 'Mesos de Collita',
+                            child: Icon(
+                              Icons.shopping_basket,
+                              size: 20,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Tooltip(
+                            message: 'Fruit Comestible/Aprofitable',
+                            child: Icon(
+                              Icons.apple,
+                              size: 20,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Tooltip(
+                            message: 'Alçada Adulta (m)',
+                            child: Icon(
+                              Icons.height,
+                              size: 20,
+                              color: Colors.black54,
+                            ),
+                          ),
+                          onSort: (idx, asc) =>
+                              _sort<num>((d) => d.adultHeight, idx, asc),
+                        ), // Height
+                        DataColumn(
+                          label: Tooltip(
+                            message: 'Diàmetre Adult (m)',
+                            child: Icon(
+                              Icons.circle_outlined,
+                              size: 20,
+                              color: Colors.black54,
+                            ),
+                          ),
+                          onSort: (idx, asc) =>
+                              _sort<num>((d) => d.adultDiameter, idx, asc),
+                        ), // Diameter
+                        DataColumn(
+                          label: Tooltip(
+                            message: 'Ritme de Creixement',
+                            child: Icon(
+                              Icons.speed,
+                              size: 20,
+                              color: Colors.black54,
+                            ),
+                          ),
+                          onSort: (idx, asc) =>
+                              _sort<String>((d) => d.growthRate, idx, asc),
+                        ), // Growth
+                        DataColumn(
+                          label: Tooltip(
+                            message: 'Mesos Plantació',
+                            child: Icon(
+                              Icons.calendar_month,
+                              size: 20,
+                              color: Colors.black54,
+                            ),
+                          ),
+                          onSort: (idx, asc) => _sort<num>(
+                            (d) => d.plantingMonths.isEmpty
+                                ? 99
+                                : d.plantingMonths.first,
+                            idx,
+                            asc,
+                          ),
+                        ), // Planting
+                        DataColumn(
+                          label: Tooltip(
+                            message: 'Resistència Sequera',
+                            child: Icon(
+                              Icons.water_drop,
+                              size: 20,
+                              color: Colors.black54,
+                            ),
+                          ),
+                          onSort: (idx, asc) =>
+                              _sort<num>((d) => d.droughtResistance, idx, asc),
+                        ), // Drought
                       ],
                       rows: filtered.map((s) {
                         Color speciesColor = Colors.grey;
@@ -806,6 +1248,33 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                                 s.fruitType?.isNotEmpty == true
                                     ? s.fruitType!
                                     : (s.fruit ? 'Sí' : '-'),
+                              ),
+                            ),
+                            DataCell(Text('${s.adultHeight}m')),
+                            DataCell(Text('${s.adultDiameter}m')),
+                            DataCell(Text(s.growthRate)),
+                            DataCell(
+                              SizedBox(
+                                width: 100,
+                                child: Text(
+                                  _formatMonths(s.plantingMonths),
+                                  style: const TextStyle(fontSize: 12),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Row(
+                                children: List.generate(
+                                  5,
+                                  (index) => Icon(
+                                    index < s.droughtResistance
+                                        ? Icons.water_drop
+                                        : Icons.water_drop_outlined,
+                                    size: 12,
+                                    color: Colors.blueAccent,
+                                  ),
+                                ),
                               ),
                             ),
                           ],

@@ -225,7 +225,10 @@ class _HomePageState extends State<HomePage> {
                           const Divider(),
                           // Download App
                           TextButton.icon(
-                            onPressed: () => launchUrl(Uri.parse('/soca.apk')),
+                            onPressed: () => launchUrl(
+                              Uri.parse('https://soca-aacac.web.app/soca.apk'),
+                              mode: LaunchMode.externalApplication,
+                            ),
                             icon: const Icon(
                               Icons.android,
                               color: Colors.green,

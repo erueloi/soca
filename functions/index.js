@@ -29,12 +29,6 @@ exports.processWhiteboardImage = functions.https.onCall(async (data, context) =>
 
     try {
         // 1. Get the image from Storage
-        // We can actually pass the gs:// URI to Vision API directly!
-        // const bucketName = admin.storage().bucket().name; // Default bucket
-        // const gcsUri = `gs://${bucketName}/${imagePath}`;
-
-        // However, getting the bucket name can be tricky if not set explicitly.
-        // Let's assume standard bucket.
         const bucket = admin.storage().bucket();
         const gcsUri = `gs://${bucket.name}/${imagePath}`;
 
@@ -51,9 +45,6 @@ exports.processWhiteboardImage = functions.https.onCall(async (data, context) =>
         // 3. Parse detections into tasks
         const tasks = parseDetections(detections);
 
-        // 4. Cleanup? Maybe we delete the temp image later or let client do it.
-        // Let's keep it simple.
-
         return { tasks: tasks };
     } catch (error) {
         console.error("Error analyzing image:", error);
@@ -68,10 +59,6 @@ exports.processWhiteboardImage = functions.https.onCall(async (data, context) =>
 function parseDetections(detections) {
     // detections[0] is the full text
     // detections[1..n] are individual words/blocks
-    // We need to reconstruct lines and assign to headers.
-
-    // This is a simplified heuristic. 
-    // A robust implementation requires reconstructing paragraphs/lines from bounding boxes.
 
     // Known buckets
     const KNOWN_BUCKETS = [
@@ -82,77 +69,6 @@ function parseDetections(detections) {
         'Documentació',
         'Reforestació'
     ];
-
-    const headers = [];
-    const content = [];
-
-    // Helper to get center Y
-    const getCY = (poly) => (poly.vertices[0].y + poly.vertices[2].y) / 2;
-    const getCX = (poly) => (poly.vertices[0].x + poly.vertices[1].x) / 2;
-
-    // 1. Identify Headers in the raw blocks (skipping 0 which is full text)
-    // Vision API splits by words usually in basic textDetection.
-    // Ideally we use fullTextAnnotation.pages[0].blocks for paragraph detection which is better.
-
-    // Let's try to infer lines from individual words for better granularity 
-    // or just use the simplest approach: iterate words and map to nearest header above.
-
-    // Actually, detections[0].description contains the full text with newlines. 
-    // But we lose spatial info (bounding boxes) for the *lines* in [0].
-    // [1..n] has boxes for words.
-
-    // Let's identify "Header Words" first.
-    // We group words that are close horizontally to form phrases.
-    // But implementing a full layout engine here is hard.
-
-    // Alternative: Use the full text and simple string parsing if the user 
-    // writes headers clearly on separate lines. 
-    // BUT the user wants "Mapeig intel·ligent...".
-
-    // Let's assume the user writes the Header, and tasks below it.
-
-    // Strategy:
-    // 1. Find bounding boxes of words that match Bucket Keywords.
-    // 2. Treat those as anchors.
-    // 3. All other words are assigned to the closest anchor "above" them.
-
-    const bucketAnchors = [];
-    const otherWords = [];
-
-    for (let i = 1; i < detections.length; i++) {
-        const d = detections[i];
-        const text = d.description.toLowerCase();
-
-        // Check if this word is part of a bucket name
-        let matchedBucket = null;
-        for (const b of KNOWN_BUCKETS) {
-            const parts = b.toLowerCase().split(/[\s/]+/);
-            if (parts.includes(text) && text.length > 3) {
-                matchedBucket = b;
-                break;
-            }
-        }
-
-        if (matchedBucket) {
-            bucketAnchors.push({ bucket: matchedBucket, box: d.boundingPoly, text: d.description });
-        } else {
-            otherWords.push(d);
-        }
-    }
-
-    // This is too fragmenty (word by word). 
-    // Better to use the full text and standard grouping?
-    // Let's stick to the heuristic:
-    // Sort all words by Y.
-    // Reconstruct lines.
-
-    // ... Or just return raw lines and let Client do the heavy lifting?
-    // User asked: "Firebase Function... retornar el text extret organitzat per línies"
-    // AND "Lògica de Negoci: Manté el mapeig...".
-    // So the FUNCTION should return the Tasks (mapped).
-
-    // Let's try a simpler approach for the heuristic.
-    // Group words into Lines based on Y coordinate overlap.
 
     const lines = groupWordsIntoLines(detections.slice(1));
 
@@ -188,7 +104,6 @@ function findMatchingBucket(text, buckets) {
     const lower = text.toLowerCase();
     for (const b of buckets) {
         // Fuzzy match: if the line contains significant parts of the bucket name
-        // e.g. "Valla" in "Valla exterior"
         const keywords = b.toLowerCase().split(/[\s/]+/);
         let matchCount = 0;
         for (const k of keywords) {
@@ -221,12 +136,9 @@ function groupWordsIntoLines(words) {
 
         // Try to add to existing line if Y overlaps significantly
         for (const line of lines) {
-            // Average Y of line
             const lineY = line.y;
-            // If wordY is within lineY +/- height/2
             if (Math.abs(wordY - lineY) < (wordH / 2 + 10)) {
                 line.words.push(word);
-                // Update average Y? or keep simple
                 added = true;
                 break;
             }
@@ -251,16 +163,6 @@ function groupWordsIntoLines(words) {
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 exports.identifyTree = functions.https.onCall(async (data, context) => {
-    // if (!context.auth) {
-    //     throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
-    // }
-
-    // image can be a base64 string or a GS URI. 
-    // Ideally pass base64 for quick analysis or a gs:// path.
-    // Let's support base64 for now as per plan to avoid upload latency for "preview".
-    // data.image: base64 string (without data:image/jpeg;base64, prefix preferably, or strip it)
-    // data.mimeType: 'image/jpeg'
-
     const imageBase64 = data.image;
     const mimeType = data.mimeType || "image/jpeg";
 
@@ -269,7 +171,6 @@ exports.identifyTree = functions.https.onCall(async (data, context) => {
     }
 
     // Initialize Gemini
-    // Allow API key from env var or runtime config.
     const apiKey = process.env.GEMINI_API_KEY || functions.config().gemini.key;
     if (!apiKey) {
         throw new functions.https.HttpsError("failed-precondition", "Gemini API Key not configured.");
@@ -318,9 +219,6 @@ exports.identifyTree = functions.https.onCall(async (data, context) => {
 });
 
 exports.analyzeTree = functions.https.onCall(async (data, context) => {
-    // Input: { imagePath: string, species: string, format: string, location: string }
-
-    // 1. Get Image
     let imageBase64 = data.image; // Option A: Direct Base64
     const imagePath = data.imagePath; // Option B: Storage Path
 
@@ -329,23 +227,14 @@ exports.analyzeTree = functions.https.onCall(async (data, context) => {
     }
 
     if (!imageBase64 && imagePath) {
-        // Download from Storage
         try {
             const bucket = admin.storage().bucket();
-            // If imagePath is a full URL, we might need to parse it. 
-            // Assuming imagePath is the relative path in the bucket (e.g. 'trees/xyz.jpg')
-            // If the client sends the full download URL, we have a problem. Client should send the path.
-            // Let's assume client sends relative path.
-
-            // Handle if client sends full gs:// or http url (basic stripping)
             let path = imagePath;
             if (path.startsWith('gs://')) {
                 const parts = path.split('/');
                 path = parts.slice(3).join('/'); // Remove gs://bucket/
             }
-            // Simple heuristic to remove query params if url
             if (path.includes('?')) path = path.split('?')[0];
-            // If it's a full HTTPS url from firebase storage
             if (path.includes('/o/')) {
                 path = decodeURIComponent(path.split('/o/')[1]);
             }
@@ -358,23 +247,20 @@ exports.analyzeTree = functions.https.onCall(async (data, context) => {
         }
     }
 
-    // 2. Setup Gemini
     const apiKey = process.env.GEMINI_API_KEY || functions.config().gemini.key;
     if (!apiKey) {
         throw new functions.https.HttpsError("failed-precondition", "Gemini API Key not configured. Run: firebase functions:config:set gemini.key=\"YOUR_KEY\"");
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    // Updated to available model from user list
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-    // 3. Prompt
     const species = data.species || "Unknown";
     const format = data.format || "Unknown";
     const location = data.location || "Unknown location";
-    const date = data.date || new Date().toISOString().split('T')[0]; // Current date context
-    const leafType = data.leafType || "Unknown"; // Caduca/Perenne
-    const age = data.age || "Unknown"; // e.g. "2 years"
+    const date = data.date || new Date().toISOString().split('T')[0];
+    const leafType = data.leafType || "Unknown";
+    const age = data.age || "Unknown";
 
     const prompt = `
     Act as an expert arborist. Analyze the health of this tree based on the image and context.
@@ -423,21 +309,24 @@ exports.analyzeTree = functions.https.onCall(async (data, context) => {
 });
 
 exports.getBotanicalDataFromText = functions.https.onCall(async (data, context) => {
-    // Input: { speciesName: string }
     const speciesName = data.speciesName;
 
     if (!speciesName) {
         throw new functions.https.HttpsError("invalid-argument", "The function must be called with a valid speciesName.");
     }
 
-    // Initialize Gemini
     const apiKey = process.env.GEMINI_API_KEY || functions.config().gemini.key;
     if (!apiKey) {
         throw new functions.https.HttpsError("failed-precondition", "Gemini API Key not configured.");
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({
+        model: "gemini-2.0-flash",
+        generationConfig: {
+            temperature: 0.1,
+        }
+    });
 
     const prompt = `
     Ets un expert botànic agrícola de Catalunya. Per a l'espècie "${speciesName}", retorna EXCLUSIVAMENT un objecte JSON amb aquests camps:
@@ -451,6 +340,11 @@ exports.getBotanicalDataFromText = functions.https.onCall(async (data, context) 
     - sol: Un d'aquests emojis segons necessitat: ☀️, 🌤️, ☁️.
     - fruit: (boolean) Si fa fruit comestible o aprofitable o no.
     - nom_fruit: (text) Nom del fruit (ex: "Poma", "Oliva", "Gla") o null si no en té.
+    - alcada_adulta: (float) Alçada mitjana adulta en metres.
+    - diametre_adult: (float) Diàmetre de capçada adult en metres.
+    - ritme_creixement: (text) "Lent", "Mig" o "Ràpid".
+    - resistencia_sequera: (int) De 1 (Poca) a 5 (Molta).
+    - mesos_plantacio: (array d'ints) Mesos ideals per plantar (1-12).
 
     Ajusta els valors per al clima de les Garrigues/Lleida (Hivern fred, Estiu calorós).
     Retorna només el JSON, sense markdown.
@@ -467,3 +361,130 @@ exports.getBotanicalDataFromText = functions.https.onCall(async (data, context) 
         throw new functions.https.HttpsError("internal", "Failed to fetch botanical data.", error.message);
     }
 });
+
+/**
+ * Scheduled function (Cron) to send daily task summary notifications.
+ * Runs every 15 minutes to check if it's time to send based on FarmConfig.
+ */
+exports.dailyTaskSummary = functions.pubsub
+    .schedule('*/15 * * * *')
+    .timeZone('Europe/Madrid')
+    .onRun(async (context) => {
+        try {
+            console.log('Running daily task summary scheduler...');
+
+            // 1. Get Farm Configuration
+            const configDoc = await admin.firestore().collection('settings').doc('finca_config').get();
+            if (!configDoc.exists) {
+                console.log('No farm config found.');
+                return null;
+            }
+            const config = configDoc.data();
+
+            if (config.dailyNotificationsEnabled === false) {
+                console.log('Daily notifications are disabled in FarmConfig.');
+                return null;
+            }
+
+            // 2. Check Time
+            const targetTimeStr = config.dailyNotificationTime || '20:30';
+            const [targetHour, targetMinute] = targetTimeStr.split(':').map(Number);
+
+            // Get current time in Madrid
+            const now = new Date();
+            const madridDateStr = now.toLocaleString("en-US", { timeZone: "Europe/Madrid" });
+            const madridNow = new Date(madridDateStr);
+
+            // Construct Target Date for "Today"
+            const targetDate = new Date(madridNow);
+            targetDate.setHours(targetHour, targetMinute, 0, 0);
+
+            // Check if we HAVE PASSED the target time (e.g. Now is 21:00, Target was 20:30)
+            if (madridNow < targetDate) {
+                console.log(`Not yet time (` + madridNow.toISOString() + `). Target: ${targetTimeStr}`);
+                return null;
+            }
+
+            // 3. Check Idempotency (Have we sent it today?)
+            const todayStr = madridNow.toISOString().split('T')[0];
+            if (config.lastNotificationDate === todayStr) {
+                console.log('Notification already sent today.');
+                return null;
+            }
+
+            console.log('Time reached. Preparing to send notification...');
+
+            // --- CORE LOGIC (Calculate and Send) ---
+
+            // Calculate "Tomorrow"
+            const tomorrow = new Date(madridNow);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            tomorrow.setHours(0, 0, 0, 0);
+
+            const endTomorrow = new Date(tomorrow);
+            endTomorrow.setHours(23, 59, 59, 999);
+
+            const startMillis = tomorrow.getTime();
+            const endMillis = endTomorrow.getTime();
+
+            const tasksSnapshot = await admin.firestore().collection('tasks')
+                .where('dueDate', '>=', startMillis)
+                .where('dueDate', '<=', endMillis)
+                .where('isDone', '==', false)
+                .get();
+
+            const taskCount = tasksSnapshot.size;
+            console.log(`Found ${taskCount} tasks for tomorrow.`);
+
+            if (taskCount > 0) {
+                // Get Recipients
+                const usersSnapshot = await admin.firestore().collection('users').get();
+                const tokens = [];
+
+                usersSnapshot.forEach(doc => {
+                    const data = doc.data();
+                    if (data.fcmToken && data.dailyNotificationsEnabled !== false) {
+                        tokens.push(data.fcmToken);
+                    }
+                });
+
+                if (tokens.length > 0) {
+                    const payload = {
+                        notification: {
+                            title: 'Soca: Previsió per a demà',
+                            body: `Tens ${taskCount} tasques pendents per a demà. Fes clic per veure el resum.`,
+                        },
+                        data: {
+                            click_action: 'FLUTTER_NOTIFICATION_CLICK',
+                            route: '/tasks',
+                            date: tomorrow.toISOString()
+                        }
+                    };
+
+                    const response = await admin.messaging().sendEachForMulticast({
+                        tokens: tokens,
+                        notification: payload.notification,
+                        data: payload.data
+                    });
+                    console.log(`Notifications sent: ${response.successCount} success.`);
+                } else {
+                    console.log('No tokens found.');
+                }
+            } else {
+                console.log('No tasks found, skipping message.');
+            }
+
+            // 4. Update Idempotency Flag
+            await admin.firestore().collection('settings').doc('finca_config').update({
+                lastNotificationDate: todayStr,
+                lastNotificationTimestamp: admin.firestore.FieldValue.serverTimestamp()
+            });
+            console.log(`Marked notification as sent for ${todayStr}`);
+
+            return null;
+
+        } catch (error) {
+            console.error('Error in dailyTaskSummary:', error);
+            return null;
+        }
+    });

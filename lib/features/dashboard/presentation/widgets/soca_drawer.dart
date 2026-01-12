@@ -155,8 +155,13 @@ class SocaDrawer extends StatelessWidget {
                   title: const Text('Descarregar App'),
                   onTap: () async {
                     Navigator.pop(context);
-                    final Uri url = Uri.parse('/soca.apk');
-                    if (!await launchUrl(url)) {
+                    final Uri url = Uri.parse(
+                      'https://soca-aacac.web.app/soca.apk',
+                    );
+                    if (!await launchUrl(
+                      url,
+                      mode: LaunchMode.externalApplication,
+                    )) {
                       // Ignore error
                     }
                   },

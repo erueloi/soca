@@ -8,6 +8,8 @@ class FarmConfig {
   final List<FarmZone> zones;
   final String? meteocatStationCode;
   final double mapMarkerSize;
+  final bool dailyNotificationsEnabled; // New
+  final String dailyNotificationTime; // New (e.g. "20:30")
 
   const FarmConfig({
     required this.name,
@@ -19,6 +21,8 @@ class FarmConfig {
     required this.zones,
     this.meteocatStationCode,
     required this.mapMarkerSize,
+    this.dailyNotificationsEnabled = true,
+    this.dailyNotificationTime = '20:30',
   });
 
   factory FarmConfig.empty() {
@@ -32,6 +36,8 @@ class FarmConfig {
       zones: [],
       meteocatStationCode: null,
       mapMarkerSize: 20.0,
+      dailyNotificationsEnabled: true,
+      dailyNotificationTime: '20:30',
     );
   }
 
@@ -46,6 +52,8 @@ class FarmConfig {
       'zones': zones.map((z) => z.toMap()).toList(),
       'meteocatStationCode': meteocatStationCode,
       'mapMarkerSize': mapMarkerSize,
+      'dailyNotificationsEnabled': dailyNotificationsEnabled,
+      'dailyNotificationTime': dailyNotificationTime,
     };
   }
 
@@ -64,6 +72,8 @@ class FarmConfig {
           [],
       meteocatStationCode: map['meteocatStationCode'],
       mapMarkerSize: (map['mapMarkerSize'] as num?)?.toDouble() ?? 20.0,
+      dailyNotificationsEnabled: map['dailyNotificationsEnabled'] ?? true,
+      dailyNotificationTime: map['dailyNotificationTime'] ?? '20:30',
     );
   }
 
@@ -77,6 +87,8 @@ class FarmConfig {
     List<FarmZone>? zones,
     String? meteocatStationCode,
     double? mapMarkerSize,
+    bool? dailyNotificationsEnabled,
+    String? dailyNotificationTime,
   }) {
     return FarmConfig(
       name: name ?? this.name,
@@ -88,6 +100,10 @@ class FarmConfig {
       zones: zones ?? this.zones,
       meteocatStationCode: meteocatStationCode ?? this.meteocatStationCode,
       mapMarkerSize: mapMarkerSize ?? this.mapMarkerSize,
+      dailyNotificationsEnabled:
+          dailyNotificationsEnabled ?? this.dailyNotificationsEnabled,
+      dailyNotificationTime:
+          dailyNotificationTime ?? this.dailyNotificationTime,
     );
   }
 }

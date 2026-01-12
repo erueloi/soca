@@ -49,10 +49,13 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
   late TextEditingController _plantingFormatController;
   late TextEditingController _referenceController;
 
+  late TextEditingController _initialAgeController;
+
   // State
   late DateTime _plantingDate;
   late LatLng _location;
   late String _status;
+  bool _isVeteran = false; // Added state
   String? _vigor;
   String? _selectedSpeciesId; // Added for Species Library Link
 
@@ -82,10 +85,14 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     _referenceController = TextEditingController(
       text: widget.tree.reference ?? '',
     );
+    _initialAgeController = TextEditingController(
+      text: widget.tree.initialAge.toString(),
+    );
 
     _plantingDate = widget.tree.plantingDate;
     _location = LatLng(widget.tree.latitude, widget.tree.longitude);
     _status = widget.tree.status;
+    _isVeteran = widget.tree.isVeteran; // Init
     _vigor = widget.tree.vigor;
     _selectedSpeciesId = widget.tree.speciesId; // Init from tree
   }
@@ -109,6 +116,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     _ecologicalFuncController.dispose();
     _plantingFormatController.dispose();
     _referenceController.dispose();
+    _initialAgeController.dispose();
     super.dispose();
   }
 
@@ -142,6 +150,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
       notes: _notesController.text,
       provider: _providerController.text,
       price: double.tryParse(_priceController.text),
+      initialAge: double.tryParse(_initialAgeController.text) ?? 0.0,
       ecologicalFunction: _ecologicalFuncController.text,
       plantingFormat: _plantingFormatController.text,
       plantingDate: _plantingDate,
@@ -149,6 +158,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
       longitude: _location.longitude,
       status: _status,
       vigor: _vigor,
+      isVeteran: _isVeteran, // Save state
       speciesId: _selectedSpeciesId, // Included in update
       reference: newRef.isEmpty ? null : newRef,
     );
@@ -313,6 +323,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
 
   Widget _buildSummaryTab() {
     return SingleChildScrollView(
+      primary: false,
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
@@ -346,7 +357,9 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
           ),
           const SizedBox(height: 24),
 
-          // Analyze Button
+          _buildAgeCard(),
+          const SizedBox(height: 24),
+
           if (!_isAnalyzing)
             SizedBox(
               width: double.infinity,
@@ -728,6 +741,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
 
   Widget _buildTechnicalTab() {
     return SingleChildScrollView(
+      primary: false,
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
@@ -844,6 +858,35 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
             mainAxisSpacing: 8,
             crossAxisSpacing: 8,
             children: [
+              if (_isEditing)
+                if (_isEditing)
+                  Card(
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text(
+                            'Veterà / Pre-existent',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Switch(
+                            value: _isVeteran,
+                            onChanged: (val) {
+                              setState(() {
+                                _isVeteran = val;
+                                if (val) {
+                                  _plantingFormatController.text = 'Existent';
+                                }
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
               _buildEditableGridItem(
                 'Data Plantació',
                 DateFormat('dd/MM/yyyy').format(_plantingDate),
@@ -883,13 +926,24 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                 controller: _plantingFormatController,
                 isDropdown: true,
                 dropdownItems: [
+                  'Existent',
                   'Alvèol forestal',
+                  'Contenidor 3L',
+                  'Contenidor 10L',
+                  'Contenidor 20L',
                   'Arrel nua',
-                  'Contenidor',
                   'Estaca',
+                  'Llavor',
                 ],
                 onChanged: (val) =>
                     setState(() => _plantingFormatController.text = val!),
+              ),
+              _buildEditableGridItem(
+                'Edat Inicial',
+                '${_initialAgeController.text} anys',
+                Icons.history,
+                controller: _initialAgeController,
+                isNumber: true,
               ),
               _buildEditableGridItem(
                 'Funció',
@@ -1623,6 +1677,70 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                         minimumSize: const Size(double.infinity, 44),
                       ),
                       onPressed: () async {
+                        final currentMain = widget.tree.photoUrl;
+                        if (currentMain != null) {
+                          try {
+                            // Check if current main exists in history
+                            final entries = await ref
+                                .read(treesRepositoryProvider)
+                                .getGrowthEntriesStream(widget.tree.id)
+                                .first;
+
+                            // Check if any existing entry has the same photo URL
+                            final exists = entries.any(
+                              (e) => e.photoUrl == currentMain,
+                            );
+
+                            if (!exists && context.mounted) {
+                              final shouldSave = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('Guardar foto actual?'),
+                                  content: const Text(
+                                    'La foto principal actual no existeix al diari visual. '
+                                    'Vols guardar-la a l\'historial abans de substituir-la?',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(ctx, false),
+                                      child: const Text('NO, PERDRE-LA'),
+                                    ),
+                                    FilledButton(
+                                      onPressed: () => Navigator.pop(ctx, true),
+                                      child: const Text('SÍ, GUARDAR-LA'),
+                                    ),
+                                  ],
+                                ),
+                              );
+
+                              if (shouldSave == true) {
+                                final archiveEntry = GrowthEntry(
+                                  id: '',
+                                  date: widget
+                                      .tree
+                                      .plantingDate, // Use planting date as origin
+                                  photoUrl: currentMain,
+                                  height: 0,
+                                  trunkDiameter: 0,
+                                  healthStatus: 'Desconegut',
+                                  observations:
+                                      'Foto principal anterior arxivada automàticament',
+                                );
+                                await ref
+                                    .read(treesRepositoryProvider)
+                                    .addGrowthEntry(
+                                      widget.tree.id,
+                                      archiveEntry,
+                                    );
+                              }
+                            }
+                          } catch (e) {
+                            debugPrint('Error checking duplicate photo: $e');
+                            // Continue anyway if check fails
+                          }
+                        }
+
                         // Update Tree Main Photo
                         final updatedTree = widget.tree.copyWith(
                           photoUrl: entry.photoUrl,
@@ -1630,6 +1748,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                         await ref
                             .read(treesRepositoryProvider)
                             .updateTree(updatedTree);
+
                         if (context.mounted) {
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -1985,33 +2104,70 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                 ),
                 const Divider(),
                 const SizedBox(height: 8),
+                const SizedBox(height: 16),
+                // Row 1: General Needs
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
                     _buildBotIcon(
                       species.leafType == 'Perenne' ? Icons.park : Icons.nature,
                       species.leafType,
+                      'Tipus de Fulla',
                     ),
                     _buildBotIcon(
                       _getSunIconData(species.sunNeeds),
                       species.sunNeeds,
+                      'Necessitat de Sol',
                     ),
                     _buildBotIcon(
                       Icons.ac_unit,
                       species.frostSensitivity.split(' ').first,
-                    ), // Shorten
-                    _buildBotIcon(
-                      species.fruit ? Icons.restaurant : Icons.no_food,
-                      species.fruit
-                          ? (species.fruitType?.isNotEmpty == true
-                                ? species.fruitType!
-                                : 'Fruit')
-                          : 'No',
+                      'Sensibilitat a Gelades',
                     ),
-                    _buildBotIcon(Icons.water, 'Kc: ${species.kc}'),
+                    _buildBotIcon(
+                      Icons.water,
+                      'Kc: ${species.kc}',
+                      'Coeficient de cultiu (Kc)',
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
+                // Row 2: Growth & Dimensions
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildBotIcon(
+                      Icons.height,
+                      '${species.adultHeight}m',
+                      'Alçada Adulta',
+                    ),
+                    _buildBotIcon(
+                      Icons.circle_outlined,
+                      'Ø ${species.adultDiameter}m',
+                      'Diàmetre Adult',
+                    ),
+                    _buildBotIcon(
+                      Icons.speed,
+                      species.growthRate,
+                      'Ritme de Creixement',
+                    ),
+                    _buildBotIcon(
+                      Icons.water_drop,
+                      List.generate(
+                        species.droughtResistance,
+                        (_) => '💧',
+                      ).join(),
+                      'Resistència Sequera',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                _buildTimeline(
+                  'Plant.',
+                  species.plantingMonths,
+                  Colors.green.shade700,
+                ),
+                const SizedBox(height: 8),
                 _buildTimeline('Poda', species.pruningMonths, Colors.orange),
                 const SizedBox(height: 8),
                 _buildTimeline('Collita', species.harvestMonths, Colors.green),
@@ -2040,18 +2196,21 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     return Icons.wb_twilight;
   }
 
-  Widget _buildBotIcon(IconData icon, String label) {
-    return Column(
-      children: [
-        Icon(icon, color: Colors.indigo.shade400, size: 28),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
+  Widget _buildBotIcon(IconData icon, String label, [String? tooltip]) {
+    return Tooltip(
+      message: tooltip ?? label,
+      child: Column(
+        children: [
+          Icon(icon, color: Colors.indigo.shade400, size: 28),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
     );
   }
 
@@ -2108,6 +2267,111 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildAgeCard() {
+    final now = DateTime.now();
+    final planted = widget.tree.plantingDate;
+    final yearsSincePlanting = now.difference(planted).inDays / 365.25;
+    final totalAge = yearsSincePlanting + widget.tree.initialAge;
+
+    // Formatting helper
+    String formatAge(double years) {
+      if (years < 1) {
+        final months = (years * 12).round();
+        return '$months mesos';
+      } else {
+        return '${years.toStringAsFixed(1)} anys';
+      }
+    }
+
+    if (widget.tree.isVeteran) {
+      return Card(
+        color: Colors.amber.shade50,
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              const Icon(Icons.history_edu, size: 40, color: Colors.amber),
+              const SizedBox(width: 16),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'ARBRE VETERÀ (Pre-existent)',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.amber,
+                    ),
+                  ),
+                  Text(
+                    'Edat Estimada: ${formatAge(widget.tree.initialAge)}',
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            Column(
+              children: [
+                const Icon(Icons.timer, color: Colors.blue),
+                const SizedBox(height: 4),
+                const Text(
+                  'Temps a finca',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                Text(
+                  formatAge(yearsSincePlanting),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                if (!widget.tree.isVeteran)
+                  Text(
+                    'Des de: ${planted.day}/${planted.month}/${planted.year}',
+                    style: const TextStyle(fontSize: 10, color: Colors.grey),
+                  ),
+              ],
+            ),
+            Container(width: 1, height: 40, color: Colors.grey.shade300),
+            Column(
+              children: [
+                const Icon(Icons.cake, color: Colors.green),
+                const SizedBox(height: 4),
+                const Text(
+                  'Edat Biològica',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                Text(
+                  formatAge(totalAge),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                if (widget.tree.initialAge > 0)
+                  Text(
+                    '(Initial: ${formatAge(widget.tree.initialAge)})',
+                    style: const TextStyle(fontSize: 10, color: Colors.grey),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

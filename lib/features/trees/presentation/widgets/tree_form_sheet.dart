@@ -41,6 +41,9 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
   String? _vigor;
   String? _selectedSpeciesId; // For Species Library Link
 
+  bool _isVeteran = false;
+  late TextEditingController _initialAgeController;
+
   double? _latitude;
   double? _longitude;
   bool _isLoadingLocation = false;
@@ -124,6 +127,9 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
     _referenceController = TextEditingController(
       text: widget.tree?.reference ?? '',
     );
+    _initialAgeController = TextEditingController(
+      text: widget.tree?.initialAge.toString() ?? '0.0',
+    );
 
     _plantingDate = widget.tree?.plantingDate ?? DateTime.now();
     _status = widget.tree?.status ?? 'Viable';
@@ -133,6 +139,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
     _latitude = widget.tree?.latitude;
     _longitude = widget.tree?.longitude;
     _selectedSpeciesId = widget.tree?.speciesId;
+    _isVeteran = widget.tree?.isVeteran ?? false;
 
     if (widget.tree == null) {
       _fetchLocation();
@@ -142,6 +149,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
   @override
   void dispose() {
     _speciesController.dispose();
+    _initialAgeController.dispose();
     _commonNameController.dispose();
     _notesController.dispose();
     _providerController.dispose();
@@ -288,6 +296,8 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
       reference: _referenceController.text.isEmpty
           ? null
           : _referenceController.text,
+      isVeteran: _isVeteran,
+      initialAge: double.tryParse(_initialAgeController.text) ?? 0.0,
     );
 
     if (widget.tree == null) {
@@ -608,15 +618,12 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                                     border: OutlineInputBorder(),
                                   ),
                                   items: config.zones.map((zone) {
-                                    // Default to grey if hex is invalid, though validation ensures it's hex.
-                                    // We assume colorHex is 'FFFF0000' or similar int.toRadixString(16).
                                     Color color;
                                     try {
                                       color = Color(int.parse(zone.colorHex));
                                     } catch (_) {
                                       color = Colors.grey;
                                     }
-
                                     return DropdownMenuItem(
                                       value: zone.name,
                                       child: Row(
@@ -632,11 +639,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                                     );
                                   }).toList(),
                                   onChanged: (v) {
-                                    // Only visual for now, as Tree doesn't have 'zone' field yet.
-                                    // I will add 'zone' field to Tree entity in next step.
-                                    if (v != null) {
-                                      // _zone = v;
-                                    }
+                                    // TODO: Implement zone assignment logic
                                   },
                                 ),
                                 const SizedBox(height: 16),
@@ -648,6 +651,71 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                         );
                       },
                     ),
+
+                    // AGE LOGIC
+                    SwitchListTile(
+                      title: const Text('Arbre Pre-existent (Veterà)'),
+                      subtitle: const Text(
+                        'Si marques això, s\'ignora la data de plantació.',
+                      ),
+                      value: _isVeteran,
+                      onChanged: (val) => setState(() => _isVeteran = val),
+                    ),
+                    const SizedBox(height: 8),
+
+                    if (!_isVeteran) ...[
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: _plantingDate,
+                            firstDate: DateTime(1900),
+                            lastDate: DateTime.now(),
+                          );
+                          if (picked != null) {
+                            setState(() => _plantingDate = picked);
+                          }
+                        },
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Data de Plantació',
+                            border: OutlineInputBorder(),
+                            suffixIcon: Icon(Icons.calendar_today),
+                          ),
+                          child: Text(
+                            '${_plantingDate.day}/${_plantingDate.month}/${_plantingDate.year}',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _initialAgeController,
+                        decoration: const InputDecoration(
+                          labelText: 'Edat Inicial a la plantació (anys)',
+                          helperText:
+                              'Quants anys tenia l\'arbre quan el vas plantar? (ex: 0.5, 2)',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                      ),
+                    ] else ...[
+                      TextFormField(
+                        controller: _initialAgeController,
+                        decoration: const InputDecoration(
+                          labelText: 'Edat Estimada (anys)',
+                          helperText:
+                              'Edat aproximada actual de l\'arbre veterà.',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    // END AGE LOGIC
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
                       key: ValueKey('status_$_status'),
@@ -706,9 +774,13 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                       ),
                       items:
                           [
+                                'Existent',
                                 'Alvèol forestal',
                                 'Contenidor 3L',
+                                'Contenidor 10L',
+                                'Contenidor 20L',
                                 'Arrel nua',
+                                'Estaca',
                                 'Llavor',
                               ]
                               .map(

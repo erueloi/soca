@@ -56,11 +56,11 @@ class _MarkerPainter extends CustomPainter {
         fontFamily: iconData!.fontFamily,
         package: iconData!.fontPackage,
         color: color, // Species Color
-        shadows: const [
+        shadows: [
           Shadow(
             offset: Offset(0, 0),
             blurRadius: 2.0,
-            color: Colors.white, // White Glow/Halo
+            color: Colors.white.withValues(alpha: 0.3), // White Glow/Halo
           ),
           Shadow(
             offset: Offset(1, 1),

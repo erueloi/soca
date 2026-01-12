@@ -11,6 +11,7 @@ import 'features/dashboard/presentation/pages/home_page.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'package:intl/date_symbol_data_local.dart';
+import 'core/services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,6 +35,14 @@ void main() async {
     persistenceEnabled: true,
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
   );
+
+  // Initialize Notifications
+  try {
+    await notificationService.initialize();
+  } catch (e) {
+    debugPrint('Error initializing notifications: $e');
+  }
+
   runApp(const ProviderScope(child: SocaApp()));
 }
 

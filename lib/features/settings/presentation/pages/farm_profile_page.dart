@@ -28,8 +28,11 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
 
   List<FarmZone> _zones = [];
   String? _stationCode; // Hoist state
+  bool _dailyNotificationsEnabled = true;
+  String _dailyNotificationTime = '20:30';
 
   bool _isSaving = false;
+  bool _initialDataLoaded = false;
 
   @override
   void initState() {
@@ -49,27 +52,24 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
   }
 
   void _updateControllers(FarmConfig config) {
-    if (_nameController.text.isEmpty && config.name.isNotEmpty) {
-      _nameController.text = config.name;
-    }
-    if (_cifController.text.isEmpty && config.cif.isNotEmpty) {
-      _cifController.text = config.cif;
-    }
-    if (_addressController.text.isEmpty && config.address.isNotEmpty) {
-      _addressController.text = config.address;
-    }
+    if (_initialDataLoaded) return;
+
+    _nameController.text = config.name;
+    _cifController.text = config.cif;
+    _addressController.text = config.address;
+
     _mapCenter ??= LatLng(config.latitude, config.longitude);
-    // Only load zones once or if list is empty/initial load logic if needed
-    // Simple approach: if controller is "pristine", load.
-    // But since this is a real-time edit form, we might not want to overwrite user edits if stream updates.
-    // Ideally we track if we initialized.
+
     if (_zones.isEmpty && config.zones.isNotEmpty) {
       _zones = List.from(config.zones);
     }
-    // Init station code if not set locally
-    if (_stationCode == null && config.meteocatStationCode != null) {
-      _stationCode = config.meteocatStationCode;
-    }
+
+    _stationCode ??= config.meteocatStationCode;
+
+    _dailyNotificationsEnabled = config.dailyNotificationsEnabled;
+    _dailyNotificationTime = config.dailyNotificationTime;
+
+    _initialDataLoaded = true;
   }
 
   void _addZone() async {
@@ -114,6 +114,8 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
         longitude: _mapCenter?.longitude,
         zoom: _mapController.camera.zoom,
         meteocatStationCode: _stationCode ?? currentConfig.meteocatStationCode,
+        dailyNotificationsEnabled: _dailyNotificationsEnabled,
+        dailyNotificationTime: _dailyNotificationTime,
       );
 
       await ref.read(settingsRepositoryProvider).saveFarmConfig(newConfig);
@@ -192,228 +194,355 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
   Widget build(BuildContext context) {
     final configAsync = ref.watch(farmConfigStreamProvider);
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Perfil de la Finca')),
-      body: configAsync.when(
-        data: (config) {
-          // Initialize controllers only once with data
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _updateControllers(config);
-          });
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Perfil de la Finca'),
+          bottom: const TabBar(
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            indicatorColor: Colors.white,
+            tabs: [
+              Tab(icon: Icon(Icons.info), text: 'Dades Generals'),
+              Tab(
+                icon: Icon(Icons.settings_input_component),
+                text: 'Integracions',
+              ),
+            ],
+          ),
+        ),
+        body: configAsync.when(
+          data: (config) {
+            // Initialize controllers only once with data
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _updateControllers(config);
+            });
 
-          return Form(
-            key: _formKey,
-            child: ListView(
-              padding: const EdgeInsets.all(16),
+            return TabBarView(
               children: [
-                const Text(
-                  'Dades Generals',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Nom de la Finca',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.business),
-                  ),
-                  validator: (v) => v!.isEmpty ? 'Introdueix un nom' : null,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _cifController,
-                  decoration: const InputDecoration(
-                    labelText: 'CIF / NIF',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.badge),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _addressController,
-                  decoration: const InputDecoration(
-                    labelText: 'Adreça',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.location_on),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Configuració del Mapa',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const Text(
-                  'Mou el mapa per definir el punt central d\'inici de l\'app.',
-                  style: TextStyle(color: Colors.grey),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  height: 300,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        FlutterMap(
-                          mapController: _mapController,
-                          options: MapOptions(
-                            initialCenter:
-                                _mapCenter ??
-                                LatLng(config.latitude, config.longitude),
-                            initialZoom: config.zoom,
-                            onPositionChanged: (pos, hasGesture) {
-                              if (hasGesture) {
-                                _mapCenter = pos.center;
-                              }
-                            },
+                // TAB 1: Dades Generals i Mapa
+                Form(
+                  key: _formKey,
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      const Text(
+                        'Dades Generals',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _nameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Nom de la Finca',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.business),
+                        ),
+                        validator: (v) =>
+                            v!.isEmpty ? 'Introdueix un nom' : null,
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _cifController,
+                        decoration: const InputDecoration(
+                          labelText: 'CIF / NIF',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.badge),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _addressController,
+                        decoration: const InputDecoration(
+                          labelText: 'Adreça',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.location_on),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Configuració del Mapa',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Text(
+                        'Mou el mapa per definir el punt central d\'inici de l\'app.',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        height: 300,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              FlutterMap(
+                                mapController: _mapController,
+                                options: MapOptions(
+                                  initialCenter:
+                                      _mapCenter ??
+                                      LatLng(config.latitude, config.longitude),
+                                  initialZoom: config.zoom,
+                                  onPositionChanged: (pos, hasGesture) {
+                                    if (hasGesture) {
+                                      _mapCenter = pos.center;
+                                    }
+                                  },
+                                ),
+                                children: [
+                                  TileLayer(
+                                    urlTemplate:
+                                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                    userAgentPackageName: 'com.soca.app',
+                                  ),
+                                ],
+                              ),
+                              const Icon(
+                                Icons.location_on,
+                                size: 40,
+                                color: Colors.red,
+                              ),
+                            ],
                           ),
-                          children: [
-                            TileLayer(
-                              urlTemplate:
-                                  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                              userAgentPackageName: 'com.soca.app',
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Zonificació',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
                             ),
-                          ],
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.add_circle,
+                              color: Colors.green,
+                            ),
+                            onPressed: _addZone,
+                          ),
+                        ],
+                      ),
+                      if (_zones.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: Text(
+                            'No hi ha zones definides.',
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        )
+                      else
+                        ..._zones.map((zone) {
+                          final color = Color(
+                            int.parse(zone.colorHex, radix: 16),
+                          );
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              leading: CircleAvatar(backgroundColor: color),
+                              title: Text(zone.name),
+                              subtitle: Text(zone.cropType),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.edit,
+                                      color: Colors.blue,
+                                    ),
+                                    onPressed: () => _editZone(zone),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.delete,
+                                      color: Colors.red,
+                                    ),
+                                    onPressed: () => _deleteZone(zone),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
+
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _isSaving ? null : () => _save(config),
+                          icon: _isSaving
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.save),
+                          label: Text(
+                            _isSaving ? 'GUARDANT...' : 'GUARDAR CONFIGURACIÓ',
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            backgroundColor: Theme.of(context).primaryColor,
+                            foregroundColor: Colors.white,
+                          ),
                         ),
-                        const Icon(
-                          Icons.location_on,
-                          size: 40,
-                          color: Colors.red,
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+
+                // TAB 2: Integracions (Notificacions + Meteocat + Manteniment)
+                ListView(
+                  padding: const EdgeInsets.all(16),
                   children: [
+                    // --- Notifications ---
                     const Text(
-                      'Zonificació',
+                      'Notificacions i Avisos',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.add_circle, color: Colors.green),
-                      onPressed: _addZone,
+                    const SizedBox(height: 8),
+                    Card(
+                      child: Column(
+                        children: [
+                          SwitchListTile(
+                            title: const Text('Resum diari de tasques'),
+                            subtitle: const Text(
+                              'Reb una notificació amb les tasques pendents per l\'endemà.',
+                            ),
+                            value: _dailyNotificationsEnabled,
+                            onChanged: (val) {
+                              setState(() => _dailyNotificationsEnabled = val);
+                            },
+                          ),
+                          if (_dailyNotificationsEnabled) ...[
+                            const Divider(height: 1),
+                            ListTile(
+                              title: const Text('Hora del resum'),
+                              trailing: Text(
+                                _dailyNotificationTime,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              onTap: () async {
+                                final parts = _dailyNotificationTime.split(':');
+                                final initialTime = TimeOfDay(
+                                  hour: int.parse(parts[0]),
+                                  minute: int.parse(parts[1]),
+                                );
+                                final picked = await showTimePicker(
+                                  context: context,
+                                  initialTime: initialTime,
+                                );
+                                if (picked != null) {
+                                  setState(() {
+                                    final hour = picked.hour.toString().padLeft(
+                                      2,
+                                      '0',
+                                    );
+                                    final minute = picked.minute
+                                        .toString()
+                                        .padLeft(2, '0');
+                                    _dailyNotificationTime = '$hour:$minute';
+                                  });
+                                }
+                              },
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // --- Meteocat Integration ---
+                    const Text(
+                      'Integració Meteocat',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _MeteocatSection(
+                      latitude: _mapCenter?.latitude ?? config.latitude,
+                      longitude: _mapCenter?.longitude ?? config.longitude,
+                      initialStationCode: config.meteocatStationCode,
+                      onStationChanged: (code) {
+                        setState(() => _stationCode = code);
+                      },
+                    ),
+
+                    const SizedBox(height: 24),
+                    const Divider(),
+                    const Text(
+                      'Manteniment de Dades',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange,
+                      ),
+                    ),
+                    const Text(
+                      'Accions massives per a la base de dades.',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: _isSaving ? null : _migrateData,
+                      icon: const Icon(Icons.build, color: Colors.orange),
+                      label: const Text('MIGRAR REFERÈNCIES ARBRES (1-Click)'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.orange,
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _isSaving ? null : () => _save(config),
+                        icon: const Icon(Icons.save),
+                        label: const Text('GUARDAR CONFIGURACIÓ'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          backgroundColor: Theme.of(context).primaryColor,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
                     ),
                   ],
                 ),
-                if (_zones.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Text(
-                      'No hi ha zones definides.',
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  )
-                else
-                  ..._zones.map((zone) {
-                    final color = Color(int.parse(zone.colorHex, radix: 16));
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: CircleAvatar(backgroundColor: color),
-                        title: Text(zone.name),
-                        subtitle: Text(zone.cropType),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.blue),
-                              onPressed: () => _editZone(zone),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => _deleteZone(zone),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
-                const SizedBox(height: 24),
-
-                // --- Meteocat Integration Section ---
-                const Text(
-                  'Integració Meteocat',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 16),
-                _MeteocatSection(
-                  latitude: _mapCenter?.latitude ?? config.latitude,
-                  longitude: _mapCenter?.longitude ?? config.longitude,
-                  initialStationCode: config.meteocatStationCode,
-                  onStationChanged: (code) {
-                    setState(() => _stationCode = code);
-                  },
-                ),
-
-                const SizedBox(height: 24),
-                const Divider(),
-                const Text(
-                  'Manteniment de Dades',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.orange,
-                  ),
-                ),
-                const Text(
-                  'Accions massives per a la base de dades.',
-                  style: TextStyle(color: Colors.grey),
-                ),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: _isSaving ? null : _migrateData,
-                  icon: const Icon(Icons.build, color: Colors.orange),
-                  label: const Text('MIGRAR REFERÈNCIES ARBRES (1-Click)'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.orange,
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _isSaving ? null : () => _save(config),
-                    icon: _isSaving
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Icon(Icons.save),
-                    label: Text(
-                      _isSaving ? 'GUARDANT...' : 'GUARDAR CONFIGURACIÓ',
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      backgroundColor: Theme.of(context).primaryColor,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ),
               ],
-            ),
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, s) => Center(child: Text('Error: $e')),
+            );
+          },
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, s) => Center(child: Text('Error: $e')),
+        ),
       ),
     );
   }
@@ -609,41 +738,122 @@ class _MeteocatSectionState extends ConsumerState<_MeteocatSection> {
 
   Widget _buildQuotaInfo(Map<String, dynamic> data) {
     try {
+      final client = data['client'];
+      final String clientName = client != null ? client['nom'] : 'Desconegut';
       final plans = data['plans'] as List;
-      if (plans.isEmpty) return const Text('Sense plans actius');
-
-      // Assume first plan is the relevant one or look for one with limits
-      final plan = plans.firstWhere(
-        (p) => p.containsKey('maxConsultes'),
-        orElse: () => plans.first,
-      );
-
-      final max = plan['maxConsultes'] ?? 0;
-      final remaining = plan['consultesRestants'] ?? 0;
-      final used = max - remaining;
-      final percent = max > 0 ? (used / max) : 0.0;
 
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Pla: ${plan['nom'] ?? "Desconegut"}'),
-          const SizedBox(height: 4),
-          LinearProgressIndicator(
-            value: percent.toDouble(),
-            backgroundColor: Colors.grey[200],
-            color: (percent > 0.9) ? Colors.red : Colors.green,
-            minHeight: 8,
-            borderRadius: BorderRadius.circular(4),
+          Row(
+            children: [
+              const Icon(Icons.person, size: 16, color: Colors.grey),
+              const SizedBox(width: 4),
+              Text(
+                'Client: $clientName',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            '$used / $max consultes (${(percent * 100).toStringAsFixed(1)}%)',
-            style: const TextStyle(fontSize: 12),
-          ),
+          const SizedBox(height: 12),
+
+          if (plans.isEmpty)
+            const Text('Sense plans actius')
+          else
+            ...plans.map((plan) {
+              final name = plan['nom'] ?? 'Pla desconegut';
+              final max = plan['maxConsultes']; // dynamic, can be null
+              final current = plan['consultesRealitzades'] ?? 0;
+              final remaining = plan['consultesRestants'] ?? 0;
+
+              if (max == null) {
+                return ListTile(
+                  title: Text(name),
+                  subtitle: const Text('Sense límits establerts.'),
+                  leading: const Icon(Icons.all_inclusive, color: Colors.blue),
+                );
+              }
+
+              final maxInt = max as int;
+              final percent = maxInt > 0 ? (current / maxInt) : 0.0;
+              final isLow = remaining < 50;
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey[200]!),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name.toUpperCase(),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: Colors.blueGrey,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(
+                      value: percent.toDouble(),
+                      backgroundColor: Colors.grey[200],
+                      color: isLow
+                          ? Colors.red
+                          : (percent > 0.9 ? Colors.orange : Colors.green),
+                      minHeight: 10,
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('$current / $maxInt utilitzades'),
+                        Text(
+                          '${(percent * 100).toStringAsFixed(1)}%',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    if (isLow)
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.warning,
+                            color: Colors.red,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Només queden $remaining consultes!',
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      Text(
+                        'Restants: $remaining',
+                        style: TextStyle(
+                          color: Colors.green[700],
+                          fontSize: 12,
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            }),
         ],
       );
     } catch (e) {
-      return const Text('Format de quota desconegut');
+      return Text('Format de quota desconegut: $e');
     }
   }
 }

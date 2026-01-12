@@ -1,5 +1,7 @@
 ﻿# Release Notes
 
+## v1.6.3
+Millorat el mapa amb Android. Descarregar la apk amb android. Edat dels arbres. Mes informació a les especies d'arbres. Gestió correcte del historial de fotos.
 ## v1.6.2
 Actualitzat la gestió de les actuación a l'apartat d'obres amb nivell de planta - mapa - fitxa. Al mapa general podem gestionar el tamany de les icones per a millor visualització.
 ## v1.6.1
@@ -47,6 +49,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

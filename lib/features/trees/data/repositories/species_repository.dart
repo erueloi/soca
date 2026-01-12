@@ -59,6 +59,11 @@ class SpeciesRepository {
       color: '4CAF50', // Green
       iconCode: Icons.nature.codePoint, // Broadleaf (Nature)
       iconName: 'nature',
+      plantingMonths: [3, 4],
+      adultHeight: 8.0,
+      adultDiameter: 6.0,
+      growthRate: 'Lent',
+      droughtResistance: 5,
     ),
     'prunus dulcis': Species(
       id: '',
@@ -493,6 +498,11 @@ class SpeciesRepository {
       color: color,
       iconCode: icon,
       iconName: iconName,
+      plantingMonths: [3, 4],
+      adultHeight: 5.0,
+      adultDiameter: 3.0,
+      growthRate: 'Mig',
+      droughtResistance: 3,
     );
   }
 
