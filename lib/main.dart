@@ -12,6 +12,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'package:intl/date_symbol_data_local.dart';
 import 'core/services/notification_service.dart';
+import 'features/settings/presentation/providers/settings_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -46,14 +47,21 @@ void main() async {
   runApp(const ProviderScope(child: SocaApp()));
 }
 
-class SocaApp extends StatelessWidget {
+class SocaApp extends ConsumerWidget {
   const SocaApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final farmConfigAsync = ref.watch(farmConfigStreamProvider);
+    final farmTitle = farmConfigAsync.when(
+      data: (config) => 'Soca - ${config.name}',
+      loading: () => 'Soca',
+      error: (err, stack) => 'Soca',
+    );
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Soca - Molí de Cal Jeroni',
+      title: farmTitle,
       theme: AppTheme.theme,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,

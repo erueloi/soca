@@ -6,16 +6,25 @@ import '../../domain/entities/task.dart';
 import '../widgets/task_edit_sheet.dart';
 
 class TasksCalendarPage extends ConsumerStatefulWidget {
-  const TasksCalendarPage({super.key});
+  final DateTime? initialDate;
+
+  const TasksCalendarPage({super.key, this.initialDate});
 
   @override
   ConsumerState<TasksCalendarPage> createState() => _TasksCalendarPageState();
 }
 
 class _TasksCalendarPageState extends ConsumerState<TasksCalendarPage> {
-  DateTime _focusedDay = DateTime.now();
-  DateTime? _selectedDay;
+  late DateTime _focusedDay;
+  late DateTime? _selectedDay;
   CalendarFormat _calendarFormat = CalendarFormat.month;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusedDay = widget.initialDate ?? DateTime.now();
+    _selectedDay = widget.initialDate ?? DateTime.now();
+  }
 
   @override
   Widget build(BuildContext context) {

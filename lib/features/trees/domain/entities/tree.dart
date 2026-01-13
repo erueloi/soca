@@ -52,6 +52,10 @@ class Tree {
   final bool isVeteran;
   final double initialAge; // Years (e.g. 0.5, 2.0)
 
+  // Growth Logic
+  final double? height; // cm
+  final double? trunkDiameter; // cm
+
   const Tree({
     required this.id,
     required this.species,
@@ -75,6 +79,8 @@ class Tree {
     this.timeline = const [],
     this.isVeteran = false,
     this.initialAge = 0.0,
+    this.height,
+    this.trunkDiameter,
   });
 
   Tree copyWith({
@@ -99,6 +105,8 @@ class Tree {
     List<TreeEvent>? timeline,
     bool? isVeteran,
     double? initialAge,
+    double? height,
+    double? trunkDiameter,
   }) {
     return Tree(
       id: id,
@@ -123,6 +131,8 @@ class Tree {
       timeline: timeline ?? this.timeline,
       isVeteran: isVeteran ?? this.isVeteran,
       initialAge: initialAge ?? this.initialAge,
+      height: height ?? this.height,
+      trunkDiameter: trunkDiameter ?? this.trunkDiameter,
     );
   }
 
@@ -148,6 +158,8 @@ class Tree {
       'reference': reference,
       'isVeteran': isVeteran,
       'initialAge': initialAge,
+      'height': height,
+      'trunkDiameter': trunkDiameter,
       'timeline': timeline.map((e) => e.toMap()).toList(),
     };
   }
@@ -177,6 +189,8 @@ class Tree {
       reference: map['reference'],
       isVeteran: map['isVeteran'] ?? false,
       initialAge: (map['initialAge'] as num?)?.toDouble() ?? 0.0,
+      height: (map['height'] as num?)?.toDouble(),
+      trunkDiameter: (map['trunkDiameter'] as num?)?.toDouble(),
       timeline: map['timeline'] != null
           ? (map['timeline'] as List<dynamic>)
                 .map((e) => TreeEvent.fromMap(e as Map<String, dynamic>))

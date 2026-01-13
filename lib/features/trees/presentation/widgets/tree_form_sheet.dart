@@ -43,6 +43,8 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
 
   bool _isVeteran = false;
   late TextEditingController _initialAgeController;
+  late TextEditingController _heightController;
+  late TextEditingController _diameterController;
 
   double? _latitude;
   double? _longitude;
@@ -130,6 +132,12 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
     _initialAgeController = TextEditingController(
       text: widget.tree?.initialAge.toString() ?? '0.0',
     );
+    _heightController = TextEditingController(
+      text: widget.tree?.height?.toString() ?? '',
+    );
+    _diameterController = TextEditingController(
+      text: widget.tree?.trunkDiameter?.toString() ?? '',
+    );
 
     _plantingDate = widget.tree?.plantingDate ?? DateTime.now();
     _status = widget.tree?.status ?? 'Viable';
@@ -150,6 +158,8 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
   void dispose() {
     _speciesController.dispose();
     _initialAgeController.dispose();
+    _heightController.dispose();
+    _diameterController.dispose();
     _commonNameController.dispose();
     _notesController.dispose();
     _providerController.dispose();
@@ -298,6 +308,8 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
           : _referenceController.text,
       isVeteran: _isVeteran,
       initialAge: double.tryParse(_initialAgeController.text) ?? 0.0,
+      height: double.tryParse(_heightController.text),
+      trunkDiameter: double.tryParse(_diameterController.text),
     );
 
     if (widget.tree == null) {
@@ -716,6 +728,40 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                     ],
                     const SizedBox(height: 16),
                     // END AGE LOGIC
+                    const SizedBox(height: 16),
+
+                    // END AGE LOGIC
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _heightController,
+                            decoration: const InputDecoration(
+                              labelText: 'Alçada (cm)',
+                              border: OutlineInputBorder(),
+                              suffixText: 'cm',
+                            ),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _diameterController,
+                            decoration: const InputDecoration(
+                              labelText: 'Diàmetre Tronc (cm)',
+                              border: OutlineInputBorder(),
+                              suffixText: 'cm',
+                            ),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
                       key: ValueKey('status_$_status'),

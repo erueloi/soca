@@ -50,6 +50,8 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
   late TextEditingController _referenceController;
 
   late TextEditingController _initialAgeController;
+  late TextEditingController _heightController;
+  late TextEditingController _diameterController;
 
   // State
   late DateTime _plantingDate;
@@ -59,11 +61,14 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
   String? _vigor;
   String? _selectedSpeciesId; // Added for Species Library Link
 
+  late Tree _displayTree;
+
   int _aiHistoryLimit = 3;
 
   @override
   void initState() {
     super.initState();
+    _displayTree = widget.tree;
     _tabController = TabController(length: 3, vsync: this);
     _initializeControllers();
   }
@@ -88,6 +93,12 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     _initialAgeController = TextEditingController(
       text: widget.tree.initialAge.toString(),
     );
+    _heightController = TextEditingController(
+      text: widget.tree.height?.toString() ?? '',
+    );
+    _diameterController = TextEditingController(
+      text: widget.tree.trunkDiameter?.toString() ?? '',
+    );
 
     _plantingDate = widget.tree.plantingDate;
     _location = LatLng(widget.tree.latitude, widget.tree.longitude);
@@ -101,6 +112,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
   void didUpdateWidget(TreeDetail oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.tree.id != oldWidget.tree.id) {
+      _displayTree = widget.tree;
       _initializeControllers();
     }
   }
@@ -117,6 +129,8 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     _plantingFormatController.dispose();
     _referenceController.dispose();
     _initialAgeController.dispose();
+    _heightController.dispose();
+    _diameterController.dispose();
     super.dispose();
   }
 
@@ -151,6 +165,8 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
       provider: _providerController.text,
       price: double.tryParse(_priceController.text),
       initialAge: double.tryParse(_initialAgeController.text) ?? 0.0,
+      height: double.tryParse(_heightController.text),
+      trunkDiameter: double.tryParse(_diameterController.text),
       ecologicalFunction: _ecologicalFuncController.text,
       plantingFormat: _plantingFormatController.text,
       plantingDate: _plantingDate,
@@ -163,19 +179,20 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
       reference: newRef.isEmpty ? null : newRef,
     );
 
+    final messenger = ScaffoldMessenger.of(context);
     await ref.read(treesRepositoryProvider).updateTree(updatedTree);
 
     if (mounted) {
       try {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(content: Text('Canvis guardats correctament')),
         );
       } catch (e) {
-        // Ignore context errors if widget is deactivated
         debugPrint('Error showing snackbar: $e');
       }
       setState(() {
         _isEditing = false;
+        _displayTree = updatedTree;
       });
     }
   }
@@ -239,7 +256,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                 title: Text(
                   _isEditing
                       ? 'Editant...'
-                      : '${widget.tree.commonName}\n(${widget.tree.species})',
+                      : '${_displayTree.commonName}\n(${_displayTree.species})',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
@@ -251,16 +268,16 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                 ),
                 background: GestureDetector(
                   onTap: () {
-                    if (widget.tree.photoUrl != null) {
-                      _showFullImage(context, widget.tree.photoUrl!);
+                    if (_displayTree.photoUrl != null) {
+                      _showFullImage(context, _displayTree.photoUrl!);
                     }
                   },
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      if (widget.tree.photoUrl != null)
+                      if (_displayTree.photoUrl != null)
                         Image.network(
-                          widget.tree.photoUrl!,
+                          _displayTree.photoUrl!,
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) {
                             return Container(color: Colors.green);
@@ -358,6 +375,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
           const SizedBox(height: 24),
 
           _buildAgeCard(),
+          _buildDimensionsCard(),
           const SizedBox(height: 24),
 
           if (!_isAnalyzing)
@@ -469,6 +487,8 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
             date: DateTime.now(),
             leafType: leafType,
             age: ageStr,
+            height: widget.tree.height,
+            diameter: widget.tree.trunkDiameter,
           );
 
       if (!mounted) {
@@ -499,6 +519,22 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                 '• Vigor: ${result.vigor}',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
+              const SizedBox(height: 12),
+              if (result.estimatedAgeYears != null) ...[
+                Text(
+                  '• Edat Visual (IA): ${result.estimatedAgeYears} anys',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                if (widget.tree.initialAge > 0)
+                  const Text(
+                    '(Ja té edat definida, no s\'actualitzarà)',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.grey,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+              ],
               const SizedBox(height: 12),
               const Text(
                 'Consell de l\'IA:',
@@ -534,9 +570,29 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
 
       if (confirm == true) {
         // Update Tree
+        // Update Tree
+        // Only update initialAge if it was 0 (undefined)
+        double initialAgeToSave = widget.tree.initialAge;
+        if (initialAgeToSave == 0.0 &&
+            result.estimatedAgeYears != null &&
+            result.estimatedAgeYears! > 0) {
+          // Calculate initialAge offset: Gemini Age - Time Since Planting
+          // If tree planted today, initialAge = Gemini Age.
+          // If planted 2 years ago, initialAge = Gemini Age - 2.
+          final yearsPlanted =
+              DateTime.now().difference(widget.tree.plantingDate).inDays /
+              365.25;
+
+          double calculatedInitial = result.estimatedAgeYears! - yearsPlanted;
+          if (calculatedInitial < 0) calculatedInitial = 0;
+
+          initialAgeToSave = calculatedInitial;
+        }
+
         final updatedTree = widget.tree.copyWith(
           status: result.health,
           vigor: result.vigor,
+          initialAge: initialAgeToSave,
         );
 
         final repo = ref.read(treesRepositoryProvider);
@@ -943,6 +999,20 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                 '${_initialAgeController.text} anys',
                 Icons.history,
                 controller: _initialAgeController,
+                isNumber: true,
+              ),
+              _buildEditableGridItem(
+                'Alçada (cm)',
+                '${_heightController.text} cm',
+                Icons.height,
+                controller: _heightController,
+                isNumber: true,
+              ),
+              _buildEditableGridItem(
+                'Diàmetre (cm)',
+                '${_diameterController.text} cm',
+                Icons.circle_outlined,
+                controller: _diameterController,
                 isNumber: true,
               ),
               _buildEditableGridItem(
@@ -2272,9 +2342,9 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
 
   Widget _buildAgeCard() {
     final now = DateTime.now();
-    final planted = widget.tree.plantingDate;
+    final planted = _displayTree.plantingDate;
     final yearsSincePlanting = now.difference(planted).inDays / 365.25;
-    final totalAge = yearsSincePlanting + widget.tree.initialAge;
+    final totalAge = yearsSincePlanting + _displayTree.initialAge;
 
     // Formatting helper
     String formatAge(double years) {
@@ -2286,7 +2356,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
       }
     }
 
-    if (widget.tree.isVeteran) {
+    if (_displayTree.isVeteran) {
       return Card(
         color: Colors.amber.shade50,
         child: Padding(
@@ -2306,7 +2376,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                     ),
                   ),
                   Text(
-                    'Edat Estimada: ${formatAge(widget.tree.initialAge)}',
+                    'Edat Estimada: ${formatAge(_displayTree.initialAge)}',
                     style: const TextStyle(fontSize: 16),
                   ),
                 ],
@@ -2339,7 +2409,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                     fontSize: 16,
                   ),
                 ),
-                if (!widget.tree.isVeteran)
+                if (!_displayTree.isVeteran)
                   Text(
                     'Des de: ${planted.day}/${planted.month}/${planted.year}',
                     style: const TextStyle(fontSize: 10, color: Colors.grey),
@@ -2362,13 +2432,76 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                     fontSize: 16,
                   ),
                 ),
-                if (widget.tree.initialAge > 0)
+                if (_displayTree.initialAge > 0)
                   Text(
-                    '(Initial: ${formatAge(widget.tree.initialAge)})',
+                    '(Initial: ${formatAge(_displayTree.initialAge)})',
                     style: const TextStyle(fontSize: 10, color: Colors.grey),
                   ),
               ],
             ),
+          ],
+        ), // Row
+      ), // Padding
+    ); // Card
+  }
+
+  Widget _buildDimensionsCard() {
+    if ((_displayTree.height == null || _displayTree.height == 0) &&
+        (_displayTree.trunkDiameter == null ||
+            _displayTree.trunkDiameter == 0)) {
+      return const SizedBox.shrink();
+    }
+
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.only(top: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            if (_displayTree.height != null && _displayTree.height! > 0)
+              Column(
+                children: [
+                  const Icon(Icons.height, color: Colors.blue),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Alçada',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  Text(
+                    '${_displayTree.height!.toStringAsFixed(1)} cm',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            if (_displayTree.height != null &&
+                _displayTree.height! > 0 &&
+                _displayTree.trunkDiameter != null &&
+                _displayTree.trunkDiameter! > 0)
+              Container(width: 1, height: 40, color: Colors.grey.shade300),
+            if (_displayTree.trunkDiameter != null &&
+                _displayTree.trunkDiameter! > 0)
+              Column(
+                children: [
+                  const Icon(Icons.circle_outlined, color: Colors.brown),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Diàmetre',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  Text(
+                    '${_displayTree.trunkDiameter!.toStringAsFixed(1)} cm',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
           ],
         ),
       ),

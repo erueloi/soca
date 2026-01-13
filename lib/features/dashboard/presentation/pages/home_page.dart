@@ -1,5 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../../../core/services/version_check_service.dart';
+import '../../../../features/settings/presentation/providers/settings_provider.dart';
 import '../../../../features/climate/presentation/pages/clima_page.dart';
+import '../../../../features/tasks/presentation/pages/tasks_page.dart';
+import '../../../contacts/presentation/pages/contacts_page.dart';
+import '../../../map/presentation/pages/map_page.dart';
+import '../../../trees/presentation/pages/trees_page.dart';
+import '../../../trees/presentation/pages/watering_page.dart';
+import '../../../settings/presentation/pages/farm_profile_page.dart';
+import '../../../construction/presentation/pages/construction_page.dart';
 
 import '../widgets/irrigation_widget.dart';
 import '../widgets/soca_drawer.dart';
@@ -8,25 +23,15 @@ import '../widgets/tree_summary_widget.dart';
 import '../widgets/weather_widget.dart';
 import '../widgets/dashboard_agenda_widget.dart';
 
-import '../../../../features/tasks/presentation/pages/tasks_page.dart';
-import '../../../contacts/presentation/pages/contacts_page.dart';
-import '../../../map/presentation/pages/map_page.dart';
-import '../../../trees/presentation/pages/trees_page.dart';
-import '../../../trees/presentation/pages/watering_page.dart';
-import '../../../settings/presentation/pages/farm_profile_page.dart';
-import '../../../construction/presentation/pages/construction_page.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-class HomePage extends StatefulWidget {
+class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  ConsumerState<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends ConsumerState<HomePage> {
+  // ... existing code ...
   bool? _isRailExtended;
 
   void _navigateToTasks(BuildContext context) {
@@ -45,6 +50,40 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _loadOrder();
+    _setupInteractedMessage();
+    // Check for updates on startup
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      VersionCheckService().checkForUpdates(context);
+    });
+  }
+
+  // Handle Notification Clicks
+  Future<void> _setupInteractedMessage() async {
+    // 1. App Terminated
+    RemoteMessage? initialMessage = await FirebaseMessaging.instance
+        .getInitialMessage();
+    if (initialMessage != null) {
+      _handleMessage(initialMessage);
+    }
+
+    // 2. App in Background
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleMessage);
+  }
+
+  void _handleMessage(RemoteMessage message) {
+    if (message.data['route'] == '/tasks') {
+      final dateStr = message.data['date'];
+      DateTime? initialDate;
+      if (dateStr != null) {
+        initialDate = DateTime.tryParse(dateStr);
+      }
+
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => TasksPage(initialDate: initialDate),
+        ),
+      );
+    }
   }
 
   bool _isEditing = false;
@@ -120,6 +159,13 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final farmConfigAsync = ref.watch(farmConfigStreamProvider);
+    final farmName = farmConfigAsync.when(
+      data: (config) => config.name,
+      loading: () => 'Carregant...',
+      error: (err, stack) => 'Soca',
+    );
+
     return LayoutBuilder(
       builder: (context, constraints) {
         // Breakpoint for Tablet (e.g. 800px)
@@ -152,10 +198,9 @@ class _HomePageState extends State<HomePage> {
                     child: Column(
                       children: [
                         const SizedBox(height: 16),
-                        Icon(
-                          Icons.spa,
-                          size: 40,
-                          color: Theme.of(context).colorScheme.primary,
+                        Image.asset(
+                          'assets/logo-soca.png',
+                          height: isRailExtended ? 80 : 48,
                         ),
                         if (isRailExtended) ...[
                           const SizedBox(height: 8),
@@ -168,7 +213,7 @@ class _HomePageState extends State<HomePage> {
                                 ),
                           ),
                           Text(
-                            'Molí de Cal Jeroni',
+                            farmName,
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],

@@ -11,8 +11,9 @@ import 'tasks_timeline_page.dart';
 
 class TasksPage extends ConsumerStatefulWidget {
   final String? initialBucketFilter;
+  final DateTime? initialDate;
 
-  const TasksPage({super.key, this.initialBucketFilter});
+  const TasksPage({super.key, this.initialBucketFilter, this.initialDate});
 
   @override
   ConsumerState<TasksPage> createState() => _TasksPageState();
@@ -21,6 +22,22 @@ class TasksPage extends ConsumerStatefulWidget {
 class _TasksPageState extends ConsumerState<TasksPage> {
   final ScrollController _scrollController = ScrollController();
   bool _showCompleted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialDate != null) {
+      // If a date is provided, navigate directly to calendar
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => TasksCalendarPage(initialDate: widget.initialDate),
+          ),
+        );
+      });
+    }
+  }
 
   @override
   void dispose() {

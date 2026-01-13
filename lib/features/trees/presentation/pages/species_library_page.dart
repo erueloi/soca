@@ -5,6 +5,7 @@ import '../../domain/entities/species.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import '../../../../core/services/ai_service.dart';
 import '../../../../core/utils/icon_utils.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SpeciesLibraryPage extends ConsumerStatefulWidget {
   final String? initialSearchQuery;
@@ -19,6 +20,7 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
   String _searchQuery = '';
   int? _sortColumnIndex;
   bool _sortAscending = true;
+  String? _updatingSpeciesId;
 
   Future<MapEntry<String, IconData>?> _showBotanicalPicker(
     BuildContext context,
@@ -124,6 +126,12 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
     );
     final diameterCtrl = TextEditingController(
       text: (existing?.adultDiameter ?? 0.0).toString(),
+    );
+    final lifeExpectancyCtrl = TextEditingController(
+      text: (existing?.lifeExpectancyYears ?? '').toString(),
+    );
+    final commonDiseasesCtrl = TextEditingController(
+      text: (existing?.commonDiseases ?? []).join(', '),
     );
 
     // State Variables
@@ -305,6 +313,15 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                                       if (data['mesos_plantacio'] != null) {
                                         plantingCtrl.text =
                                             (data['mesos_plantacio'] as List)
+                                                .join(', ');
+                                      }
+                                      if (data['esperanca_vida'] != null) {
+                                        lifeExpectancyCtrl.text =
+                                            data['esperanca_vida'].toString();
+                                      }
+                                      if (data['malalties_comunes'] != null) {
+                                        commonDiseasesCtrl.text =
+                                            (data['malalties_comunes'] as List)
                                                 .join(', ');
                                       }
 
@@ -682,6 +699,24 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                           labelText: 'Nom del Fruit (ex: Poma)',
                         ),
                       ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: lifeExpectancyCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Esperança de Vida (Anys)',
+                        suffixText: 'anys',
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: commonDiseasesCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Malalties Comunes (separades per comes)',
+                        hintText: 'Ex: Pulgó, Oïdi, Foc bacterià',
+                      ),
+                      maxLines: 2,
+                    ),
                   ],
                 ),
               ),
@@ -723,6 +758,14 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                       adultDiameter: double.tryParse(diameterCtrl.text) ?? 0.0,
                       growthRate: growthRate,
                       droughtResistance: droughtResistance,
+                      lifeExpectancyYears: int.tryParse(
+                        lifeExpectancyCtrl.text,
+                      ),
+                      commonDiseases: commonDiseasesCtrl.text
+                          .split(',')
+                          .map((e) => e.trim())
+                          .where((e) => e.isNotEmpty)
+                          .toList(),
                     );
 
                     if (existing == null) {
@@ -889,6 +932,131 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
     );
   }
 
+  Future<void> _onWebSearch(Species s) async {
+    final query = s.scientificName.isNotEmpty ? s.scientificName : s.commonName;
+    final url = Uri.parse(
+      'https://www.google.com/search?q=${Uri.encodeComponent(query)}',
+    );
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No s\'ha pogut obrir el navegador')),
+        );
+      }
+    }
+  }
+
+  Future<void> _onMagicUpdate(Species s) async {
+    setState(() {
+      _updatingSpeciesId = s.id;
+    });
+
+    try {
+      final query = s.scientificName.isNotEmpty
+          ? s.scientificName
+          : s.commonName;
+      final data = await ref.read(aiServiceProvider).getBotanicalData(query);
+
+      // Helper to parse months
+      List<int> parseMonths(dynamic raw) {
+        if (raw is List) return raw.cast<int>();
+        return [];
+      }
+
+      // Merge Data
+      final updated = s.copyWith(
+        scientificName: s.scientificName.isEmpty
+            ? (data['nom_cientific'] ?? s.scientificName)
+            : s.scientificName,
+        commonName: s.commonName.isEmpty
+            ? (data['nom_comu'] ?? s.commonName)
+            : s.commonName,
+        kc: data['kc'] is num ? (data['kc'] as num).toDouble() : s.kc,
+        leafType: data['fulla'] == 'Perenne'
+            ? 'Perenne'
+            : (data['fulla'] == 'Caduca' ? 'Caduca' : s.leafType),
+        frostSensitivity: data['sensibilitat_gelada'] ?? s.frostSensitivity,
+        fruit: data['fruit'] ?? s.fruit,
+        fruitType: data['nom_fruit'] ?? s.fruitType,
+        adultHeight: data['alcada_adulta'] is num
+            ? (data['alcada_adulta'] as num).toDouble()
+            : s.adultHeight,
+        adultDiameter: data['diametre_adult'] is num
+            ? (data['diametre_adult'] as num).toDouble()
+            : s.adultDiameter,
+        growthRate: ['Lent', 'Mig', 'Ràpid'].contains(data['ritme_creixement'])
+            ? data['ritme_creixement']
+            : s.growthRate,
+        droughtResistance: data['resistencia_sequera'] is int
+            ? data['resistencia_sequera']
+            : s.droughtResistance,
+        lifeExpectancyYears: data['esperanca_vida'] is int
+            ? data['esperanca_vida']
+            : s.lifeExpectancyYears,
+        commonDiseases: data['malalties_comunes'] is List
+            ? List<String>.from(data['malalties_comunes'])
+            : s.commonDiseases,
+        pruningMonths: data['mesos_poda'] != null
+            ? parseMonths(data['mesos_poda'])
+            : s.pruningMonths,
+        harvestMonths: data['mesos_collita'] != null
+            ? parseMonths(data['mesos_collita'])
+            : s.harvestMonths,
+        plantingMonths: data['mesos_plantacio'] != null
+            ? parseMonths(data['mesos_plantacio'])
+            : s.plantingMonths,
+        iconCode: data['iconCode'] ?? s.iconCode,
+        color: data['color']?.toString().replaceAll('#', '') ?? s.color,
+      );
+
+      // Determine Sun needs separately as it's a string logic
+      String newSun = s.sunNeeds;
+      if (data['sol'] != null) {
+        final solStr = data['sol'].toString();
+        if (solStr.contains('☀️')) {
+          newSun = 'Alt';
+        } else if (solStr.contains('🌤️')) {
+          newSun = 'Mitjà';
+        } else if (solStr.contains('☁️')) {
+          newSun = 'Baix';
+        }
+      }
+      // Apply sun needs (copyWith handled simplistic fields earlier)
+      // Since copyWith handles all, we might need a dedicated copyWith call if logic is complex,
+      // but s.copyWith should cover it if we pass sunNeeds.
+      // Re-doing final object to include Sun
+      final finalSpecies = updated.copyWith(sunNeeds: newSun);
+
+      await ref.read(speciesRepositoryProvider).updateSpecies(finalSpecies);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Dades actualitzades per ${s.commonName} 🪄'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error actualitzant: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _updatingSpeciesId = null;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final speciesStream = ref.watch(speciesRepositoryProvider).getSpecies();
@@ -1013,6 +1181,17 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                           b.droughtResistance,
                         );
                         break;
+                      case 16:
+                        final la = a.lifeExpectancyYears ?? 0;
+                        final lb = b.lifeExpectancyYears ?? 0;
+                        cmp = la.compareTo(lb);
+                        break;
+                      case 17:
+                        // Sort by number of diseases as a proxy
+                        cmp = a.commonDiseases.length.compareTo(
+                          b.commonDiseases.length,
+                        );
+                        break;
                     }
                     return _sortAscending ? cmp : -cmp;
                   });
@@ -1056,60 +1235,78 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                         DataColumn(
                           label: Tooltip(
                             message: 'Necessitat de Sol',
-                            child: Icon(
-                              Icons.wb_sunny,
-                              size: 20,
-                              color: Colors.black54,
+                            child: Container(
+                              alignment: Alignment.centerLeft,
+                              child: Icon(
+                                Icons.wb_sunny,
+                                size: 18,
+                                color: Colors.black54,
+                              ),
                             ),
                           ),
                         ),
                         DataColumn(
                           label: Tooltip(
                             message: 'Sensibilitat a Gelades',
-                            child: Icon(
-                              Icons.ac_unit,
-                              size: 20,
-                              color: Colors.black54,
+                            child: Container(
+                              alignment: Alignment.centerLeft,
+                              child: Icon(
+                                Icons.ac_unit,
+                                size: 18,
+                                color: Colors.black54,
+                              ),
                             ),
                           ),
                         ),
                         DataColumn(
                           label: Tooltip(
                             message: 'Mesos de Poda',
-                            child: Icon(
-                              Icons.cut,
-                              size: 20,
-                              color: Colors.black54,
+                            child: Container(
+                              alignment: Alignment.centerLeft,
+                              child: Icon(
+                                Icons.cut,
+                                size: 18,
+                                color: Colors.black54,
+                              ),
                             ),
                           ),
                         ),
                         DataColumn(
                           label: Tooltip(
                             message: 'Mesos de Collita',
-                            child: Icon(
-                              Icons.shopping_basket,
-                              size: 20,
-                              color: Colors.black54,
+                            child: Container(
+                              alignment: Alignment.centerLeft,
+                              child: Icon(
+                                Icons.shopping_basket,
+                                size: 18,
+                                color: Colors.black54,
+                              ),
                             ),
                           ),
                         ),
                         DataColumn(
                           label: Tooltip(
                             message: 'Fruit Comestible/Aprofitable',
-                            child: Icon(
-                              Icons.apple,
-                              size: 20,
-                              color: Colors.black54,
+                            child: Container(
+                              alignment: Alignment.centerLeft,
+                              child: Icon(
+                                Icons.apple,
+                                size: 18,
+                                color: Colors.black54,
+                              ),
                             ),
                           ),
                         ),
                         DataColumn(
                           label: Tooltip(
                             message: 'Alçada Adulta (m)',
-                            child: Icon(
-                              Icons.height,
-                              size: 20,
-                              color: Colors.black54,
+                            child: Container(
+                              alignment: Alignment.centerLeft,
+                              child: Icon(
+                                Icons.height,
+                                size: 18,
+                                color: Colors.black54,
+                              ),
                             ),
                           ),
                           onSort: (idx, asc) =>
@@ -1118,10 +1315,13 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                         DataColumn(
                           label: Tooltip(
                             message: 'Diàmetre Adult (m)',
-                            child: Icon(
-                              Icons.circle_outlined,
-                              size: 20,
-                              color: Colors.black54,
+                            child: Container(
+                              alignment: Alignment.centerLeft,
+                              child: Icon(
+                                Icons.circle_outlined,
+                                size: 18,
+                                color: Colors.black54,
+                              ),
                             ),
                           ),
                           onSort: (idx, asc) =>
@@ -1130,10 +1330,13 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                         DataColumn(
                           label: Tooltip(
                             message: 'Ritme de Creixement',
-                            child: Icon(
-                              Icons.speed,
-                              size: 20,
-                              color: Colors.black54,
+                            child: Container(
+                              alignment: Alignment.centerLeft,
+                              child: Icon(
+                                Icons.speed,
+                                size: 18,
+                                color: Colors.black54,
+                              ),
                             ),
                           ),
                           onSort: (idx, asc) =>
@@ -1142,10 +1345,13 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                         DataColumn(
                           label: Tooltip(
                             message: 'Mesos Plantació',
-                            child: Icon(
-                              Icons.calendar_month,
-                              size: 20,
-                              color: Colors.black54,
+                            child: Container(
+                              alignment: Alignment.centerLeft,
+                              child: Icon(
+                                Icons.calendar_month,
+                                size: 18,
+                                color: Colors.black54,
+                              ),
                             ),
                           ),
                           onSort: (idx, asc) => _sort<num>(
@@ -1159,15 +1365,63 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                         DataColumn(
                           label: Tooltip(
                             message: 'Resistència Sequera',
-                            child: Icon(
-                              Icons.water_drop,
-                              size: 20,
-                              color: Colors.black54,
+                            child: Container(
+                              alignment: Alignment.centerLeft,
+                              child: Icon(
+                                Icons.water_drop,
+                                size: 18,
+                                color: Colors.black54,
+                              ),
                             ),
                           ),
                           onSort: (idx, asc) =>
                               _sort<num>((d) => d.droughtResistance, idx, asc),
                         ), // Drought
+                        DataColumn(
+                          label: Tooltip(
+                            message: 'Esperança de Vida (Anys)',
+                            child: Container(
+                              alignment: Alignment.center,
+                              child: Icon(
+                                Icons.hourglass_bottom,
+                                size: 18,
+                                color: Colors.black54,
+                              ),
+                            ),
+                          ),
+                          numeric: true,
+                          onSort: (idx, asc) => _sort<num>(
+                            (d) => d.lifeExpectancyYears ?? 0,
+                            idx,
+                            asc,
+                          ),
+                        ),
+                        DataColumn(
+                          label: Tooltip(
+                            message: 'Malalties Comunes',
+                            child: Container(
+                              alignment: Alignment.centerLeft,
+                              child: Icon(
+                                Icons.bug_report,
+                                size: 18,
+                                color: Colors.black54,
+                              ),
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Tooltip(
+                            message: 'Accions',
+                            child: Container(
+                              alignment: Alignment.center,
+                              child: Icon(
+                                Icons.settings,
+                                size: 18,
+                                color: Colors.black54,
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                       rows: filtered.map((s) {
                         Color speciesColor = Colors.grey;
@@ -1277,8 +1531,77 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                                 ),
                               ),
                             ),
+                            DataCell(
+                              Text(
+                                s.lifeExpectancyYears != null
+                                    ? '${s.lifeExpectancyYears}'
+                                    : '-',
+                              ),
+                            ),
+                            DataCell(
+                              SizedBox(
+                                width: 150,
+                                child: Text(
+                                  s.commonDiseases.isEmpty
+                                      ? '-'
+                                      : s.commonDiseases.join(', '),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 2,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // Magic Button
+                                  if (_updatingSpeciesId == s.id)
+                                    const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  else
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.auto_fix_high,
+                                        size: 20,
+                                        color: Colors.purple,
+                                      ),
+                                      tooltip: 'Màgic (Actualitzar IA)',
+                                      onPressed: () => _onMagicUpdate(s),
+                                    ),
+                                  // Search Button
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.search,
+                                      size: 20,
+                                      color: Colors.blue,
+                                    ),
+                                    tooltip: 'Cercar a Google',
+                                    onPressed: () => _onWebSearch(s),
+                                  ),
+                                  // Edit Button
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.edit,
+                                      size: 20,
+                                      color: Colors.grey,
+                                    ),
+                                    tooltip: 'Editar',
+                                    onPressed: () => _showAddSpeciesDialog(s),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ],
                           onSelectChanged: (selected) {
+                            // If clicked elsewhere, maybe strictly nothing or toggle dialog?
+                            // DataTable default behavior selects row.
+                            // We keep dialog on row click or just use the edit button?
+                            // Let's keep existing behavior: Row click -> Edit
                             if (selected == true) {
                               _showAddSpeciesDialog(s);
                             }

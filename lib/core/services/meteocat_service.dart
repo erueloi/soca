@@ -21,11 +21,11 @@ class MeteocatService {
   static const String _keyCachedForecast = 'meteocat_cached_forecast';
 
   final Duration _obsRateLimit = const Duration(
-    hours: 3,
-  ); // Reduce costs (750 limit)
+    hours: 4,
+  ); // Reduce costs (750 limit) -> Now 4h (max 6/day)
   final Duration _forecastRateLimit = const Duration(
-    hours: 1,
-  ); // Keep fresh (2000 limit)
+    hours: 6,
+  ); // Keep fresh (2000 limit) -> Now 6h (max 4/day)
 
   // Preference Keys
   static const String _keyQuotaSaver = 'meteocat_quota_saver_enabled';

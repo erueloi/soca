@@ -475,6 +475,15 @@ class _MapPageState extends ConsumerState<MapPage> {
     final currentMonth = DateTime.now().month;
     final isPruning = species?.pruningMonths.contains(currentMonth) ?? false;
     final isHarvest = species?.harvestMonths.contains(currentMonth) ?? false;
+    final isPlanting = species?.plantingMonths.contains(currentMonth) ?? false;
+
+    // Age Calculation
+    final now = DateTime.now();
+    final ageYears =
+        (now.difference(tree.plantingDate).inDays / 365.25) + tree.initialAge;
+    String ageText = ageYears < 1
+        ? '${(ageYears * 12).round()} mesos'
+        : '${ageYears.toStringAsFixed(1)} anys';
 
     showModalBottomSheet(
       context: context,
@@ -536,6 +545,53 @@ class _MapPageState extends ConsumerState<MapPage> {
                       style: TextStyle(color: Colors.grey[800], fontSize: 14),
                     ),
                     const SizedBox(height: 8),
+                    // Metrics Row
+                    Row(
+                      children: [
+                        Icon(Icons.cake, size: 14, color: Colors.grey[600]),
+                        const SizedBox(width: 4),
+                        Text(
+                          ageText,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey[800],
+                          ),
+                        ),
+                        if (tree.height != null && tree.height! > 0) ...[
+                          const SizedBox(width: 12),
+                          Icon(Icons.height, size: 14, color: Colors.grey[600]),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${tree.height!.toStringAsFixed(1)}m',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey[800],
+                            ),
+                          ),
+                        ],
+                        if (tree.trunkDiameter != null &&
+                            tree.trunkDiameter! > 0) ...[
+                          const SizedBox(width: 12),
+                          Icon(
+                            Icons.circle_outlined,
+                            size: 14,
+                            color: Colors.grey[600],
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Ø ${tree.trunkDiameter!.toStringAsFixed(1)}cm',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey[800],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
@@ -553,6 +609,12 @@ class _MapPageState extends ConsumerState<MapPage> {
                               'Collita',
                               Icons.agriculture,
                               Colors.purple,
+                            ),
+                          if (isPlanting)
+                            _buildTaskBadge(
+                              'Plantació',
+                              Icons.spa,
+                              Colors.lightGreen,
                             ),
                         ],
                       ),

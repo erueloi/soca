@@ -261,6 +261,8 @@ exports.analyzeTree = functions.https.onCall(async (data, context) => {
     const date = data.date || new Date().toISOString().split('T')[0];
     const leafType = data.leafType || "Unknown";
     const age = data.age || "Unknown";
+    const height = data.height ? `${data.height} cm` : "Unknown";
+    const diameter = data.diameter ? `${data.diameter} cm` : "Unknown";
 
     const prompt = `
     Act as an expert arborist. Analyze the health of this tree based on the image and context.
@@ -270,6 +272,8 @@ exports.analyzeTree = functions.https.onCall(async (data, context) => {
     - Leaf Type: ${leafType} (If 'Caduca' and date is winter, leafless is normal)
     - Date of Analysis: ${date}
     - Age/Format: ${format}, planted approx ${age} ago.
+    - Measured Height: ${height}
+    - Measured Trunk Diameter: ${diameter}
     - Location: ${location}
 
     Analyze the image considering the season and species characteristics.
@@ -278,12 +282,14 @@ exports.analyzeTree = functions.https.onCall(async (data, context) => {
     Return a strict JSON object (no markdown) with:
     - health: One of "Viable", "Malalt", "Mort".
     - vigor: One of "Alt", "Mitjà", "Baix".
-    - advice: A paragraph of advice and diagnosis in Catalan (Català). Mention specific visual indicators observed in the photo and relate them to the season/species context.
+    - estimated_age_years: (float) Estimated visual age of the tree in years. Use the image (size, trunk thickness) and species growth rate context to estimate. If unsure, provide a best guess.
+    - advice: A paragraph of advice and diagnosis in Catalan (Català). Mention specific visual indicators observed in the photo and relate them to the season/species context. Explain why you estimated the age if relevant.
 
     Example JSON:
     {
       "health": "Malalt",
       "vigor": "Baix",
+      "estimated_age_years": 5.5,
       "advice": "S'observa clorosi a les fulles, indicant falta de ferro..."
     }
     `;
@@ -345,6 +351,8 @@ exports.getBotanicalDataFromText = functions.https.onCall(async (data, context) 
     - ritme_creixement: (text) "Lent", "Mig" o "Ràpid".
     - resistencia_sequera: (int) De 1 (Poca) a 5 (Molta).
     - mesos_plantacio: (array d'ints) Mesos ideals per plantar (1-12).
+    - esperanca_vida: (int) Esperança de vida mitjana en anys (ex: 80).
+    - malalties_comunes: (array de strings) Top 3 malalties o plagues més freqüents (ex: ["Pulgó", "Oïdi", "Foc bacterià"]).
 
     Ajusta els valors per al clima de les Garrigues/Lleida (Hivern fred, Estiu calorós).
     Retorna només el JSON, sense markdown.
@@ -381,105 +389,90 @@ exports.dailyTaskSummary = functions.pubsub
             }
             const config = configDoc.data();
 
-            if (config.dailyNotificationsEnabled === false) {
-                console.log('Daily notifications are disabled in FarmConfig.');
-                return null;
-            }
-
-            // 2. Check Time
-            const targetTimeStr = config.dailyNotificationTime || '20:30';
-            const [targetHour, targetMinute] = targetTimeStr.split(':').map(Number);
-
             // Get current time in Madrid
             const now = new Date();
             const madridDateStr = now.toLocaleString("en-US", { timeZone: "Europe/Madrid" });
             const madridNow = new Date(madridDateStr);
-
-            // Construct Target Date for "Today"
-            const targetDate = new Date(madridNow);
-            targetDate.setHours(targetHour, targetMinute, 0, 0);
-
-            // Check if we HAVE PASSED the target time (e.g. Now is 21:00, Target was 20:30)
-            if (madridNow < targetDate) {
-                console.log(`Not yet time (` + madridNow.toISOString() + `). Target: ${targetTimeStr}`);
-                return null;
-            }
-
-            // 3. Check Idempotency (Have we sent it today?)
             const todayStr = madridNow.toISOString().split('T')[0];
-            if (config.lastNotificationDate === todayStr) {
-                console.log('Notification already sent today.');
-                return null;
-            }
 
-            console.log('Time reached. Preparing to send notification...');
+            const updates = {};
 
-            // --- CORE LOGIC (Calculate and Send) ---
+            // --- MORNING NOTIFICATION (Tasks for TODAY) ---
+            // Default 08:00 if not set
+            if (config.morningNotificationsEnabled !== false) {
+                const morningTime = config.morningNotificationTime || '08:00';
+                const [mHour, mMinute] = morningTime.split(':').map(Number);
+                const morningTarget = new Date(madridNow);
+                morningTarget.setHours(mHour, mMinute, 0, 0);
 
-            // Calculate "Tomorrow"
-            const tomorrow = new Date(madridNow);
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            tomorrow.setHours(0, 0, 0, 0);
+                // Check if time passed AND not sent yet
+                if (madridNow >= morningTarget && config.lastMorningNotificationDate !== todayStr) {
+                    console.log(`Sending MORNING notification for ${todayStr}...`);
 
-            const endTomorrow = new Date(tomorrow);
-            endTomorrow.setHours(23, 59, 59, 999);
+                    // Query for TODAY
+                    const todayStart = new Date(madridNow);
+                    todayStart.setHours(0, 0, 0, 0);
+                    const todayEnd = new Date(madridNow);
+                    todayEnd.setHours(23, 59, 59, 999);
 
-            const startMillis = tomorrow.getTime();
-            const endMillis = endTomorrow.getTime();
+                    // Shift for UTC (-2h safety)
+                    const startMillis = todayStart.getTime() - (2 * 60 * 60 * 1000);
+                    const endMillis = todayEnd.getTime() - (2 * 60 * 60 * 1000);
 
-            const tasksSnapshot = await admin.firestore().collection('tasks')
-                .where('dueDate', '>=', startMillis)
-                .where('dueDate', '<=', endMillis)
-                .where('isDone', '==', false)
-                .get();
+                    const sent = await checkAndSendNotification(
+                        startMillis,
+                        endMillis,
+                        "remind_today", // type
+                        "Bon dia! Feina per avui ☀️" // Title prefix
+                    );
 
-            const taskCount = tasksSnapshot.size;
-            console.log(`Found ${taskCount} tasks for tomorrow.`);
-
-            if (taskCount > 0) {
-                // Get Recipients
-                const usersSnapshot = await admin.firestore().collection('users').get();
-                const tokens = [];
-
-                usersSnapshot.forEach(doc => {
-                    const data = doc.data();
-                    if (data.fcmToken && data.dailyNotificationsEnabled !== false) {
-                        tokens.push(data.fcmToken);
+                    if (sent) {
+                        updates.lastMorningNotificationDate = todayStr;
                     }
-                });
-
-                if (tokens.length > 0) {
-                    const payload = {
-                        notification: {
-                            title: 'Soca: Previsió per a demà',
-                            body: `Tens ${taskCount} tasques pendents per a demà. Fes clic per veure el resum.`,
-                        },
-                        data: {
-                            click_action: 'FLUTTER_NOTIFICATION_CLICK',
-                            route: '/tasks',
-                            date: tomorrow.toISOString()
-                        }
-                    };
-
-                    const response = await admin.messaging().sendEachForMulticast({
-                        tokens: tokens,
-                        notification: payload.notification,
-                        data: payload.data
-                    });
-                    console.log(`Notifications sent: ${response.successCount} success.`);
-                } else {
-                    console.log('No tokens found.');
                 }
-            } else {
-                console.log('No tasks found, skipping message.');
             }
 
-            // 4. Update Idempotency Flag
-            await admin.firestore().collection('settings').doc('finca_config').update({
-                lastNotificationDate: todayStr,
-                lastNotificationTimestamp: admin.firestore.FieldValue.serverTimestamp()
-            });
-            console.log(`Marked notification as sent for ${todayStr}`);
+            // --- EVENING NOTIFICATION (Tasks for TOMORROW) ---
+            if (config.dailyNotificationsEnabled !== false) {
+                const eveningTime = config.dailyNotificationTime || '20:30';
+                const [eHour, eMinute] = eveningTime.split(':').map(Number);
+                const eveningTarget = new Date(madridNow);
+                eveningTarget.setHours(eHour, eMinute, 0, 0);
+
+                // Check if time passed AND not sent yet
+                if (madridNow >= eveningTarget && config.lastNotificationDate !== todayStr) {
+                    console.log(`Sending EVENING notification for ${todayStr}...`);
+
+                    // Calculate "Tomorrow"
+                    const tomorrow = new Date(madridNow);
+                    tomorrow.setDate(tomorrow.getDate() + 1);
+                    tomorrow.setHours(0, 0, 0, 0);
+
+                    const endTomorrow = new Date(tomorrow);
+                    endTomorrow.setHours(23, 59, 59, 999);
+
+                    // Shift for UTC (-2h safety)
+                    const startMillis = tomorrow.getTime() - (2 * 60 * 60 * 1000);
+                    const endMillis = endTomorrow.getTime() - (2 * 60 * 60 * 1000);
+
+                    const sent = await checkAndSendNotification(
+                        startMillis,
+                        endMillis,
+                        "remind_tomorrow",
+                        "Soca: Previsió per a demà 🌙"
+                    );
+
+                    if (sent) {
+                        updates.lastNotificationDate = todayStr; // Keep legacy name for evening
+                    }
+                }
+            }
+
+            // Update Config if notifications were sent
+            if (Object.keys(updates).length > 0) {
+                await admin.firestore().collection('settings').doc('finca_config').update(updates);
+                console.log('Config updated:', updates);
+            }
 
             return null;
 
@@ -488,3 +481,82 @@ exports.dailyTaskSummary = functions.pubsub
             return null;
         }
     });
+
+/**
+ * Helper to query tasks and send notification
+ */
+async function checkAndSendNotification(startMillis, endMillis, type, titlePrefix) {
+    const tasksSnapshot = await admin.firestore().collection('tasks')
+        .where('dueDate', '>=', startMillis)
+        .where('dueDate', '<=', endMillis)
+        .where('isDone', '==', false)
+        .get();
+
+    const taskCount = tasksSnapshot.size;
+    console.log(`[${type}] Found ${taskCount} tasks.`);
+
+    if (taskCount === 0) {
+        console.log(`[${type}] No tasks, skipping.`);
+        // Note: You might want to act differently (e.g. mark as sent anyway)
+        // But for now we only update 'sent' flag if we actually try to send, 
+        // OR we can decide that 0 tasks counts as "done" so we don't retry.
+        // Let's return TRUE so we update the date and don't retry every 15 mins.
+        return true;
+    }
+
+    // Get Recipients
+    const usersSnapshot = await admin.firestore().collection('users').get();
+    const tokens = [];
+
+    usersSnapshot.forEach(doc => {
+        const data = doc.data();
+        if (data.fcmToken && data.dailyNotificationsEnabled !== false) {
+            tokens.push(data.fcmToken);
+        }
+    });
+
+    if (tokens.length === 0) {
+        console.log(`[${type}] No users to notify.`);
+        return true;
+    }
+
+    const taskTitles = [];
+    tasksSnapshot.forEach(doc => {
+        const data = doc.data();
+        if (taskTitles.length < 3) {
+            taskTitles.push(`• ${data.title}`);
+        }
+    });
+
+    let body = taskTitles.join('\n');
+    if (taskCount > 3) {
+        body += `\n(+${taskCount - 3} més)`;
+    }
+
+    const targetDate = new Date(startMillis + (2 * 60 * 60 * 1000)); // Approx original date for navigation
+
+    const payload = {
+        notification: {
+            title: `${titlePrefix} (${taskCount})`,
+            body: body,
+        },
+        data: {
+            click_action: "FLUTTER_NOTIFICATION_CLICK",
+            route: "/tasks",
+            date: targetDate.toISOString().split('T')[0]
+        }
+    };
+
+    try {
+        const response = await admin.messaging().sendEachForMulticast({
+            tokens: tokens,
+            notification: payload.notification,
+            data: payload.data
+        });
+        console.log(`[${type}] Sent: ${response.successCount}, Failed: ${response.failureCount}`);
+        return true;
+    } catch (e) {
+        console.error(`[${type}] Send failed:`, e);
+        return false;
+    }
+}

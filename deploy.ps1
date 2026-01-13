@@ -57,7 +57,11 @@ try {
         $notesPath = "assets/release_notes.md"
         if (Test-Path $notesPath) {
             $currentNotes = Get-Content $notesPath -Raw
-            $header = "# Release Notes`n`n## v$Version`n$ReleaseNotes`n"
+            
+            # Formatting: Replace ". " with ".\n" for line breaks
+            $formattedNotes = $ReleaseNotes -replace "\. ", ".`n"
+            
+            $header = "# Release Notes`n`n## v$Version`n$formattedNotes`n"
             $newNotes = $header + ($currentNotes -replace "# Release Notes\s+", "")
             Set-Content -Path $notesPath -Value $newNotes -Encoding UTF8
             Write-Success "Added notes to assets/release_notes.md"
@@ -77,23 +81,8 @@ try {
     Write-Success "APK Built."
 
     # --- Step 5: Copy APK for Web ---
-    Write-Step "Step 5: Copying APK to Web Folder"
-    # Ensure directory exists (it should be created by build process but for safety)
-    if (-not (Test-Path "build/web")) { New-Item -ItemType Directory -Force -Path "build/web" | Out-Null }
-    
-    # We copy FROM app output TO where web output WILL BE (or into assets if we want to bundle it differently, 
-    # but the previous logic was copy AFTER web build or create dir. 
-    # Actually, flutter build web deletes build/web usually. So we must do it AFTER build web or ensure it persists?
-    # Wait, 'flutter build web' cleans 'build/web'. 
-    # So we should build web FIRST, then copy?
-    # The previous .bat did: Build Web -> Then Copy.
-    # Uh oh, looking at previous .bat: 
-    # call flutter build apk
-    # call flutter build web
-    # copy "build\app..." "build\web\soca.apk"
-    # This order is CORRECT because build web creates the folder. 
-    # So I will swap the order here for safety or just follow the .bat flow.
-    # But wait, Step 4 was Build APK. Step 6 is Build Web. So I should move Copy to AFTER Web Build.
+    # Moved to after Web Build logic effectively, but we prepare variable here or wait.
+    # Actually, proceed to build web first.
 
     # --- Step 6: Build Web ---
     Write-Step "Step 6: Building Web PWA"
@@ -101,11 +90,20 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Web build failed" }
     Write-Success "Web Built."
     
-    # NOW Copy APK (because build/web exists now)
+    # Copy APK
     $apkSource = "build\app\outputs\flutter-apk\app-release.apk"
     $apkDest = "build\web\soca.apk"
     Copy-Item -Path $apkSource -Destination $apkDest -Force
     Write-Success "APK copied to $apkDest"
+
+    # Generate version.json
+    $versionJson = @{
+        version = $Version
+        apkUrl = "https://soca-aacac.web.app/soca.apk"
+    } | ConvertTo-Json
+    
+    Set-Content -Path "build/web/version.json" -Value $versionJson -Encoding UTF8
+    Write-Success "Generated version.json"
 
     # --- Step 7: Deploy to Firebase ---
     Write-Step "Step 7: Deploying to Firebase Hosting & Functions"

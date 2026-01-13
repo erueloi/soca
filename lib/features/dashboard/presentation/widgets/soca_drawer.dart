@@ -10,12 +10,21 @@ import '../../../settings/presentation/pages/farm_profile_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-class SocaDrawer extends StatelessWidget {
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../features/settings/presentation/providers/settings_provider.dart';
+
+class SocaDrawer extends ConsumerWidget {
   const SocaDrawer({super.key});
 
   @override
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final farmConfigAsync = ref.watch(farmConfigStreamProvider);
+    final farmName = farmConfigAsync.when(
+      data: (config) => config.name,
+      loading: () => 'Carregant...',
+      error: (err, stack) => 'Soca',
+    );
+
     return Drawer(
       child: Column(
         // Changet ListView to Column to use Spacer
@@ -32,15 +41,18 @@ class SocaDrawer extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      const Icon(Icons.spa, size: 48, color: Colors.white),
-                      const SizedBox(height: 8),
+                      Image.asset('assets/logo-soca.png', height: 80),
+                      const SizedBox(height: 12),
                       Text(
                         'Soca',
                         style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(color: Colors.white),
+                            ?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
                       ),
                       Text(
-                        'Molí de Cal Jeroni',
+                        farmName,
                         style: Theme.of(
                           context,
                         ).textTheme.bodyMedium?.copyWith(color: Colors.white70),

@@ -9,11 +9,13 @@ class AIAnalysisResult {
   final String health;
   final String vigor;
   final String advice;
+  final double? estimatedAgeYears;
 
   AIAnalysisResult({
     required this.health,
     required this.vigor,
     required this.advice,
+    this.estimatedAgeYears,
   });
 }
 
@@ -30,6 +32,8 @@ class AIService {
     required DateTime date,
     required String leafType, // 'Caduca' or 'Perenne'
     required String age, // e.g. "2 anys"
+    double? height,
+    double? diameter,
   }) async {
     try {
       final callable = FirebaseFunctions.instance.httpsCallable('analyzeTree');
@@ -41,6 +45,8 @@ class AIService {
         'date': date.toIso8601String().split('T')[0],
         'leafType': leafType,
         'age': age,
+        'height': height,
+        'diameter': diameter,
       });
 
       final data = Map<String, dynamic>.from(result.data);
@@ -49,6 +55,7 @@ class AIService {
         health: data['health'] ?? 'Desconegut',
         vigor: data['vigor'] ?? 'Desconegut',
         advice: data['advice'] ?? 'Sense consells.',
+        estimatedAgeYears: (data['estimated_age_years'] as num?)?.toDouble(),
       );
     } catch (e) {
       throw Exception('Error connectant amb IA: $e');

@@ -30,6 +30,8 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
   String? _stationCode; // Hoist state
   bool _dailyNotificationsEnabled = true;
   String _dailyNotificationTime = '20:30';
+  bool _morningNotificationsEnabled = true;
+  String _morningNotificationTime = '08:00';
 
   bool _isSaving = false;
   bool _initialDataLoaded = false;
@@ -68,6 +70,8 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
 
     _dailyNotificationsEnabled = config.dailyNotificationsEnabled;
     _dailyNotificationTime = config.dailyNotificationTime;
+    _morningNotificationsEnabled = config.morningNotificationsEnabled;
+    _morningNotificationTime = config.morningNotificationTime;
 
     _initialDataLoaded = true;
   }
@@ -101,8 +105,45 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
     setState(() => _zones.removeWhere((z) => z.id == zone.id));
   }
 
+  Future<void> _pickTime(bool isMorning) async {
+    final currentStr = isMorning
+        ? _morningNotificationTime
+        : _dailyNotificationTime;
+    final parts = currentStr.split(':');
+    final initialTime = TimeOfDay(
+      hour: int.parse(parts[0]),
+      minute: int.parse(parts[1]),
+    );
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+    );
+    if (picked != null) {
+      setState(() {
+        final hour = picked.hour.toString().padLeft(2, '0');
+        final minute = picked.minute.toString().padLeft(2, '0');
+        final newTime = '$hour:$minute';
+        if (isMorning) {
+          _morningNotificationTime = newTime;
+        } else {
+          _dailyNotificationTime = newTime;
+        }
+      });
+    }
+  }
+
   Future<void> _save(FarmConfig currentConfig) async {
-    if (!_formKey.currentState!.validate()) return;
+    // Check form validity only if the form is currently in the tree (Tab 1 active)
+    if (_formKey.currentState != null && !_formKey.currentState!.validate()) {
+      return;
+    }
+    // Fallback: If form is not built (Tab 2 active), manually check required fields
+    if (_formKey.currentState == null && _nameController.text.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('El nom és obligatori')));
+      return;
+    }
 
     setState(() => _isSaving = true);
     try {
@@ -116,6 +157,8 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
         meteocatStationCode: _stationCode ?? currentConfig.meteocatStationCode,
         dailyNotificationsEnabled: _dailyNotificationsEnabled,
         dailyNotificationTime: _dailyNotificationTime,
+        morningNotificationsEnabled: _morningNotificationsEnabled,
+        morningNotificationTime: _morningNotificationTime,
       );
 
       await ref.read(settingsRepositoryProvider).saveFarmConfig(newConfig);
@@ -427,8 +470,36 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
                     Card(
                       child: Column(
                         children: [
+                          // Morning Notifications
                           SwitchListTile(
-                            title: const Text('Resum diari de tasques'),
+                            title: const Text('Resum Matinal (Avui)'),
+                            subtitle: const Text(
+                              'Reb una notificació amb les tasques per fer avui.',
+                            ),
+                            value: _morningNotificationsEnabled,
+                            onChanged: (val) {
+                              setState(
+                                () => _morningNotificationsEnabled = val,
+                              );
+                            },
+                          ),
+                          if (_morningNotificationsEnabled) ...[
+                            ListTile(
+                              title: const Text('Hora del avís matinal'),
+                              trailing: Text(
+                                _morningNotificationTime,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              onTap: () => _pickTime(true),
+                            ),
+                          ],
+                          const Divider(height: 1),
+                          // Evening Notifications
+                          SwitchListTile(
+                            title: const Text('Resum Vespre (Demà)'),
                             subtitle: const Text(
                               'Reb una notificació amb les tasques pendents per l\'endemà.',
                             ),
@@ -438,9 +509,8 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
                             },
                           ),
                           if (_dailyNotificationsEnabled) ...[
-                            const Divider(height: 1),
                             ListTile(
-                              title: const Text('Hora del resum'),
+                              title: const Text('Hora del resum vespre'),
                               trailing: Text(
                                 _dailyNotificationTime,
                                 style: const TextStyle(
@@ -448,29 +518,7 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
                                   fontSize: 16,
                                 ),
                               ),
-                              onTap: () async {
-                                final parts = _dailyNotificationTime.split(':');
-                                final initialTime = TimeOfDay(
-                                  hour: int.parse(parts[0]),
-                                  minute: int.parse(parts[1]),
-                                );
-                                final picked = await showTimePicker(
-                                  context: context,
-                                  initialTime: initialTime,
-                                );
-                                if (picked != null) {
-                                  setState(() {
-                                    final hour = picked.hour.toString().padLeft(
-                                      2,
-                                      '0',
-                                    );
-                                    final minute = picked.minute
-                                        .toString()
-                                        .padLeft(2, '0');
-                                    _dailyNotificationTime = '$hour:$minute';
-                                  });
-                                }
-                              },
+                              onTap: () => _pickTime(false),
                             ),
                           ],
                         ],

@@ -1,5 +1,15 @@
 ﻿# Release Notes
 
+## v1.6.4
+Icona nova de la app.
+Bugfix Notificacions.
+Autoupdate a Android.
+Edat en les especies.
+Actualitzar amb màgic les especies.
+Carrega automatica de l'edat de l'arbre/arbust/planta.
+Revisió del accés al servei de meteocat.
+Guardar les hores que vols que t'arribin les notificacions de les tasques (al matí pel tot el dia.
+A la tarda per l'endemà).
 ## v1.6.3
 Millorat el mapa amb Android. Descarregar la apk amb android. Edat dels arbres. Mes informació a les especies d'arbres. Gestió correcte del historial de fotos.
 ## v1.6.2
@@ -49,6 +59,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

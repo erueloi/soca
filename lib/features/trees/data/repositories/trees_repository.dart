@@ -241,6 +241,16 @@ class TreesRepository {
         .doc(treeId)
         .collection('seguiment')
         .add(entry.toMap());
+
+    // Sync latest measurements to Tree
+    // Only update if values are > 0 to avoid overwriting valid data with zeros if user didn't measure.
+    final Map<String, dynamic> updates = {};
+    if (entry.height > 0) updates['height'] = entry.height;
+    if (entry.trunkDiameter > 0) updates['trunkDiameter'] = entry.trunkDiameter;
+
+    if (updates.isNotEmpty) {
+      await _treesCollection.doc(treeId).update(updates);
+    }
   }
 
   // --- AI History ---

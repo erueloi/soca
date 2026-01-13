@@ -24,6 +24,9 @@ class Species {
   final String growthRate; // Lent, Mig, Ràpid
   final int droughtResistance; // 1-5
 
+  final int? lifeExpectancyYears;
+  final List<String> commonDiseases;
+
   const Species({
     required this.id,
     required this.scientificName,
@@ -47,6 +50,8 @@ class Species {
     this.adultDiameter = 0.0,
     this.growthRate = 'Mig',
     this.droughtResistance = 3,
+    this.lifeExpectancyYears,
+    this.commonDiseases = const [],
   });
 
   Species copyWith({
@@ -72,6 +77,8 @@ class Species {
     double? adultDiameter,
     String? growthRate,
     int? droughtResistance,
+    int? lifeExpectancyYears,
+    List<String>? commonDiseases,
   }) {
     return Species(
       id: id ?? this.id,
@@ -96,6 +103,8 @@ class Species {
       adultDiameter: adultDiameter ?? this.adultDiameter,
       growthRate: growthRate ?? this.growthRate,
       droughtResistance: droughtResistance ?? this.droughtResistance,
+      lifeExpectancyYears: lifeExpectancyYears ?? this.lifeExpectancyYears,
+      commonDiseases: commonDiseases ?? this.commonDiseases,
     );
   }
 
@@ -122,6 +131,8 @@ class Species {
       'adultDiameter': adultDiameter,
       'growthRate': growthRate,
       'droughtResistance': droughtResistance,
+      'lifeExpectancyYears': lifeExpectancyYears,
+      'commonDiseases': commonDiseases,
     };
   }
 
@@ -155,6 +166,8 @@ class Species {
       adultDiameter: (map['adultDiameter'] as num?)?.toDouble() ?? 0.0,
       growthRate: map['growthRate'] ?? 'Mig',
       droughtResistance: map['droughtResistance'] ?? 3,
+      lifeExpectancyYears: map['lifeExpectancyYears'],
+      commonDiseases: List<String>.from(map['commonDiseases'] ?? []),
     );
   }
 }
