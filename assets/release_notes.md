@@ -1,5 +1,9 @@
 ﻿# Release Notes
 
+## v1.6.5
+Millora de les icones per android.
+Botó verd de ubicació actual al mapa.
+Millor carga de dades de nou arbre.
 ## v1.6.4
 Icona nova de la app.
 Bugfix Notificacions.
@@ -59,6 +63,8 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
+
 
 
 

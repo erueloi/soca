@@ -86,6 +86,31 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
           }
 
           if (info['notes'] != null) _notesController.text = info['notes'];
+
+          if (info['ecologicalFunction'] != null) {
+            final eco = info['ecologicalFunction'];
+            if ([
+              'Nitrogenadora',
+              'Fusta',
+              'Fruit',
+              'Tallavent/Visual',
+              'Biomassa',
+              'Ornamental',
+            ].contains(eco)) {
+              _ecologicalFunction = eco;
+            }
+          }
+
+          if (info['vigor'] != null) {
+            final vig = info['vigor'];
+            if (['Alt', 'Mitjà', 'Baix'].contains(vig)) {
+              _vigor = vig;
+            }
+          }
+
+          if (info['maintenanceTips'] != null) {
+            _maintenanceTipsController.text = info['maintenanceTips'];
+          }
         });
 
         ScaffoldMessenger.of(context).showSnackBar(

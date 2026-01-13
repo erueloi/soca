@@ -115,6 +115,24 @@ class LayerControllerSheet extends ConsumerWidget {
               value: layers[MapLayer.treeLabels] ?? false,
               onChanged: (val) => notifier.toggleLayer(MapLayer.treeLabels),
             ),
+            const Divider(), // Visual separation for Map Settings
+            SwitchListTile(
+              title: const Text('Fer servir OpenStreetMap'),
+              subtitle: const Text('Si desactivat, fa servir ICGC (Catalunya)'),
+              secondary: const Icon(Icons.public, color: Colors.blueAccent),
+              value: layers[MapLayer.useOpenStreetMap] ?? false,
+              onChanged: (val) =>
+                  notifier.toggleLayer(MapLayer.useOpenStreetMap),
+            ),
+            SwitchListTile(
+              title: const Text('Vista Satèl·lit'),
+              subtitle: const Text(
+                'Canvia entre mapa Topogràfic i Satèl·lit (ICGC)',
+              ),
+              secondary: const Icon(Icons.satellite_alt, color: Colors.purple),
+              value: layers[MapLayer.satellite] ?? false,
+              onChanged: (val) => notifier.toggleLayer(MapLayer.satellite),
+            ),
             const SizedBox(height: 24),
             if (allSpecies.isNotEmpty) ...[
               const Divider(),

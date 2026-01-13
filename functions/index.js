@@ -180,18 +180,24 @@ exports.identifyTree = functions.https.onCall(async (data, context) => {
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const prompt = `
-    Analyze this image of a tree. Return a strict JSON object (no markdown) with the following fields:
-    - species: Scientific name of the tree.
+    Analyze this image of a tree/plant. Return a strict JSON object (no markdown) with the following fields:
+    - species: Scientific name of the tree/plant.
     - commonName: Common name in Catalan (or Spanish if unknown).
     - status: One of "Viable", "Malalt", "Mort" based on visual health.
     - notes: A concise summary including water needs, ideal sun exposure, and observed health issues.
+    - ecologicalFunction: Best fit from ["Nitrogenadora", "Fusta", "Fruit", "Tallavent/Visual", "Biomassa", "Ornamental"]. Default to "Ornamental" if unsure or "Fruit" if it bears edible fruit.
+    - vigor: One of ["Alt", "Mitjà", "Baix"] based on visual lushness and growth.
+    - maintenanceTips: A short paragraph in Catalan with specific maintenance advice (pruning, watering) for this species.
     
     Example:
     {
       "species": "Quercus ilex",
       "commonName": "Alzina",
       "status": "Viable",
-      "notes": "Necessita poc reg, ple sol. Fulles sanes."
+      "notes": "Necessita poc reg, ple sol.",
+      "ecologicalFunction": "Fusta",
+      "vigor": "Alt",
+      "maintenanceTips": "Podar a l'hivern per formar l'estructura. Regar ocasionalment el primer any."
     }
     `;
 

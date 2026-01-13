@@ -9,6 +9,7 @@ import '../../../trees/presentation/pages/watering_page.dart';
 import '../../../settings/presentation/pages/farm_profile_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import '../../../../core/services/version_check_service.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../features/settings/presentation/providers/settings_provider.dart';
@@ -37,27 +38,29 @@ class SocaDrawer extends ConsumerWidget {
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.primary,
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Image.asset('assets/logo-soca.png', height: 80),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Soca',
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                      ),
-                      Text(
-                        farmName,
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodyMedium?.copyWith(color: Colors.white70),
-                      ),
-                    ],
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Image.asset('assets/logo-soca.png', height: 70),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Soca',
+                          style: Theme.of(context).textTheme.headlineMedium
+                              ?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                        Text(
+                          farmName,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: Colors.white70),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 ListTile(
@@ -209,6 +212,14 @@ class SocaDrawer extends ConsumerWidget {
                         },
                       ),
                       actions: [
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            // Import version_check_service.dart required
+                            VersionCheckService().checkForUpdates(context);
+                          },
+                          child: const Text('Comprovar Actualitzacions'),
+                        ),
                         TextButton(
                           onPressed: () => Navigator.pop(context),
                           child: const Text('Tancar'),

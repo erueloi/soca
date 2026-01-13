@@ -1,7 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum MapLayer { tasks, irrigationZones, healthStatus, treeLabels }
+enum MapLayer {
+  tasks,
+  irrigationZones,
+  healthStatus,
+  treeLabels,
+  satellite,
+  useOpenStreetMap,
+}
 
 class MapLayersNotifier extends Notifier<Map<MapLayer, bool>> {
   @override
@@ -12,6 +19,8 @@ class MapLayersNotifier extends Notifier<Map<MapLayer, bool>> {
       MapLayer.irrigationZones: false,
       MapLayer.healthStatus: false,
       MapLayer.treeLabels: false,
+      MapLayer.satellite: true,
+      MapLayer.useOpenStreetMap: false,
     };
   }
 
@@ -24,6 +33,9 @@ class MapLayersNotifier extends Notifier<Map<MapLayer, bool>> {
             prefs.getBool('layer_irrigationZones') ?? false,
         MapLayer.healthStatus: prefs.getBool('layer_healthStatus') ?? false,
         MapLayer.treeLabels: prefs.getBool('layer_treeLabels') ?? false,
+        MapLayer.satellite: prefs.getBool('layer_satellite') ?? true,
+        MapLayer.useOpenStreetMap:
+            prefs.getBool('layer_useOpenStreetMap') ?? false,
       };
     } catch (e) {
       // Gracefully handle missing plugin or other errors

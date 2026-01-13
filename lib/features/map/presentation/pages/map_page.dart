@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/utils/icon_utils.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
@@ -103,7 +104,30 @@ class _MapPageState extends ConsumerState<MapPage> {
                   maxZoom: 20.0,
                 ),
                 children: [
-                  child!, // TileLayer
+                  TileLayer(
+                    urlTemplate: (layers[MapLayer.useOpenStreetMap] ?? false)
+                        ? ((layers[MapLayer.satellite] ?? false)
+                              ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                              : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png')
+                        : ((layers[MapLayer.satellite] ?? false)
+                              ? 'https://geoserveis.icgc.cat/icc_mapesmultibase/noutm/wmts/orto/GRID3857/{z}/{x}/{y}.jpeg'
+                              : 'https://geoserveis.icgc.cat/icc_mapesmultibase/noutm/wmts/topo/GRID3857/{z}/{x}/{y}.jpeg'),
+                    userAgentPackageName: 'com.molicaljeroni.soca',
+                  ),
+                  CurrentLocationLayer(
+                    style: const LocationMarkerStyle(
+                      marker: DefaultLocationMarker(
+                        color: Color(0xFF2E7D32), // Soca Green
+                        child: Icon(
+                          Icons.navigation,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                      ),
+                      markerSize: Size(40, 40),
+                      accuracyCircleColor: Color(0x332E7D32),
+                    ),
+                  ),
                   // Irrigation Zones Layer (Dynamic from FarmConfig)
                   if (layers[MapLayer.irrigationZones] == true)
                     PolygonLayer(
