@@ -114,6 +114,19 @@ class AIService {
       throw Exception('Error obtenint dades botàniques: $e');
     }
   }
+
+  Future<Map<String, dynamic>> getHorticulturalData(String speciesName) async {
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable(
+        'getHorticulturalData',
+        options: HttpsCallableOptions(timeout: const Duration(minutes: 1)),
+      );
+      final result = await callable.call({'speciesName': speciesName});
+      return Map<String, dynamic>.from(result.data);
+    } catch (e) {
+      throw Exception('Error obtenint dades hortícoles: $e');
+    }
+  }
 }
 
 final aiServiceProvider = Provider(

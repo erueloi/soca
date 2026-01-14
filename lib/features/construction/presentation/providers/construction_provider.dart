@@ -20,6 +20,14 @@ final constructionPointsProvider =
       return repository.getPoints(floorId);
     });
 
+// All Points Stream (For Dashboard)
+final allConstructionPointsProvider = StreamProvider<List<ConstructionPoint>>((
+  ref,
+) {
+  final repository = ref.watch(constructionRepositoryProvider);
+  return repository.getAllPoints();
+});
+
 // Current Selected Point (Notifier for mutable state)
 final selectedPointProvider =
     NotifierProvider<SelectedPointNotifier, ConstructionPoint?>(

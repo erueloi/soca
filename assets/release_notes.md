@@ -1,5 +1,11 @@
 ﻿# Release Notes
 
+## v1.7.0
+Afegit Widget de obres.
+Preu de les cada acció i cost total de l'obra segons les compres de les tasques relacionades.
+Podem plantar o posar una tasca nova directament al mapa.
+Hem afegit la opció de l'hort (a plantar!).
+Arreglat alguns bugfix menors 
 ## v1.6.5
 Millora de les icones per android.
 Botó verd de ubicació actual al mapa.
@@ -63,6 +69,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

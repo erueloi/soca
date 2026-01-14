@@ -13,6 +13,7 @@ import '../../../../core/services/version_check_service.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../features/settings/presentation/providers/settings_provider.dart';
+import '../../../horticulture/presentation/pages/horticulture_page.dart';
 
 class SocaDrawer extends ConsumerWidget {
   const SocaDrawer({super.key});
@@ -124,6 +125,18 @@ class SocaDrawer extends ConsumerWidget {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (context) => const ConstructionPage(),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.grass),
+                  title: const Text('Hort'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const HorticulturePage(),
                       ),
                     );
                   },

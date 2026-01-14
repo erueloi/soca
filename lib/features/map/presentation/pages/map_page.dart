@@ -1,16 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // For HapticFeedback
+import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 import '../../../../core/utils/icon_utils.dart';
+import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:uuid/uuid.dart';
+import 'dart:math' as math;
+import 'dart:async'; // StreamSubscription
 import '../../../tasks/presentation/providers/tasks_provider.dart';
 import '../../../trees/presentation/providers/trees_provider.dart';
+import '../../../trees/presentation/widgets/tree_form_sheet.dart';
 import '../../../trees/presentation/widgets/tree_detail.dart';
 import '../../../trees/domain/entities/watering_event.dart';
 import '../../../trees/domain/entities/tree.dart';
 import '../../../tasks/domain/entities/task.dart';
+
 import '../../../tasks/presentation/widgets/task_edit_sheet.dart';
 
 import '../providers/map_layers_provider.dart';
@@ -21,6 +29,8 @@ import '../../../trees/data/repositories/species_repository.dart';
 import '../../../trees/domain/entities/species.dart';
 import '../../../settings/presentation/providers/settings_provider.dart';
 
+enum MapFollowMode { none, centered, compass }
+
 class MapPage extends ConsumerStatefulWidget {
   const MapPage({super.key});
 
@@ -30,66 +40,99 @@ class MapPage extends ConsumerStatefulWidget {
 
 class _MapPageState extends ConsumerState<MapPage> {
   final MapController _mapController = MapController();
+  MapFollowMode _followMode = MapFollowMode.none;
+  StreamSubscription<MapEvent>? _mapEventSubscription;
+  LatLng? _selectedLocation;
+
+  @override
+  void initState() {
+    super.initState();
+    _mapEventSubscription = _mapController.mapEventStream.listen((event) {
+      // If user drags or rotates manually, stop following
+      if (event.source == MapEventSource.onDrag ||
+          event.source == MapEventSource.onMultiFinger) {
+        if (_followMode != MapFollowMode.none) {
+          setState(() {
+            _followMode = MapFollowMode.none;
+          });
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _mapEventSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _toggleFollowMode() async {
+    // Cycle: none -> centered -> compass -> centered
+    // If none, check permissions first before going to centered
+    if (_followMode == MapFollowMode.none) {
+      final hasPermission = await _checkPermissions();
+      if (!hasPermission) return;
+
+      setState(() {
+        _followMode = MapFollowMode.centered;
+      });
+      _moveToCurrentLocation();
+    } else if (_followMode == MapFollowMode.centered) {
+      setState(() {
+        _followMode = MapFollowMode.compass;
+      });
+    } else if (_followMode == MapFollowMode.compass) {
+      setState(() {
+        _followMode =
+            MapFollowMode.centered; // Back to centered, disable compass
+      });
+      // Reset rotation to 0 when leaving compass mode
+      _mapController.rotate(0);
+    }
+  }
+
+  Future<bool> _checkPermissions() async {
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Permís de localització denegat')),
+          );
+        }
+        return false;
+      }
+    }
+    if (permission == LocationPermission.deniedForever) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Permís de localització denegat permanentment'),
+          ),
+        );
+      }
+      return false;
+    }
+    return true;
+  }
+
+  Future<void> _moveToCurrentLocation() async {
+    try {
+      final position = await Geolocator.getCurrentPosition();
+      _mapController.move(LatLng(position.latitude, position.longitude), 18.0);
+    } catch (e) {
+      debugPrint('Error moving to location: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final layers = ref.watch(mapLayersProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mapa de la Finca'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.my_location),
-            onPressed: () async {
-              try {
-                // Check permissions
-                LocationPermission permission =
-                    await Geolocator.checkPermission();
-                if (permission == LocationPermission.denied) {
-                  permission = await Geolocator.requestPermission();
-                  if (permission == LocationPermission.denied) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Permís de localització denegat'),
-                        ),
-                      );
-                    }
-                    return;
-                  }
-                }
+      appBar: AppBar(title: const Text('Mapa de la Finca')),
 
-                if (permission == LocationPermission.deniedForever) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Permís de localització denegat permanentment',
-                        ),
-                      ),
-                    );
-                  }
-                  return;
-                }
-
-                // Get location
-                final position = await Geolocator.getCurrentPosition();
-                _mapController.move(
-                  LatLng(position.latitude, position.longitude),
-                  18.0, // Zoom in for user location
-                );
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error obtenint localització: $e')),
-                  );
-                }
-              }
-            },
-          ),
-        ],
-      ),
       body: Consumer(
         builder: (context, ref, child) {
           final configAsync = ref.watch(farmConfigStreamProvider);
@@ -102,6 +145,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                   initialCenter: LatLng(config.latitude, config.longitude),
                   initialZoom: config.zoom,
                   maxZoom: 20.0,
+                  onLongPress: _handleLongPress,
                 ),
                 children: [
                   TileLayer(
@@ -115,6 +159,22 @@ class _MapPageState extends ConsumerState<MapPage> {
                     userAgentPackageName: 'com.molicaljeroni.soca',
                   ),
                   CurrentLocationLayer(
+                    // Align position: Always for centered/compass. Never for none.
+                    alignPositionOnUpdate: _followMode != MapFollowMode.none
+                        ? AlignOnUpdate.always
+                        : AlignOnUpdate.never,
+                    // Align direction: Always for compass. Never for others.
+                    alignDirectionOnUpdate: _followMode == MapFollowMode.compass
+                        ? AlignOnUpdate.always
+                        : AlignOnUpdate.never,
+                    headingStream: _followMode == MapFollowMode.compass
+                        ? FlutterCompass.events?.map((e) {
+                            return LocationMarkerHeading(
+                              heading: (e.heading ?? 0) * (math.pi / 180),
+                              accuracy: (e.accuracy ?? 0) * (math.pi / 180),
+                            );
+                          })
+                        : null,
                     style: const LocationMarkerStyle(
                       marker: DefaultLocationMarker(
                         color: Color(0xFF2E7D32), // Soca Green
@@ -339,6 +399,23 @@ class _MapPageState extends ConsumerState<MapPage> {
                       );
                     },
                   ),
+
+                  // Selected Location Marker (Long Press)
+                  if (_selectedLocation != null)
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          point: _selectedLocation!,
+                          width: 40,
+                          height: 40,
+                          child: const Icon(
+                            Icons.location_on,
+                            color: Colors.red,
+                            size: 40,
+                          ),
+                        ),
+                      ],
+                    ),
                 ],
               );
             },
@@ -346,14 +423,6 @@ class _MapPageState extends ConsumerState<MapPage> {
             error: (e, s) => Center(child: Text('Error: $e')),
           );
         },
-        child: TileLayer(
-          // ICGC Orthophoto
-          urlTemplate:
-              'https://geoserveis.icgc.cat/icc_mapesmultibase/noutm/wmts/orto/GRID3857/{z}/{x}/{y}.jpeg',
-          userAgentPackageName: 'com.soca.app',
-          maxZoom: 20,
-          subdomains: const [],
-        ),
       ),
 
       floatingActionButton: Column(
@@ -371,6 +440,21 @@ class _MapPageState extends ConsumerState<MapPage> {
               );
             },
             child: const Icon(Icons.layers),
+          ),
+          const SizedBox(height: 8),
+          FloatingActionButton(
+            heroTag: 'map_follow_fab',
+            mini: true,
+            backgroundColor: const Color(0xFF2E7D32), // Soca Green
+            onPressed: _toggleFollowMode,
+            child: Icon(
+              _followMode == MapFollowMode.none
+                  ? Icons.location_searching
+                  : _followMode == MapFollowMode.centered
+                  ? Icons.my_location
+                  : Icons.explore,
+              color: Colors.white,
+            ),
           ),
           const SizedBox(height: 8),
           FloatingActionButton(
@@ -398,7 +482,220 @@ class _MapPageState extends ConsumerState<MapPage> {
             },
             child: const Icon(Icons.remove),
           ),
+          const SizedBox(height: 16),
+          SpeedDial(
+            icon: Icons.add,
+            activeIcon: Icons.close,
+            backgroundColor: const Color(0xFF2E7D32),
+            foregroundColor: Colors.white,
+            overlayColor: Colors.black,
+            overlayOpacity: 0.5,
+            spacing: 12,
+            spaceBetweenChildren: 8,
+            children: [
+              SpeedDialChild(
+                child: const Icon(Icons.park),
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                label: 'Nou Arbre',
+                onTap: () {
+                  final center = _mapController.camera.center;
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (context) => TreeFormSheet(
+                      tree: Tree(
+                        id: '',
+                        species: '',
+                        commonName: '',
+                        latitude: center.latitude,
+                        longitude: center.longitude,
+                        plantingDate: DateTime.now(),
+                        status: 'Viable',
+                      ),
+                    ),
+                  );
+                },
+              ),
+              SpeedDialChild(
+                child: const Icon(Icons.assignment),
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+                label: 'Nova Tasca',
+                onTap: () async {
+                  final center = _mapController.camera.center;
+                  Task? createdTask;
+
+                  await showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (context) => TaskEditSheet(
+                      initialBucket: 'Pendent',
+                      task: Task(
+                        id: const Uuid().v4(),
+                        title: '',
+                        bucket: 'Pendent',
+                        latitude: center.latitude,
+                        longitude: center.longitude,
+                      ),
+                      onSave: (task) {
+                        createdTask = task;
+                      },
+                    ),
+                  );
+
+                  if (createdTask == null) return;
+                  if (!context.mounted) return;
+
+                  final selectedBucket = await _askForBucket(context);
+                  if (selectedBucket == null) return;
+
+                  final taskToSave = createdTask!.copyWith(
+                    bucket: selectedBucket,
+                  );
+                  await ref.read(tasksRepositoryProvider).addTask(taskToSave);
+
+                  if (!context.mounted) return;
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Tasca creada a "$selectedBucket"')),
+                  );
+                },
+              ),
+            ],
+          ),
         ],
+      ),
+    );
+  }
+
+  void _handleLongPress(TapPosition tapPosition, LatLng point) {
+    HapticFeedback.lightImpact();
+    setState(() {
+      _selectedLocation = point;
+    });
+
+    showModalBottomSheet(
+      context: context,
+      builder: (sheetContext) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.park, color: Colors.green),
+            title: const Text('Nou Arbre aquí'),
+            onTap: () {
+              Navigator.pop(sheetContext);
+              // Clear selection after action (or keep it?)
+              // Let's keep it until form opens?
+              // Standard behavior: clear temporary marker when form opens.
+              setState(() => _selectedLocation = null);
+
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                builder: (context) => TreeFormSheet(
+                  tree: Tree(
+                    id: '',
+                    species: '',
+                    commonName: '',
+                    latitude: point.latitude,
+                    longitude: point.longitude,
+                    plantingDate: DateTime.now(),
+                    status: 'Viable',
+                  ),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.assignment, color: Colors.orange),
+            title: const Text('Nova Tasca aquí'),
+            onTap: () async {
+              Navigator.pop(sheetContext);
+              setState(() => _selectedLocation = null);
+
+              Task? createdTask;
+              await showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                builder: (context) => TaskEditSheet(
+                  initialBucket: 'Pendent',
+                  task: Task(
+                    id: const Uuid().v4(),
+                    title: '',
+                    bucket: 'Pendent',
+                    latitude: point.latitude,
+                    longitude: point.longitude,
+                  ),
+                  onSave: (task) {
+                    createdTask = task;
+                  },
+                ),
+              );
+
+              if (createdTask == null) return;
+              if (!mounted) return;
+
+              final selectedBucket = await _askForBucket(context);
+              if (selectedBucket == null) return;
+
+              final taskToSave = createdTask!.copyWith(bucket: selectedBucket);
+              await ref.read(tasksRepositoryProvider).addTask(taskToSave);
+
+              if (!mounted) return;
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Tasca creada a "$selectedBucket"')),
+              );
+            },
+          ),
+        ],
+      ),
+    ).whenComplete(() {
+      // If user just dismisses the sheet without picking option, clear the marker
+      if (mounted) {
+        setState(() => _selectedLocation = null);
+      }
+    });
+  }
+
+  Future<String?> _askForBucket(BuildContext context) {
+    return showDialog<String>(
+      context: context,
+      builder: (context) => Consumer(
+        builder: (context, ref, _) {
+          final bucketsAsync = ref.watch(bucketsStreamProvider);
+          return AlertDialog(
+            title: const Text('Classificar Tasca'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Vols sincronitzar aquesta tasca amb el Tauler Kanban?',
+                ),
+                const SizedBox(height: 16),
+                bucketsAsync.when(
+                  data: (buckets) {
+                    return Column(
+                      children: [
+                        ...buckets.map(
+                          (b) => ListTile(
+                            title: Text(b.name),
+                            leading: const Icon(Icons.view_column),
+                            onTap: () => Navigator.pop(context, b.name),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                  loading: () => const CircularProgressIndicator(),
+                  error: (error, stackTrace) =>
+                      const Text('Error carregant columnes'),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

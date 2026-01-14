@@ -12,6 +12,7 @@ class FarmConfig {
   final String dailyNotificationTime; // Evening (e.g. "20:30")
   final bool morningNotificationsEnabled; // Morning
   final String morningNotificationTime; // Morning (e.g. "08:00")
+  final List<String> dashboardOrder; // Order of dashboard widgets
 
   const FarmConfig({
     required this.name,
@@ -27,6 +28,7 @@ class FarmConfig {
     this.dailyNotificationTime = '20:30',
     this.morningNotificationsEnabled = true,
     this.morningNotificationTime = '08:00',
+    this.dashboardOrder = const [],
   });
 
   factory FarmConfig.empty() {
@@ -44,6 +46,7 @@ class FarmConfig {
       dailyNotificationTime: '20:30',
       morningNotificationsEnabled: true,
       morningNotificationTime: '08:00',
+      dashboardOrder: [],
     );
   }
 
@@ -62,6 +65,7 @@ class FarmConfig {
       'dailyNotificationTime': dailyNotificationTime,
       'morningNotificationsEnabled': morningNotificationsEnabled,
       'morningNotificationTime': morningNotificationTime,
+      'dashboardOrder': dashboardOrder,
     };
   }
 
@@ -84,6 +88,11 @@ class FarmConfig {
       dailyNotificationTime: map['dailyNotificationTime'] ?? '20:30',
       morningNotificationsEnabled: map['morningNotificationsEnabled'] ?? true,
       morningNotificationTime: map['morningNotificationTime'] ?? '08:00',
+      dashboardOrder:
+          (map['dashboardOrder'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
     );
   }
 
@@ -101,6 +110,7 @@ class FarmConfig {
     String? dailyNotificationTime,
     bool? morningNotificationsEnabled,
     String? morningNotificationTime,
+    List<String>? dashboardOrder,
   }) {
     return FarmConfig(
       name: name ?? this.name,
@@ -120,6 +130,7 @@ class FarmConfig {
           morningNotificationsEnabled ?? this.morningNotificationsEnabled,
       morningNotificationTime:
           morningNotificationTime ?? this.morningNotificationTime,
+      dashboardOrder: dashboardOrder ?? this.dashboardOrder,
     );
   }
 }

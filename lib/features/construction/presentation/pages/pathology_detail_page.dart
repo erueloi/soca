@@ -54,6 +54,16 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
     _actionController = TextEditingController(text: p?.recommendedAction ?? '');
     _statusController = TextEditingController(text: p?.currentState ?? '');
     _currentPhotos = List.from(p?.photos ?? []);
+    // Sort photos by date (newest last or first? Usually evolution -> Oldest first)
+    _currentPhotos.sort((a, b) {
+      if (a.date == null) {
+        return -1;
+      }
+      if (b.date == null) {
+        return 1;
+      }
+      return a.date!.compareTo(b.date!);
+    });
     _severity = p?.severity ?? 1;
   }
 
@@ -238,6 +248,37 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
         ).showSnackBar(SnackBar(content: Text('Error pujant foto: $e')));
       }
     }
+  }
+
+  void _showFullScreenImage(
+    BuildContext context,
+    String imageUrl,
+    DateTime? date,
+  ) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            iconTheme: const IconThemeData(color: Colors.white),
+            title: Text(
+              date != null ? _formatDate(date) : '',
+              style: const TextStyle(color: Colors.white),
+            ),
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              panEnabled: true,
+              boundaryMargin: const EdgeInsets.all(20),
+              minScale: 0.5,
+              maxScale: 4,
+              child: Image.network(imageUrl),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -453,16 +494,27 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
                                         return Stack(
                                           fit: StackFit.expand,
                                           children: [
-                                            Image.network(
-                                              photo.url,
-                                              fit: BoxFit.cover,
-                                              loadingBuilder: (c, w, p) {
-                                                if (p == null) return w;
-                                                return const Center(
-                                                  child:
-                                                      CircularProgressIndicator(),
-                                                );
+                                            GestureDetector(
+                                              onTap: () {
+                                                if (!_isEditing) {
+                                                  _showFullScreenImage(
+                                                    context,
+                                                    photo.url,
+                                                    photo.date,
+                                                  );
+                                                }
                                               },
+                                              child: Image.network(
+                                                photo.url,
+                                                fit: BoxFit.cover,
+                                                loadingBuilder: (c, w, p) {
+                                                  if (p == null) return w;
+                                                  return const Center(
+                                                    child:
+                                                        CircularProgressIndicator(),
+                                                  );
+                                                },
+                                              ),
                                             ),
                                             // Date Overlay
                                             Positioned(
@@ -487,18 +539,30 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
                                                             );
                                                         if (newDate != null) {
                                                           setState(() {
-                                                            // Need to update the item in the list.
-                                                            // Since PathologyPhoto is final, replace it.
-                                                            // But wait, class definition in step 844: fields are final.
-                                                            // I need to create a new one.
-                                                            // Wait, I can only create new one if I have all fields.
-                                                            // PathologyPhoto has url and date.
+                                                            // Update date
                                                             _currentPhotos[index] =
                                                                 PathologyPhoto(
                                                                   url:
                                                                       photo.url,
                                                                   date: newDate,
                                                                 );
+                                                            // Re-sort
+                                                            _currentPhotos.sort(
+                                                              (a, b) {
+                                                                if (a.date ==
+                                                                    null) {
+                                                                  return -1;
+                                                                }
+                                                                if (b.date ==
+                                                                    null) {
+                                                                  return 1;
+                                                                }
+                                                                return a.date!
+                                                                    .compareTo(
+                                                                      b.date!,
+                                                                    );
+                                                              },
+                                                            );
                                                           });
                                                         }
                                                       }
@@ -712,108 +776,258 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
     BuildContext context,
     PathologySheet? pathology,
   ) {
-    final subActions = pathology?.subActions ?? [];
-    final total = subActions.length;
-    final completed = subActions.where((s) => s.isCompleted).length;
-    final progress = total > 0 ? completed / total : 0.0;
+    // Watch tasks to calculate costs
+    final tasksAsync = ref.watch(tasksStreamProvider);
 
-    // We need a controller for adding new items.
-    // Since this is a ConsumerWidget (stateless), we can't hold a controller easily without rebuilding.
-    // However, we can show a dialog to add an item, or switch this to ConsumerStatefulWidget.
-    // For simplicity, let's use a Dialog to add sub-actions.
+    return tasksAsync.when(
+      loading: () => const Center(child: LinearProgressIndicator()),
+      error: (e, s) => Text('Error carregant costos: $e'),
+      data: (tasks) {
+        final subActions = pathology?.subActions ?? [];
+        final total = subActions.length;
+        final completed = subActions.where((s) => s.isCompleted).length;
+        final progress = total > 0 ? completed / total : 0.0;
 
-    return Container(
-      decoration: BoxDecoration(border: Border.all(color: Colors.black)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            color: const Color(0xFFD6E8D6),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'FULL DE RUTA / SUBACTUACIONS',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.add_circle_outline, size: 20),
-                  onPressed: () {
-                    _showAddSubActionDialog(context);
-                  },
-                  tooltip: 'Afegir tasca',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Column(
-              children: [
-                if (total > 0) ...[
-                  LinearProgressIndicator(
-                    value: progress,
-                    backgroundColor: Colors.grey.shade200,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      progress == 1.0 ? Colors.green : Colors.orange,
+        // Calculate total estimated cost
+        double totalEstimatedCost = 0.0;
+        for (var action in subActions) {
+          if (action.taskId != null) {
+            try {
+              final task = tasks.firstWhere((t) => t.id == action.taskId);
+              totalEstimatedCost += task.totalBudget;
+            } catch (_) {}
+          }
+        }
+
+        return Container(
+          decoration: BoxDecoration(border: Border.all(color: Colors.black)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                color: const Color(0xFFD6E8D6),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'FULL DE RUTA / SUBACTUACIONS',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                        if (totalEstimatedCost > 0)
+                          Text(
+                            'Cost Estimat: ${totalEstimatedCost.toStringAsFixed(2)} €',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.green.shade800,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                      ],
                     ),
-                    minHeight: 8,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Progrés: ${(progress * 100).toInt()}% ($completed/$total)',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-                if (subActions.isEmpty)
-                  const Text(
-                    'No hi ha tasques definides.',
-                    style: TextStyle(
-                      fontStyle: FontStyle.italic,
-                      color: Colors.grey,
-                    ),
-                  ),
-                ...subActions.map((action) {
-                  return ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    horizontalTitleGap: 0,
-                    leading: Checkbox(
-                      value: action.isCompleted,
-                      onChanged: (val) {
-                        _toggleSubAction(action, val ?? false);
+                    IconButton(
+                      icon: const Icon(Icons.add_circle_outline, size: 20),
+                      onPressed: () {
+                        _showAddSubActionDialog(context);
                       },
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      tooltip: 'Afegir tasca',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                     ),
-                    title: Text(
-                      action.title,
-                      style: TextStyle(
-                        decoration: action.isCompleted
-                            ? TextDecoration.lineThrough
-                            : null,
-                        color: action.isCompleted ? Colors.grey : null,
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  children: [
+                    if (total > 0) ...[
+                      LinearProgressIndicator(
+                        value: progress,
+                        backgroundColor: Colors.grey.shade200,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          progress == 1.0 ? Colors.green : Colors.orange,
+                        ),
+                        minHeight: 8,
                       ),
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.edit, size: 20),
-                      onPressed: () => _editSubAction(context, action),
-                      tooltip: 'Editar Tasca',
-                    ),
-                  );
-                }),
-              ],
-            ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Progrés: ${(progress * 100).toInt()}% ($completed/$total)',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    if (subActions.isEmpty)
+                      const Text(
+                        'No hi ha tasques definides.',
+                        style: TextStyle(
+                          fontStyle: FontStyle.italic,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ...subActions.map((action) {
+                      // Find task for specific action cost
+                      double? actionCost;
+                      if (action.taskId != null) {
+                        try {
+                          final task = tasks.firstWhere(
+                            (t) => t.id == action.taskId,
+                          );
+                          if (task.totalBudget > 0) {
+                            actionCost = task.totalBudget;
+                          }
+                        } catch (_) {}
+                      }
+
+                      return ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Checkbox(
+                          value: action.isCompleted,
+                          onChanged: (bool? value) {
+                            if (value != null) {
+                              _toggleSubAction(action, value);
+                            }
+                          },
+                        ),
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                action.title,
+                                style: TextStyle(
+                                  decoration: action.isCompleted
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                ),
+                              ),
+                            ),
+                            if (actionCost != null)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: Colors.green.shade200,
+                                  ),
+                                ),
+                                child: Text(
+                                  '${actionCost.toStringAsFixed(2)} €',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.green.shade800,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.edit, size: 16),
+                          onPressed: () {
+                            if (action.taskId != null) {
+                              // Edit linked task
+                              _openLinkedTask(action.taskId!);
+                            } else {
+                              // Edit simple action (rename/delete)
+                              _editSubAction(context, action);
+                            }
+                          },
+                          tooltip: action.taskId != null
+                              ? 'Veure detall tasca'
+                              : 'Editar',
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
+  }
+
+  void _openLinkedTask(String taskId) async {
+    // Determine the bucket? We don't know it easily.
+    // TaskEditSheet requires a Task object.
+    // We can fetch it first.
+    try {
+      final repo = ref.read(tasksRepositoryProvider);
+      final tasks = await repo.getTasksStream().first;
+      final task = tasks.cast<task_entity.Task?>().firstWhere(
+        (t) => t?.id == taskId,
+        orElse: () => null,
+      );
+
+      if (task != null && mounted) {
+        await showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          builder: (context) => TaskEditSheet(
+            task: task,
+            initialBucket: task.bucket,
+            onSave: (updatedTask) async {
+              await repo.updateTask(updatedTask);
+              // Also update title in subAction if changed?
+              // The SubAction has a copy of the title.
+              // It would be nice to keep them in sync, but maybe not strictly required right now.
+              // But let's verify if title changed.
+              if (updatedTask.title != task.title) {
+                // Find the subAction with this taskId
+                final subActions = point.pathology?.subActions ?? [];
+                final index = subActions.indexWhere((s) => s.taskId == taskId);
+                if (index != -1) {
+                  final updatedSubActions = List<SubAction>.from(subActions);
+                  updatedSubActions[index] = updatedSubActions[index].copyWith(
+                    title: updatedTask.title,
+                  );
+                  _updatePoint(
+                    point.pathology!.copyWith(subActions: updatedSubActions),
+                  );
+                }
+              }
+            },
+            onDelete: () async {
+              // Delete task and remove from subActions
+              await repo.deleteTask(taskId);
+              final subActions = point.pathology?.subActions ?? [];
+              final updatedSubActions = subActions
+                  .where((s) => s.taskId != taskId)
+                  .toList();
+              _updatePoint(
+                point.pathology!.copyWith(subActions: updatedSubActions),
+              );
+            },
+          ),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No s\'ha trobat la tasca vinculada')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error obrint la tasca: $e')));
+      }
+    }
   }
 
   Widget _buildHistorySection(BuildContext context, PathologySheet? pathology) {

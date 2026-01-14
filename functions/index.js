@@ -180,14 +180,14 @@ exports.identifyTree = functions.https.onCall(async (data, context) => {
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const prompt = `
-    Analyze this image of a tree/plant. Return a strict JSON object (no markdown) with the following fields:
+    Analyze this image of a tree/plant acting as an expert in PERMACULTURE. Return a strict JSON object (no markdown) with the following fields:
     - species: Scientific name of the tree/plant.
     - commonName: Common name in Catalan (or Spanish if unknown).
     - status: One of "Viable", "Malalt", "Mort" based on visual health.
     - notes: A concise summary including water needs, ideal sun exposure, and observed health issues.
     - ecologicalFunction: Best fit from ["Nitrogenadora", "Fusta", "Fruit", "Tallavent/Visual", "Biomassa", "Ornamental"]. Default to "Ornamental" if unsure or "Fruit" if it bears edible fruit.
     - vigor: One of ["Alt", "Mitjà", "Baix"] based on visual lushness and growth.
-    - maintenanceTips: A short paragraph in Catalan with specific maintenance advice (pruning, watering) for this species.
+    - maintenanceTips: A short paragraph in Catalan with specific maintenance advice (pruning, watering) using ONLY PERMACULTURE / ORGANIC methods (no chemicals).
     
     Example:
     {
@@ -197,7 +197,7 @@ exports.identifyTree = functions.https.onCall(async (data, context) => {
       "notes": "Necessita poc reg, ple sol.",
       "ecologicalFunction": "Fusta",
       "vigor": "Alt",
-      "maintenanceTips": "Podar a l'hivern per formar l'estructura. Regar ocasionalment el primer any."
+      "maintenanceTips": "Podar a l'hivern lleugerament. Aplicar encoixinat (mulching) per retenir humitat."
     }
     `;
 
@@ -271,7 +271,7 @@ exports.analyzeTree = functions.https.onCall(async (data, context) => {
     const diameter = data.diameter ? `${data.diameter} cm` : "Unknown";
 
     const prompt = `
-    Act as an expert arborist. Analyze the health of this tree based on the image and context.
+    Act as an expert arborist specialized in PERMACULTURE and REGENERATIVE AGRICULTURE. Analyze the health of this tree based on the image and context.
     
     CRITICAL CONTEXT:
     - Species: ${species}
@@ -285,18 +285,23 @@ exports.analyzeTree = functions.https.onCall(async (data, context) => {
     Analyze the image considering the season and species characteristics.
     If it is winter and the tree is deciduous ('Caduca'), do NOT mark as 'Mort' or 'Malalt' just because it has no leaves, unless there are other signs of disease (bark issues, broken branches).
 
+    IMPORTANT: ALL recommendations must be based on NATURAL, ORGANIC, and REGENERATIVE methods. 
+    - AVOID chemical fertilizers or synthetic pesticides.
+    - RECOMMEND natural solutions such as nettle slurry (purí d'ortigues), comfrey tea, worm castings (humus de cuc), compost tea, or mulching.
+    - Focus on soil health and biodiversity.
+
     Return a strict JSON object (no markdown) with:
     - health: One of "Viable", "Malalt", "Mort".
     - vigor: One of "Alt", "Mitjà", "Baix".
     - estimated_age_years: (float) Estimated visual age of the tree in years. Use the image (size, trunk thickness) and species growth rate context to estimate. If unsure, provide a best guess.
-    - advice: A paragraph of advice and diagnosis in Catalan (Català). Mention specific visual indicators observed in the photo and relate them to the season/species context. Explain why you estimated the age if relevant.
+    - advice: A paragraph of advice and diagnosis in Catalan (Català). Mention specific visual indicators observed in the photo and relate them to the season/species context. Explain why you estimated the age if relevant. Ensure the advice applies permaculture principles (e.g., "Aplicar purí d'ortigues" instead of "Aplicar insecticida").
 
     Example JSON:
     {
       "health": "Malalt",
       "vigor": "Baix",
       "estimated_age_years": 5.5,
-      "advice": "S'observa clorosi a les fulles, indicant falta de ferro..."
+      "advice": "S'observa clorosi a les fulles, indicant falta de ferro. Es recomana aplicar quelats de ferro naturals o purí d'ortigues per millorar el sòl..."
     }
     `;
 
@@ -373,6 +378,58 @@ exports.getBotanicalDataFromText = functions.https.onCall(async (data, context) 
     } catch (error) {
         console.error("Gemini Botany Error:", error);
         throw new functions.https.HttpsError("internal", "Failed to fetch botanical data.", error.message);
+    }
+});
+
+exports.getHorticulturalData = functions.https.onCall(async (data, context) => {
+    const speciesName = data.speciesName;
+
+    if (!speciesName) {
+        throw new functions.https.HttpsError("invalid-argument", "The function must be called with a valid speciesName.");
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY || functions.config().gemini.key;
+    if (!apiKey) {
+        throw new functions.https.HttpsError("failed-precondition", "Gemini API Key not configured.");
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+        model: "gemini-2.0-flash",
+        generationConfig: {
+            temperature: 0.1,
+        }
+    });
+
+    const prompt = `
+    Ets un expert en HORTICULTURA REGENERATIVA i PERMACULTURA. Per a la planta d'hort "${speciesName}", retorna EXCLUSIVAMENT un objecte JSON amb aquests camps:
+    - nom_cientific: (text) Nom científic.
+    - nom_comu: (text) Nom comú principal en Català.
+    - familia: (text) Família botànica (ex: Solanàcies).
+    - part_comestible: Un de ["Fruit", "Fulla", "Arrel", "FlorLlegum"].
+    - exigencia: Un de ["Exhauridora", "Consumidora", "Millorant"].
+        * REGLES D'EXIGÈNCIA (CRÍTIC):
+        - "Millorant": OBLIGATORI per a tota la família FABACEAE (Lleguminoses: Fesols, Pèsols, Faves...) ja que fixen nitrogen.
+        - "Exhauridora": Solanàcies (Tomata, Pebrot, Albergínia) i Cucurbitàcies exigents.
+        - "Consumidora": La resta (Bledes, Pastanagues, Liliàcies...).
+    - distancia_plantes: (int) Distància entre plantes en cm (ex: 40).
+    - distancia_linies: (int) Distància entre línies en cm (ex: 60).
+    - aliats: (array de strings) 3-5 plantes companyes beneficioses (ex: ["Alfàbrega", "Pastanaga"]).
+    - enemics: (array de strings) Plantes incompatibles (ex: ["Patata", "Fonoll"]).
+
+    Prioritza associacions d'al·lelopatia provades.
+    Retorna només el JSON, sense markdown.
+    `;
+
+    try {
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        return JSON.parse(jsonStr);
+    } catch (error) {
+        console.error("Gemini Horticulture Error:", error);
+        throw new functions.https.HttpsError("internal", "Failed to fetch horticultural data.", error.message);
     }
 });
 

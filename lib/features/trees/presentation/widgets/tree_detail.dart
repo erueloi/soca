@@ -135,6 +135,9 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
   }
 
   Future<void> _saveChanges() async {
+    // Cache messenger before async gaps
+    final messenger = ScaffoldMessenger.of(context);
+
     // Check for duplicate reference
     final newRef = _referenceController.text.trim().toUpperCase();
     if (newRef.isNotEmpty) {
@@ -145,7 +148,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
 
       if (isDuplicate) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             SnackBar(
               content: Text(
                 'Referència "$newRef" ja existeix useu-ne una altra.',
@@ -179,7 +182,6 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
       reference: newRef.isEmpty ? null : newRef,
     );
 
-    final messenger = ScaffoldMessenger.of(context);
     await ref.read(treesRepositoryProvider).updateTree(updatedTree);
 
     if (mounted) {

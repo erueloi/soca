@@ -37,6 +37,17 @@ class ConstructionRepository {
         });
   }
 
+  Stream<List<ConstructionPoint>> getAllPoints() {
+    return _pointsCollection.snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        return ConstructionPoint.fromMap(
+          doc.data() as Map<String, dynamic>,
+          doc.id,
+        );
+      }).toList();
+    });
+  }
+
   Future<void> addPoint(ConstructionPoint point) async {
     await _pointsCollection.add(point.toMap());
   }

@@ -3,10 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+// import 'package:shared_preferences/shared_preferences.dart'; // Removed
 
 import '../../../../core/services/version_check_service.dart';
 import '../../../../features/settings/presentation/providers/settings_provider.dart';
+import '../../../../features/settings/domain/entities/farm_config.dart'; // Added
 import '../../../../features/climate/presentation/pages/clima_page.dart';
 import '../../../../features/tasks/presentation/pages/tasks_page.dart';
 import '../../../contacts/presentation/pages/contacts_page.dart';
@@ -15,6 +16,7 @@ import '../../../trees/presentation/pages/trees_page.dart';
 import '../../../trees/presentation/pages/watering_page.dart';
 import '../../../settings/presentation/pages/farm_profile_page.dart';
 import '../../../construction/presentation/pages/construction_page.dart';
+import '../../../horticulture/presentation/pages/horticulture_page.dart';
 
 import '../widgets/irrigation_widget.dart';
 import '../widgets/soca_drawer.dart';
@@ -22,6 +24,7 @@ import '../widgets/task_bucket_widget.dart';
 import '../widgets/tree_summary_widget.dart';
 import '../widgets/weather_widget.dart';
 import '../widgets/dashboard_agenda_widget.dart';
+import '../widgets/farm_status_widget.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -49,7 +52,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   void initState() {
     super.initState();
-    _loadOrder();
+    // _loadOrder(); // Removing manual load, relying on stream listener
     _setupInteractedMessage();
     // Check for updates on startup
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -93,6 +96,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     'irrigation',
     'buckets',
     'agenda',
+    'farm_status',
   ];
 
   final Map<String, String> _widgetNames = {
@@ -101,38 +105,61 @@ class _HomePageState extends ConsumerState<HomePage> {
     'irrigation': 'Reg',
     'buckets': 'Tasques per Partida',
     'agenda': 'Agenda',
+    'farm_status': 'Estat Masia',
   };
 
-  Future<void> _loadOrder() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedOrder = prefs.getStringList('dashboard_order');
-    if (savedOrder != null && savedOrder.isNotEmpty) {
-      // Ensure all current widgets are present (handle new widgets added in updates)
-      final currentKeys = _widgetOrder.toSet();
-      final savedKeys = savedOrder.toSet();
+  Future<void> _loadOrder(FarmConfig config) async {
+    // If config has order, use it
+    if (config.dashboardOrder.isNotEmpty) {
+      if (_widgetOrder != config.dashboardOrder) {
+        // Only update if different to avoid constant rebuilds/loops if setState called wrongly
+        // Check if we need to merge new widgets
+        // final currentKeys = _widgetOrder.toSet(); // Unused
+        final savedKeys = config.dashboardOrder.toSet();
+        final newOrder = List<String>.from(config.dashboardOrder);
 
-      // Add saved keys that are still valid
-      final newOrder = savedOrder
-          .where((key) => currentKeys.contains(key))
-          .toList();
+        // Add any default widgets that might be missing from saved config (new features)
+        for (final key in _defaultWidgetOrder) {
+          if (!savedKeys.contains(key)) {
+            newOrder.add(key);
+          }
+        }
 
-      // Append any new widgets that weren't in the saved list
-      for (final key in _widgetOrder) {
-        if (!savedKeys.contains(key)) {
-          newOrder.add(key);
+        // Update local state if needed
+        if (mounted &&
+            (newOrder.length != _widgetOrder.length ||
+                newOrder.join(',') != _widgetOrder.join(','))) {
+          setState(() {
+            _widgetOrder = newOrder;
+          });
         }
       }
-
-      setState(() {
-        _widgetOrder = newOrder;
-      });
+    } else {
+      // First time sync? Or empty. Save default to cloud.
+      // We only do this if we are sure we want to overwrite/init cloud.
+      // Let's just keep local default and maybe save it if user edits.
     }
   }
 
   Future<void> _saveOrder() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('dashboard_order', _widgetOrder);
+    // Save to Firebase via SettingsRepository
+    final settingsRepo = ref.read(settingsRepositoryProvider);
+    final currentConfig = ref.read(farmConfigStreamProvider).value;
+
+    if (currentConfig != null) {
+      final newConfig = currentConfig.copyWith(dashboardOrder: _widgetOrder);
+      await settingsRepo.saveFarmConfig(newConfig);
+    }
   }
+
+  final List<String> _defaultWidgetOrder = [
+    'weather',
+    'trees',
+    'irrigation',
+    'buckets',
+    'agenda',
+    'farm_status',
+  ];
 
   Widget _getWidgetByKey(String key) {
     switch (key) {
@@ -146,6 +173,8 @@ class _HomePageState extends ConsumerState<HomePage> {
         return const TaskBucketWidget();
       case 'agenda':
         return const DashboardAgendaWidget();
+      case 'farm_status':
+        return const FarmStatusWidget();
       default:
         return const SizedBox.shrink();
     }
@@ -160,6 +189,23 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   Widget build(BuildContext context) {
     final farmConfigAsync = ref.watch(farmConfigStreamProvider);
+
+    // Sync order when config loads
+    farmConfigAsync.whenData((config) {
+      // We can't call setState directly during build if value changes,
+      // but _loadOrder has a guard.
+      // Better approach: Use a separate useEffect or simple check.
+      // Since this is a StatefulWidget, we can just check if we need to update.
+      // However, to avoid build-cycle issues preferably we'd use listen, but watch is fine if we start with defaults.
+      // Let's trigger a microtask or check in body?
+      // Actually, easiest is to use ref.listen in build.
+    });
+
+    // Better: Ref listen
+    ref.listen(farmConfigStreamProvider, (previous, next) {
+      next.whenData((config) => _loadOrder(config));
+    });
+
     final farmName = farmConfigAsync.when(
       data: (config) => config.name,
       loading: () => 'Carregant...',
@@ -244,8 +290,14 @@ class _HomePageState extends ConsumerState<HomePage> {
                         ),
                       );
                     } else if (index == 6) {
-                      _navigateToTasks(context);
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const HorticulturePage(),
+                        ),
+                      );
                     } else if (index == 7) {
+                      _navigateToTasks(context);
+                    } else if (index == 8) {
                       _navigateToContacts(context);
                     } else if (index == 3) {
                       Navigator.of(context).push(
@@ -253,7 +305,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                           builder: (context) => const WateringPage(),
                         ),
                       );
-                    } else if (index == 8) {
+                    } else if (index == 9) {
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (context) => const FarmProfilePage(),
@@ -367,6 +419,11 @@ class _HomePageState extends ConsumerState<HomePage> {
                       icon: Icon(Icons.architecture_outlined),
                       selectedIcon: Icon(Icons.architecture),
                       label: Text('Obres'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.grass),
+                      selectedIcon: Icon(Icons.grass_outlined),
+                      label: Text('Hort'),
                     ),
                     NavigationRailDestination(
                       icon: Icon(Icons.check_circle_outline),
