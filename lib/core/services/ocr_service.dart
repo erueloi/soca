@@ -51,12 +51,12 @@ class OcrService {
       final data = result.data as Map<dynamic, dynamic>;
       debugPrint('OCR: Data received: $data');
       final tasksList = data['tasks'] as List<dynamic>;
+      final now = DateTime.now().millisecondsSinceEpoch;
 
-      return tasksList.map((item) {
+      return List.generate(tasksList.length, (index) {
+        final item = tasksList[index];
         return Task(
-          id:
-              DateTime.now().millisecondsSinceEpoch.toString() +
-              (item['title'].hashCode).toString(),
+          id: '${now}_${index}_${item['title'].hashCode}',
           title: item['title'] ?? 'Sense títol',
           bucket: item['bucket'] ?? 'General',
           description: 'Importada via Cloud Vision OCR',
@@ -66,7 +66,7 @@ class OcrService {
           contactIds: [],
           photoUrls: [],
         );
-      }).toList();
+      });
     } catch (e) {
       debugPrint('Error in OCR Service: $e');
       rethrow;

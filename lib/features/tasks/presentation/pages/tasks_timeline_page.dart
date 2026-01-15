@@ -126,6 +126,7 @@ class _TasksTimelinePageState extends ConsumerState<TasksTimelinePage> {
               completedAt: task.completedAt!,
               cost: task.totalSpent,
               isSubtask: false,
+              resolution: task.resolution,
             ),
           );
         }
@@ -261,6 +262,40 @@ class _TasksTimelinePageState extends ConsumerState<TasksTimelinePage> {
                     'Subtasca de: ${item.parentTaskTitle}',
                     style: const TextStyle(fontSize: 12, color: Colors.grey),
                   ),
+                if (item.resolution != null && item.resolution!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.orange.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.info_outline,
+                          size: 14,
+                          color: Colors.orange,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            item.resolution!,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontStyle: FontStyle.italic,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 4),
                 Row(
                   children: [
@@ -304,6 +339,7 @@ class _TimelineItem {
   final double cost;
   final bool isSubtask;
   final String? parentTaskTitle;
+  final String? resolution;
 
   _TimelineItem({
     required this.title,
@@ -311,5 +347,6 @@ class _TimelineItem {
     required this.cost,
     required this.isSubtask,
     this.parentTaskTitle,
+    this.resolution,
   });
 }

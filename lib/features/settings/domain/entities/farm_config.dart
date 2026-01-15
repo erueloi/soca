@@ -146,10 +146,22 @@ class FarmZone {
     required this.name,
     required this.colorHex,
     required this.cropType,
+    this.rotationPatternId,
+    this.rotationStartDate,
   });
 
+  final String? rotationPatternId;
+  final DateTime? rotationStartDate;
+
   Map<String, dynamic> toMap() {
-    return {'id': id, 'name': name, 'colorHex': colorHex, 'cropType': cropType};
+    return {
+      'id': id,
+      'name': name,
+      'colorHex': colorHex,
+      'cropType': cropType,
+      'rotationPatternId': rotationPatternId,
+      'rotationStartDate': rotationStartDate?.toIso8601String(),
+    };
   }
 
   factory FarmZone.fromMap(Map<String, dynamic> map) {
@@ -158,6 +170,10 @@ class FarmZone {
       name: map['name'] ?? '',
       colorHex: map['colorHex'] ?? 'FF2196F3', // Default Blue
       cropType: map['cropType'] ?? '',
+      rotationPatternId: map['rotationPatternId'],
+      rotationStartDate: map['rotationStartDate'] != null
+          ? DateTime.parse(map['rotationStartDate'])
+          : null,
     );
   }
 }

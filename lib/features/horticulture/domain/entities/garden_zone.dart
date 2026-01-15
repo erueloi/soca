@@ -7,12 +7,17 @@ class GardenZone {
   final double areaM2;
   final String notes;
 
+  final String? rotationPatternId;
+  final DateTime? rotationStartDate;
+
   GardenZone({
     required this.id,
     required this.name,
     required this.polygon,
     required this.areaM2,
     this.notes = '',
+    this.rotationPatternId,
+    this.rotationStartDate,
   });
 
   Map<String, dynamic> toMap() {
@@ -22,6 +27,8 @@ class GardenZone {
       'polygon': polygon,
       'areaM2': areaM2,
       'notes': notes,
+      'rotationPatternId': rotationPatternId,
+      'rotationStartDate': rotationStartDate?.toIso8601String(),
     };
   }
 
@@ -36,6 +43,10 @@ class GardenZone {
           [],
       areaM2: (map['areaM2'] ?? 0.0).toDouble(),
       notes: map['notes'] ?? '',
+      rotationPatternId: map['rotationPatternId'],
+      rotationStartDate: map['rotationStartDate'] != null
+          ? DateTime.parse(map['rotationStartDate'])
+          : null,
     );
   }
 }

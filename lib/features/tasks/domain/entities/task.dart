@@ -15,6 +15,7 @@ class Task {
   final double? longitude;
   final int order;
   final DateTime? completedAt;
+  final String? resolution;
 
   const Task({
     required this.id,
@@ -31,6 +32,7 @@ class Task {
     this.longitude,
     this.order = 0,
     this.completedAt,
+    this.resolution,
   });
 
   Task copyWith({
@@ -48,6 +50,7 @@ class Task {
     double? longitude,
     int? order,
     DateTime? completedAt,
+    String? resolution,
   }) {
     return Task(
       id: id ?? this.id,
@@ -64,6 +67,7 @@ class Task {
       longitude: longitude ?? this.longitude,
       order: order ?? this.order,
       completedAt: completedAt ?? this.completedAt,
+      resolution: resolution ?? this.resolution,
     );
   }
 
@@ -82,6 +86,7 @@ class Task {
       'longitude': longitude,
       'order': order,
       'completedAt': completedAt?.millisecondsSinceEpoch,
+      'resolution': resolution,
     };
   }
 
@@ -107,6 +112,7 @@ class Task {
       completedAt: map['completedAt'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['completedAt'])
           : null,
+      resolution: map['resolution'],
     );
   }
 

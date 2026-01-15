@@ -1,212 +1,188 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../features/map/presentation/providers/map_layers_provider.dart';
-
+import 'package:latlong2/latlong.dart';
+import '../../data/repositories/hort_repository.dart';
 import '../../domain/entities/espai_hort.dart';
 import '../../domain/entities/garden_layout_config.dart';
-import '../../data/repositories/hort_repository.dart';
 import 'garden_designer_page.dart';
-import 'espai_list_page.dart'; // For provider
-import 'dart:math' as math;
 
-// Service provider
-// final rotationServiceProvider = Provider((ref) => RotationService()); // Unused now
+final espaiListStreamProvider = StreamProvider((ref) {
+  final repo = ref.watch(hortRepositoryProvider);
+  return repo.getEspaisStream();
+});
 
-class ZoneEditorPage extends ConsumerStatefulWidget {
-  const ZoneEditorPage({super.key});
+class EspaiListPage extends ConsumerStatefulWidget {
+  const EspaiListPage({super.key});
 
   @override
-  ConsumerState<ZoneEditorPage> createState() => _ZoneEditorPageState();
+  ConsumerState<EspaiListPage> createState() => _EspaiListPageState();
 }
 
-class _ZoneEditorPageState extends ConsumerState<ZoneEditorPage> {
-  final MapController _mapController = MapController();
-
-  EspaiHort? _selectedEspai;
-
-  // Helper to compute rectangle corners from center+dims
-  List<LatLng> _computeCorners(EspaiHort espai) {
-    const metersPerDegLat = 111132.92;
-    final metersPerDegLng =
-        metersPerDegLat * math.cos(espai.center.latitude * math.pi / 180);
-
-    final dLat = (espai.length / 2) / metersPerDegLat;
-    final dLng = (espai.width / 2) / metersPerDegLng;
-
-    return [
-      LatLng(espai.center.latitude + dLat, espai.center.longitude - dLng), // TL
-      LatLng(espai.center.latitude + dLat, espai.center.longitude + dLng), // TR
-      LatLng(espai.center.latitude - dLat, espai.center.longitude + dLng), // BR
-      LatLng(espai.center.latitude - dLat, espai.center.longitude - dLng), // BL
-    ];
-  }
+class _EspaiListPageState extends ConsumerState<EspaiListPage> {
+  String? _loadingId;
 
   @override
   Widget build(BuildContext context) {
     final espaisAsync = ref.watch(espaiListStreamProvider);
-    final layers = ref.watch(mapLayersProvider);
-    // Rotation logic mostly moved to Designer/Details, but showing status on Map popup is cool.
 
-    return espaisAsync.when(
-      data: (espais) {
-        // Center on first if available and map not moved?
-        // simple logic
-
-        return Stack(
-          children: [
-            FlutterMap(
-              mapController: _mapController,
-              options: MapOptions(
-                // Center on selected zone if possible, else farm center
-                // Default center
-                initialCenter: espais.isNotEmpty
-                    ? espais.first.center
-                    : const LatLng(41.5126, 0.9186),
-                initialZoom: 20.0,
-                maxZoom: 22.0,
-                onTap: (pos, latlng) {
-                  setState(() => _selectedEspai = null);
-                },
-                onLongPress: (pos, latlng) {
-                  _showCreateDialogAt(context, latlng);
-                },
-              ),
-              children: [
-                TileLayer(
-                  urlTemplate: (layers[MapLayer.useOpenStreetMap] ?? false)
-                      ? ((layers[MapLayer.satellite] ?? false)
-                            ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-                            : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png')
-                      : ((layers[MapLayer.satellite] ?? false)
-                            ? 'https://geoserveis.icgc.cat/icc_mapesmultibase/noutm/wmts/orto/GRID3857/{z}/{x}/{y}.jpeg'
-                            : 'https://geoserveis.icgc.cat/icc_mapesmultibase/noutm/wmts/topo/GRID3857/{z}/{x}/{y}.jpeg'),
-                  userAgentPackageName: 'com.molicaljeroni.soca',
-                ),
-                PolygonLayer(
-                  polygons: espais.map((espai) {
-                    final points = _computeCorners(espai);
-                    final isSelected = _selectedEspai?.id == espai.id;
-                    return Polygon(
-                      points: points,
-                      color: isSelected
-                          ? Colors.blue.withValues(alpha: 0.4)
-                          : Colors.green.withValues(alpha: 0.2),
-                      borderColor: isSelected ? Colors.blue : Colors.green,
-                      borderStrokeWidth: 2,
-                      label: espai.nom,
-                      labelStyle: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        backgroundColor: Colors.black45,
-                      ),
-                    );
-                  }).toList(),
-                  // Handling Hit Test manually? Flutter Map usually handles tap on polygon?
-                  // Wait, PolygonLayer in newer versions doesn't always have onTap.
-                  // If onTap missing, we check bounds in Map onTap. But checking bounds of rotated rects/polygons is mathy.
-                  // Let's assume user taps the polygon.
-                  // Version check: Flutter map 6/7?
-                  // Checking imports... 'flutter_map'.
-                  // Let's trust older hit testing or add a transparent marker?
-                  // EASIER: Display Markers at center of Espai?
-                  // OR: Compute distance to center in Map OnTap.
-                ),
-                MarkerLayer(
-                  markers: espais
-                      .map(
-                        (e) => Marker(
-                          point: e.center,
-                          width: 120,
-                          height: 60,
-                          child: GestureDetector(
-                            onTap: () {
-                              setState(() => _selectedEspai = e);
-                              _showEspaiDetails(context, e);
-                            },
-                            child: Container(
-                              alignment: Alignment.center,
-                              child: const Icon(
-                                Icons.location_on,
-                                color: Colors.transparent,
-                                size: 50,
-                              ), // Invisible hit target
-                            ),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ],
-            ),
-          ],
-        );
-      },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, s) => Center(child: Text('Error: $e')),
-    );
-  }
-
-  void _showEspaiDetails(BuildContext context, EspaiHort espai) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        bool isLoading = false;
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Container(
-              padding: const EdgeInsets.all(16),
-              height: 200,
+    return Scaffold(
+      body: espaisAsync.when(
+        data: (espais) {
+          if (espais.isEmpty) {
+            return Center(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    espai.nom,
-                    style: Theme.of(context).textTheme.titleLarge,
+                  const Icon(Icons.grid_on, size: 64, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No tens cap espai creat.',
+                    style: TextStyle(fontSize: 18, color: Colors.grey),
                   ),
-                  Text('${espai.width}m x ${espai.length}m'),
                   const SizedBox(height: 16),
                   ElevatedButton.icon(
-                    icon: isLoading
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.edit),
-                    label: Text(isLoading ? 'Obrint...' : 'Obrir Dissenyador'),
-                    onPressed: isLoading
-                        ? null
-                        : () async {
-                            setModalState(() => isLoading = true);
-                            await Future.delayed(Duration.zero);
-
-                            if (!context.mounted) return;
-
-                            // Keep modal open while generating/pushing route to show spinner
-                            await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    GardenDesignerPage(espai: espai),
-                              ),
-                            );
-
-                            // Close modal when returning from Designer
-                            if (context.mounted) Navigator.pop(context);
-                          },
+                    icon: const Icon(Icons.add),
+                    label: const Text('Crear Nou Espai'),
+                    onPressed: () => _showCreateDialog(context, ref),
                   ),
                 ],
               ),
             );
-          },
-        );
-      },
+          }
+
+          return Stack(
+            children: [
+              ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: espais.length,
+                itemBuilder: (context, index) {
+                  final espai = espais[index];
+                  return Card(
+                    elevation: 2,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Column(
+                        children: [
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.green[100],
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.grass,
+                                color: Colors.green,
+                              ),
+                            ),
+                            title: Text(
+                              espai.nom,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${espai.width}m x ${espai.length}m  |  ${espai.layoutConfig?.numberOfBeds ?? '?'} Bancals',
+                                ),
+                              ],
+                            ),
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      GardenDesignerPage(espai: espai),
+                                ),
+                              );
+                            },
+                          ),
+                          const Divider(),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton.icon(
+                                icon: _loadingId == espai.id
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(Icons.edit, size: 18),
+                                label: Text(
+                                  _loadingId == espai.id
+                                      ? 'Obrint...'
+                                      : 'Dissenyar',
+                                  style: TextStyle(
+                                    color: _loadingId == espai.id
+                                        ? Colors.grey
+                                        : null,
+                                  ),
+                                ),
+                                onPressed: _loadingId == espai.id
+                                    ? null
+                                    : () async {
+                                        setState(() => _loadingId = espai.id);
+                                        await Future.delayed(Duration.zero);
+
+                                        if (!context.mounted) return;
+                                        await Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) => GardenDesignerPage(
+                                              espai: espai,
+                                            ),
+                                          ),
+                                        );
+                                        if (mounted) {
+                                          setState(() => _loadingId = null);
+                                        }
+                                      },
+                              ),
+                              const SizedBox(width: 8),
+                              TextButton.icon(
+                                icon: const Icon(
+                                  Icons.delete,
+                                  size: 18,
+                                  color: Colors.red,
+                                ),
+                                label: const Text(
+                                  'Eliminar',
+                                  style: TextStyle(color: Colors.red),
+                                ),
+                                onPressed: () =>
+                                    _showDeleteDialog(context, ref, espai),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+              Positioned(
+                bottom: 16,
+                right: 16,
+                child: FloatingActionButton(
+                  child: const Icon(Icons.add),
+                  onPressed: () => _showCreateDialog(context, ref),
+                ),
+              ),
+            ],
+          );
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, s) => Center(child: Text('Error: $e')),
+      ),
     );
   }
 
-  void _showCreateDialogAt(BuildContext context, LatLng position) {
+  void _showCreateDialog(BuildContext context, WidgetRef ref) {
     // Controllers for Layout Wizard
     final nameCtrl = TextEditingController();
     final widthCtrl = TextEditingController(text: '7');
@@ -292,7 +268,7 @@ class _ZoneEditorPageState extends ConsumerState<ZoneEditorPage> {
           }
 
           return AlertDialog(
-            title: const Text('Nou Espai en Ubicació'),
+            title: const Text('Nou Espai d\'Hort'),
             content: SingleChildScrollView(
               child: SizedBox(
                 width: 400,
@@ -300,11 +276,6 @@ class _ZoneEditorPageState extends ConsumerState<ZoneEditorPage> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      'Ubicació: ${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 16),
                     TextField(
                       controller: nameCtrl,
                       decoration: const InputDecoration(
@@ -383,7 +354,8 @@ class _ZoneEditorPageState extends ConsumerState<ZoneEditorPage> {
                     ),
                     const SizedBox(height: 8),
                     TextField(
-                      controller: cellSizeCtrl,
+                      controller:
+                          cellSizeCtrl, // Make sure to define this controller above!
                       decoration: const InputDecoration(
                         labelText: 'Mida Cel·la Grid (m) - Def: 0.2',
                       ),
@@ -426,15 +398,19 @@ class _ZoneEditorPageState extends ConsumerState<ZoneEditorPage> {
                         final newEspai = EspaiHort(
                           id: '',
                           nom: nom,
-                          center: position,
+                          center: const LatLng(0, 0), // Undefined location
                           width: w,
                           length: l,
                           gridCellSize: cSize,
                           layoutConfig: layoutConfig,
                         );
 
-                        ref.read(hortRepositoryProvider).saveEspai(newEspai);
-                        Navigator.pop(context);
+                        ref
+                            .read(hortRepositoryProvider)
+                            .saveEspai(newEspai)
+                            .then((_) {
+                              if (context.mounted) Navigator.pop(context);
+                            });
                       }
                     : null,
                 child: const Text('Crear Espai'),
@@ -442,6 +418,32 @@ class _ZoneEditorPageState extends ConsumerState<ZoneEditorPage> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  void _showDeleteDialog(BuildContext context, WidgetRef ref, EspaiHort espai) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar Espai?'),
+        content: Text('Estàs segur que vols eliminar "${espai.nom}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () {
+              ref.read(hortRepositoryProvider).deleteEspai(espai.id);
+              Navigator.pop(context);
+            },
+            child: const Text(
+              'Sí, eliminar',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
       ),
     );
   }

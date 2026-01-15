@@ -28,8 +28,16 @@ class _HortPlantFormState extends ConsumerState<HortPlantForm> {
 
   // Enums
   HortPartComestible _partComestible = HortPartComestible.fulla;
-  HortExigenciaNutrients _exigencia = HortExigenciaNutrients.consumidora;
+  HortExigenciaNutrients _exigencia = HortExigenciaNutrients.mitjanamentExigent;
   Color _color = Colors.green;
+
+  // New Enum State
+  // New Enum State
+  HortTipusSembra _tipusSembra = HortTipusSembra.trasplantament;
+  // _grupRotacio removed (Calculated)
+  HortViaMetabolica _viaMetabolica = HortViaMetabolica.c3;
+  late TextEditingController _rendimentCtrl;
+  late TextEditingController _cicleCtrl;
 
   // Lists (Aliats/Enemics) now handled via text controllers
 
@@ -60,7 +68,17 @@ class _HortPlantFormState extends ConsumerState<HortPlantForm> {
       _partComestible = widget.plant!.partComestible;
       _exigencia = widget.plant!.exigenciaNutrients;
       _color = widget.plant!.color;
+      _tipusSembra = widget.plant!.tipusSembra;
+      // _grupRotacio calculated from partComestible
+      _viaMetabolica = widget.plant!.viaMetabolica;
     }
+
+    _rendimentCtrl = TextEditingController(
+      text: widget.plant?.rendiment.toString() ?? '',
+    );
+    _cicleCtrl = TextEditingController(
+      text: widget.plant?.diesEnCamp.toString() ?? '',
+    );
   }
 
   @override
@@ -72,7 +90,36 @@ class _HortPlantFormState extends ConsumerState<HortPlantForm> {
     _linesCtrl.dispose();
     _aliatsCtrl.dispose();
     _enemicsCtrl.dispose();
+    _rendimentCtrl.dispose();
+    _cicleCtrl.dispose();
     super.dispose();
+  }
+
+  // Helper Methods for Calculated Logic
+  HortGrupRotacio _calculateRotationGroup(HortPartComestible part) {
+    // 1. Priority: Exigency
+    if (_exigencia == HortExigenciaNutrients.moltExigent) {
+      return HortGrupRotacio.fruit; // Grup 1
+    }
+    if (_exigencia == HortExigenciaNutrients.millorant) {
+      return HortGrupRotacio.millorant; // Grup 4
+    }
+
+    // 2. Secondary: Part (for Mitjanament/Poc)
+    if (part == HortPartComestible.arrel) {
+      return HortGrupRotacio.arrel; // Grup 3
+    }
+
+    // Default to Grup 2 (Leaf) for others (Leaf, Flower) if not High/Imp
+    return HortGrupRotacio.fulla;
+  }
+
+  String _getRotationLabel(HortPartComestible part) {
+    return _calculateRotationGroup(part).label;
+  }
+
+  Color _getRotationColor(HortPartComestible part) {
+    return _calculateRotationGroup(part).color;
   }
 
   Future<void> _fetchAI() async {
@@ -139,11 +186,14 @@ class _HortPlantFormState extends ConsumerState<HortPlantForm> {
 
         if (data['exigencia'] != null) {
           final e = data['exigencia'].toString().toLowerCase();
-          if (e.contains('exh')) {
-            _exigencia = HortExigenciaNutrients.exhauridora;
+          if (e.contains('molt') || e.contains('exh')) {
+            _exigencia = HortExigenciaNutrients.moltExigent;
           }
-          if (e.contains('cons')) {
-            _exigencia = HortExigenciaNutrients.consumidora;
+          if (e.contains('mitja') || e.contains('cons')) {
+            _exigencia = HortExigenciaNutrients.mitjanamentExigent;
+          }
+          if (e.contains('poc')) {
+            _exigencia = HortExigenciaNutrients.pocExigent;
           }
           if (e.contains('mil')) {
             _exigencia = HortExigenciaNutrients.millorant;
@@ -343,6 +393,33 @@ class _HortPlantFormState extends ConsumerState<HortPlantForm> {
                   .toList(),
               onChanged: (v) => setState(() => _partComestible = v!),
             ),
+            const SizedBox(height: 8),
+            // Automatic Rotation Group Badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: _getRotationColor(
+                  _partComestible,
+                ).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: _getRotationColor(_partComestible)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.sync, color: _getRotationColor(_partComestible)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Grup Rotació Automàtic: ${_getRotationLabel(_partComestible)}',
+                      style: TextStyle(
+                        color: _getRotationColor(_partComestible),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 16),
             DropdownButtonFormField<HortExigenciaNutrients>(
               key: ValueKey(_exigencia),
@@ -366,6 +443,19 @@ class _HortPlantFormState extends ConsumerState<HortPlantForm> {
                   )
                   .toList(),
               onChanged: (v) => setState(() => _exigencia = v!),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<HortViaMetabolica>(
+              key: ValueKey(_viaMetabolica),
+              initialValue: _viaMetabolica,
+              decoration: const InputDecoration(
+                labelText: 'Fisiologia (C₃, C₄, CAM)',
+                border: OutlineInputBorder(),
+              ),
+              items: HortViaMetabolica.values
+                  .map((e) => DropdownMenuItem(value: e, child: Text(e.label)))
+                  .toList(),
+              onChanged: (v) => setState(() => _viaMetabolica = v!),
             ),
 
             const SizedBox(height: 24),
@@ -396,6 +486,53 @@ class _HortPlantFormState extends ConsumerState<HortPlantForm> {
               keyboardType: TextInputType.number,
               validator: (v) =>
                   double.tryParse(v ?? '') != null ? null : 'Número invàlid',
+            ),
+
+            const SizedBox(height: 24),
+            const Text(
+              'Dades Agronòmiques (Avançat)',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _rendimentCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Rendiment Estim.',
+                      border: OutlineInputBorder(),
+                      suffixText: 'kg/m²',
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextFormField(
+                    controller: _cicleCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Cicle',
+                      border: OutlineInputBorder(),
+                      suffixText: 'dies',
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<HortTipusSembra>(
+              key: ValueKey(_tipusSembra),
+              initialValue: _tipusSembra,
+              decoration: const InputDecoration(
+                labelText: 'Mètode Inicial',
+                border: OutlineInputBorder(),
+              ),
+              items: HortTipusSembra.values
+                  .map((e) => DropdownMenuItem(value: e, child: Text(e.label)))
+                  .toList(),
+              onChanged: (v) => setState(() => _tipusSembra = v!),
             ),
 
             const SizedBox(height: 24),

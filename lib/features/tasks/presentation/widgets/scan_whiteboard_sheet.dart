@@ -217,6 +217,7 @@ class _ScanWhiteboardSheetState extends ConsumerState<ScanWhiteboardSheet> {
                         itemBuilder: (context, index) {
                           final task = _detectedTasks[index];
                           return Card(
+                            key: ValueKey(task.id),
                             child: ListTile(
                               leading: Icon(
                                 Icons.label,

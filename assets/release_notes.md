@@ -1,5 +1,9 @@
 ﻿# Release Notes
 
+## v1.7.1
+Modificacions per anar creant el dissenyador de l'hort.
+Bancals, files, patrons, planter, etc.
+Ara les tasques es tanquen amb una resolució que es mostra al historic i al calendari.
 ## v1.7.0
 Afegit Widget de obres.
 Preu de les cada acció i cost total de l'obra segons les compres de les tasques relacionades.
@@ -69,6 +73,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

@@ -5,7 +5,8 @@ import '../../data/repositories/hort_repository.dart';
 import '../widgets/hort_plant_form.dart';
 
 class HortLibraryPage extends StatefulWidget {
-  const HortLibraryPage({super.key});
+  final String? initialSearch;
+  const HortLibraryPage({super.key, this.initialSearch});
 
   @override
   State<HortLibraryPage> createState() => _HortLibraryPageState();
@@ -14,6 +15,12 @@ class HortLibraryPage extends StatefulWidget {
 class _HortLibraryPageState extends State<HortLibraryPage> {
   final _repository = HortRepository();
   String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchQuery = widget.initialSearch ?? '';
+  }
 
   // Sorting state can be added later if needed.
 

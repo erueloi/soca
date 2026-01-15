@@ -1,3 +1,4 @@
+import 'dart:math'; // Added import
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -5,7 +6,17 @@ import 'package:latlong2/latlong.dart';
 
 class LocationPickerPage extends StatefulWidget {
   final LatLng initialLocation;
-  const LocationPickerPage({super.key, required this.initialLocation});
+  final double? width; // Optional width in meters
+  final double? height; // Optional height in meters
+  final String? label; // Optional label for the area
+
+  const LocationPickerPage({
+    super.key,
+    required this.initialLocation,
+    this.width,
+    this.height,
+    this.label,
+  });
 
   @override
   State<LocationPickerPage> createState() => _LocationPickerPageState();
@@ -16,6 +27,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   final MapController _mapController = MapController();
   int _currentLayerIndex = 0; // 0: Ortho (Sat), 1: Topo (Map)
   bool _isLoadingLocation = false;
+  List<LatLng> _polygonPoints = [];
 
   static const List<String> _layerUrls = [
     'https://geoserveis.icgc.cat/icc_mapesmultibase/noutm/wmts/orto/GRID3857/{z}/{x}/{y}.jpeg',
@@ -26,6 +38,46 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   void initState() {
     super.initState();
     _currentLocation = widget.initialLocation;
+    _updatePolygon();
+  }
+
+  void _updatePolygon() {
+    if (widget.width == null || widget.height == null) {
+      _polygonPoints = [];
+      return;
+    }
+
+    final halfW = widget.width! / 2;
+    final halfH = widget.height! / 2;
+
+    // Approximation for meters to degrees
+    const metersPerDegLat = 111132.95;
+    final metersPerDegLng =
+        111132.95 * cos(_currentLocation.latitude * pi / 180);
+
+    final latDelta = halfH / metersPerDegLat;
+    final lngDelta = halfW / metersPerDegLng;
+
+    setState(() {
+      _polygonPoints = [
+        LatLng(
+          _currentLocation.latitude + latDelta,
+          _currentLocation.longitude - lngDelta,
+        ), // TL
+        LatLng(
+          _currentLocation.latitude + latDelta,
+          _currentLocation.longitude + lngDelta,
+        ), // TR
+        LatLng(
+          _currentLocation.latitude - latDelta,
+          _currentLocation.longitude + lngDelta,
+        ), // BR
+        LatLng(
+          _currentLocation.latitude - latDelta,
+          _currentLocation.longitude - lngDelta,
+        ), // BL
+      ];
+    });
   }
 
   Future<void> _moveToCurrentLocation() async {
@@ -51,6 +103,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
       Position position = await Geolocator.getCurrentPosition();
       final newLoc = LatLng(position.latitude, position.longitude);
       setState(() => _currentLocation = newLoc);
+      _updatePolygon();
       _mapController.move(newLoc, 18);
     } catch (e) {
       if (mounted) {
@@ -83,7 +136,10 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
               initialCenter: widget.initialLocation,
               initialZoom: 19,
               onTap: (_, point) {
-                setState(() => _currentLocation = point);
+                setState(() {
+                  _currentLocation = point;
+                  _updatePolygon();
+                });
               },
             ),
             children: [
@@ -92,16 +148,34 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                 userAgentPackageName: 'com.soca.app',
                 maxZoom: 20,
               ),
+              if (_polygonPoints.isNotEmpty)
+                PolygonLayer(
+                  polygons: [
+                    Polygon(
+                      points: _polygonPoints,
+                      color: Colors.green.withValues(alpha: 0.3),
+                      borderColor: Colors.green,
+                      borderStrokeWidth: 2,
+                      label: widget.label,
+                      labelStyle: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        backgroundColor: Colors.black45,
+                      ),
+                    ),
+                  ],
+                ),
               MarkerLayer(
                 markers: [
-                  Marker(
-                    point: _currentLocation,
-                    child: const Icon(
-                      Icons.location_on,
-                      color: Colors.red,
-                      size: 50,
+                  if (_polygonPoints.isEmpty)
+                    Marker(
+                      point: _currentLocation,
+                      child: const Icon(
+                        Icons.location_on,
+                        color: Colors.red,
+                        size: 50,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ],

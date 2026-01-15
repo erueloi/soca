@@ -405,20 +405,29 @@ exports.getHorticulturalData = functions.https.onCall(async (data, context) => {
     Ets un expert en HORTICULTURA REGENERATIVA i PERMACULTURA. Per a la planta d'hort "${speciesName}", retorna EXCLUSIVAMENT un objecte JSON amb aquests camps:
     - nom_cientific: (text) Nom científic.
     - nom_comu: (text) Nom comú principal en Català.
-    - familia: (text) Família botànica (ex: Solanàcies).
+    - familia: (text) Família botànica.
     - part_comestible: Un de ["Fruit", "Fulla", "Arrel", "FlorLlegum"].
-    - exigencia: Un de ["Exhauridora", "Consumidora", "Millorant"].
-        * REGLES D'EXIGÈNCIA (CRÍTIC):
-        - "Millorant": OBLIGATORI per a tota la família FABACEAE (Lleguminoses: Fesols, Pèsols, Faves...) ja que fixen nitrogen.
-        - "Exhauridora": Solanàcies (Tomata, Pebrot, Albergínia) i Cucurbitàcies exigents.
-        - "Consumidora": La resta (Bledes, Pastanagues, Liliàcies...).
-    - distancia_plantes: (int) Distància entre plantes en cm (ex: 40).
-    - distancia_linies: (int) Distància entre línies en cm (ex: 60).
-    - aliats: (array de strings) 3-5 plantes companyes beneficioses (ex: ["Alfàbrega", "Pastanaga"]).
-    - enemics: (array de strings) Plantes incompatibles (ex: ["Patata", "Fonoll"]).
+    
+    - exigencia: Un de ["Molt exigent", "Mitjanament exigent", "Poc exigent", "Millorant"].
+        * CLASSIFICACIÓ ESTRICTA:
+        - "Molt exigent": Solanàcies (Tomata, Pebrot, Patata), Cucurbitàcies (Meló, Síndria, Carbassa), Panís.
+        - "Mitjanament exigent": Bleda, Espinac, Remolatxa, Api, Bràssiques (Cols), Pastanaga, Rave, Nap, Enciam, Escarola.
+        - "Poc exigent": All, Ceba, Porro.
+        - "Millorant": Totes les Fabàcies (Lleguminoses: Fesol, Pèsol, Fava...). REGLA D'OR: Si és Fabaceae = Millorant.
 
-    Prioritza associacions d'al·lelopatia provades.
-    Retorna només el JSON, sense markdown.
+    - rendiment: (float) Rendiment estimat en kg/m2 (intensiu regeneratiu, clima Lleida).
+    - dies_cicle: (int) Dies des de plantació a fi collita.
+    - tipus_sembra: Un de ["directa", "trasplantament"].
+    
+    - via_metabolica: Un de ["c3", "c4", "cam"]. (Ciència: Fixació Carboni).
+        * NOTA: No confondre "Millorant" amb C4. Blat de moro és C4 però Molt Exigent. Faves són C3 però Millorant.
+
+    - distancia_plantes: (int) cm.
+    - distancia_linies: (int) cm.
+    - aliats: (array strings) 3-5 favorables.
+    - enemics: (array strings).
+
+    Retorna només el JSON.
     `;
 
     try {

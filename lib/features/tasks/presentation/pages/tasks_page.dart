@@ -87,16 +87,19 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   Future<void> _toggleTask(Task task) async {
     final isDone = !task.isDone;
     DateTime? completionDate;
+    String? resolution;
 
     if (isDone) {
-      completionDate = await _promptCompletionDate(task.title);
-      // If user cancelled the dialog, we don't complete the task
-      if (completionDate == null) return;
+      final result = await _promptCompletionWithResolution(task.title);
+      if (result == null) return; // Cancelled
+      completionDate = result['date'] as DateTime;
+      resolution = result['resolution'] as String;
     }
 
     final updatedTask = task.copyWith(
       isDone: isDone,
       completedAt: isDone ? completionDate : null,
+      resolution: isDone ? resolution : null,
     );
     ref.read(tasksRepositoryProvider).updateTask(updatedTask);
   }
@@ -109,12 +112,13 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   }
 
   Future<void> _onArchiveDrop(Task task) async {
-    final completionDate = await _promptCompletionDate(task.title);
-    if (completionDate == null) return;
+    final result = await _promptCompletionWithResolution(task.title);
+    if (result == null) return;
 
     final updatedTask = task.copyWith(
       isDone: true,
-      completedAt: completionDate,
+      completedAt: result['date'] as DateTime,
+      resolution: result['resolution'] as String,
     );
     ref.read(tasksRepositoryProvider).updateTask(updatedTask);
     if (!mounted) return;
@@ -123,21 +127,95 @@ class _TasksPageState extends ConsumerState<TasksPage> {
     );
   }
 
-  Future<DateTime?> _promptCompletionDate(String taskTitle) async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
+  Future<Map<String, dynamic>?> _promptCompletionWithResolution(
+    String taskTitle,
+  ) async {
+    DateTime selectedDate = DateTime.now();
+    final TextEditingController resolutionController = TextEditingController();
+
+    return await showDialog<Map<String, dynamic>>(
       context: context,
-      initialDate: now,
-      firstDate: DateTime(2020),
-      lastDate: now,
-      helpText: 'FINALITZACIÓ DE TASCA',
-      confirmText: 'COMPLETAR',
-      cancelText: 'CANCEL·LAR',
-      fieldLabelText: 'Data de finalització',
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Completar Tasca'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Tasca: $taskTitle',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Data de finalització:'),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.calendar_today),
+                    title: Text(
+                      '${selectedDate.day}/${selectedDate.month}/${selectedDate.year} ${selectedDate.hour}:${selectedDate.minute.toString().padLeft(2, '0')}',
+                    ),
+                    onTap: () async {
+                      final now = DateTime.now();
+                      final pickedDate = await showDatePicker(
+                        context: context,
+                        initialDate: selectedDate,
+                        firstDate: DateTime(2020),
+                        lastDate: now,
+                      );
+                      if (pickedDate != null) {
+                        if (!context.mounted) return;
+                        final pickedTime = await showTimePicker(
+                          context: context,
+                          initialTime: TimeOfDay.fromDateTime(selectedDate),
+                        );
+                        if (pickedTime != null) {
+                          setDialogState(() {
+                            selectedDate = DateTime(
+                              pickedDate.year,
+                              pickedDate.month,
+                              pickedDate.day,
+                              pickedTime.hour,
+                              pickedTime.minute,
+                            );
+                          });
+                        }
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: resolutionController,
+                    decoration: const InputDecoration(
+                      labelText: 'Resolució / Notes',
+                      hintText: 'Ex: S\'ha arreglat canviant la peça...',
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 3,
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('CANCEL·LAR'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context, {
+                      'date': selectedDate,
+                      'resolution': resolutionController.text,
+                    });
+                  },
+                  child: const Text('COMPLETAR TASCA'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
-    return picked != null
-        ? DateTime(picked.year, picked.month, picked.day, now.hour, now.minute)
-        : null;
   }
 
   void _openBucketManagement() {

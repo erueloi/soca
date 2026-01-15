@@ -34,29 +34,98 @@ enum HortPartComestible {
 }
 
 enum HortExigenciaNutrients {
-  millorant, // Nitrogen fixers (legumes)
-  consumidora, // Moderate
-  exhauridora; // Heavy feeders (solanaceae usually)
+  moltExigent,
+  mitjanamentExigent,
+  pocExigent,
+  millorant;
 
   String get label {
     switch (this) {
+      case HortExigenciaNutrients.moltExigent:
+        return 'Molt Exigent (Exhauridora)';
+      case HortExigenciaNutrients.mitjanamentExigent:
+        return 'Mitjanament Exigent';
+      case HortExigenciaNutrients.pocExigent:
+        return 'Poc Exigent';
       case HortExigenciaNutrients.millorant:
-        return 'Millorant (N)';
-      case HortExigenciaNutrients.consumidora:
-        return 'Consumidora';
-      case HortExigenciaNutrients.exhauridora:
-        return 'Exhauridora';
+        return 'Millorant (Fixadora N)';
     }
   }
 
   Color get color {
     switch (this) {
+      case HortExigenciaNutrients.moltExigent:
+        return Colors.red;
+      case HortExigenciaNutrients.mitjanamentExigent:
+        return Colors.orange;
+      case HortExigenciaNutrients.pocExigent:
+        return Colors.yellow.shade700;
       case HortExigenciaNutrients.millorant:
-        return Colors.green[800]!;
-      case HortExigenciaNutrients.consumidora:
-        return Colors.orange[700]!;
-      case HortExigenciaNutrients.exhauridora:
-        return Colors.red[800]!;
+        return Colors.green;
+    }
+  }
+}
+
+enum HortTipusSembra {
+  directa,
+  trasplantament;
+
+  String get label {
+    switch (this) {
+      case HortTipusSembra.directa:
+        return 'Sembra Directa';
+      case HortTipusSembra.trasplantament:
+        return 'Trasplantament';
+    }
+  }
+}
+
+enum HortGrupRotacio {
+  fruit, // C1
+  fulla, // C2
+  arrel, // C3
+  millorant; // C4
+
+  String get label {
+    switch (this) {
+      case HortGrupRotacio.fruit:
+        return 'Grup 1: Fruit (Exhauridora)';
+      case HortGrupRotacio.fulla:
+        return 'Grup 2: Fulla (Consumidora)';
+      case HortGrupRotacio.arrel:
+        return 'Grup 3: Arrel (Consumidora)';
+      case HortGrupRotacio.millorant:
+        return 'Grup 4: Millorant (Llegum)';
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case HortGrupRotacio.fruit:
+        return Colors.red;
+      case HortGrupRotacio.fulla:
+        return Colors.green;
+      case HortGrupRotacio.arrel:
+        return Colors.orange;
+      case HortGrupRotacio.millorant:
+        return Colors.purple;
+    }
+  }
+}
+
+enum HortViaMetabolica {
+  c3,
+  c4,
+  cam;
+
+  String get label {
+    switch (this) {
+      case HortViaMetabolica.c3:
+        return 'C3 (Majoritaris)';
+      case HortViaMetabolica.c4:
+        return 'C4 (Clima Càlid)';
+      case HortViaMetabolica.cam:
+        return 'CAM (Suculentes/Cactus)';
     }
   }
 }
@@ -65,21 +134,25 @@ class PlantaHort {
   final String id;
   final String nomComu;
   final String? nomCientific;
-  final String familiaBotanica; // e.g., "Solanàcies"
-  final List<String> aliats; // IDs or Names
-  final List<String> enemics; // IDs or Names
+  final String familiaBotanica;
+  final List<String> aliats;
+  final List<String> enemics;
 
   // Permaculture specific
   final HortPartComestible partComestible;
   final HortExigenciaNutrients exigenciaNutrients;
   final double distanciaPlantacio; // cm
-
   final double distanciaLinies; // cm
-
-  final String funcio; // Still useful for generic tags like "Repulsiu"
-  final String
-  marcPlantacio; // Text desc (e.g. "40x40 cm") - Keep for backwards compat or UI display
+  final String funcio;
+  final String marcPlantacio;
   final Color color;
+
+  // New Agronomic Fields
+  final double rendiment; // kg/m2
+  final int diesEnCamp; // dies cicle
+  final HortTipusSembra tipusSembra;
+  final HortGrupRotacio grupRotacio;
+  final HortViaMetabolica viaMetabolica;
 
   const PlantaHort({
     required this.id,
@@ -89,12 +162,17 @@ class PlantaHort {
     this.aliats = const [],
     this.enemics = const [],
     this.partComestible = HortPartComestible.fruit,
-    this.exigenciaNutrients = HortExigenciaNutrients.consumidora,
+    this.exigenciaNutrients = HortExigenciaNutrients.mitjanamentExigent,
     this.distanciaPlantacio = 30.0,
     this.distanciaLinies = 40.0,
     this.funcio = 'Comestible',
-    this.marcPlantacio = '30x30 cm',
+    this.marcPlantacio = '30x40 cm',
     this.color = Colors.green,
+    this.rendiment = 0.0,
+    this.diesEnCamp = 90,
+    this.tipusSembra = HortTipusSembra.trasplantament,
+    this.grupRotacio = HortGrupRotacio.fulla,
+    this.viaMetabolica = HortViaMetabolica.c3,
   });
 
   Map<String, dynamic> toMap() {
@@ -112,24 +190,42 @@ class PlantaHort {
       'funcio': funcio,
       'marcPlantacio': marcPlantacio,
       'color': color.toARGB32(),
+      'rendiment': rendiment,
+      'diesEnCamp': diesEnCamp,
+      'tipusSembra': tipusSembra.name,
+      'grupRotacio': grupRotacio.name,
+      'viaMetabolica': viaMetabolica.name,
     };
   }
 
   factory PlantaHort.fromMap(Map<String, dynamic> map, [String? id]) {
-    // Handle Enum parsing with safe defaults
-    HortPartComestible parsePart(String? val) {
-      return HortPartComestible.values.firstWhere(
+    HortPartComestible parsePart(String? val) =>
+        HortPartComestible.values.firstWhere(
+          (e) => e.name == val,
+          orElse: () => HortPartComestible.fruit,
+        );
+    HortExigenciaNutrients parseExigencia(String? val) {
+      // Legacy mapping
+      if (val == 'exhauridora') return HortExigenciaNutrients.moltExigent;
+      if (val == 'consumidora') {
+        return HortExigenciaNutrients.mitjanamentExigent;
+      }
+
+      return HortExigenciaNutrients.values.firstWhere(
         (e) => e.name == val,
-        orElse: () => HortPartComestible.fruit,
+        orElse: () => HortExigenciaNutrients.mitjanamentExigent,
       );
     }
 
-    HortExigenciaNutrients parseExigencia(String? val) {
-      return HortExigenciaNutrients.values.firstWhere(
-        (e) => e.name == val,
-        orElse: () => HortExigenciaNutrients.consumidora,
-      );
-    }
+    HortTipusSembra parseSembra(String? val) =>
+        HortTipusSembra.values.firstWhere(
+          (e) => e.name == val,
+          orElse: () => HortTipusSembra.trasplantament,
+        );
+    HortGrupRotacio parseRotacio(String? val) => HortGrupRotacio.values
+        .firstWhere((e) => e.name == val, orElse: () => HortGrupRotacio.fulla);
+    HortViaMetabolica parseVia(String? val) => HortViaMetabolica.values
+        .firstWhere((e) => e.name == val, orElse: () => HortViaMetabolica.c3);
 
     return PlantaHort(
       id: id ?? map['id'] ?? '',
@@ -143,8 +239,13 @@ class PlantaHort {
       distanciaPlantacio: (map['distanciaPlantacio'] ?? 30.0).toDouble(),
       distanciaLinies: (map['distanciaLinies'] ?? 40.0).toDouble(),
       funcio: map['funcio'] ?? 'Comestible',
-      marcPlantacio: map['marcPlantacio'] ?? '30x30 cm',
+      marcPlantacio: map['marcPlantacio'] ?? '30x40 cm',
       color: Color(map['color'] ?? 0xFF4CAF50),
+      rendiment: (map['rendiment'] ?? 0.0).toDouble(),
+      diesEnCamp: map['diesEnCamp'] ?? 90,
+      tipusSembra: parseSembra(map['tipusSembra']),
+      grupRotacio: parseRotacio(map['grupRotacio']),
+      viaMetabolica: parseVia(map['viaMetabolica']),
     );
   }
 
@@ -162,6 +263,11 @@ class PlantaHort {
     String? funcio,
     String? marcPlantacio,
     Color? color,
+    double? rendiment,
+    int? diesEnCamp,
+    HortTipusSembra? tipusSembra,
+    HortGrupRotacio? grupRotacio,
+    HortViaMetabolica? viaMetabolica,
   }) {
     return PlantaHort(
       id: id ?? this.id,
@@ -177,6 +283,11 @@ class PlantaHort {
       funcio: funcio ?? this.funcio,
       marcPlantacio: marcPlantacio ?? this.marcPlantacio,
       color: color ?? this.color,
+      rendiment: rendiment ?? this.rendiment,
+      diesEnCamp: diesEnCamp ?? this.diesEnCamp,
+      tipusSembra: tipusSembra ?? this.tipusSembra,
+      grupRotacio: grupRotacio ?? this.grupRotacio,
+      viaMetabolica: viaMetabolica ?? this.viaMetabolica,
     );
   }
 }
