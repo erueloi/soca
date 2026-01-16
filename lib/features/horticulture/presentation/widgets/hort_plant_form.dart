@@ -186,12 +186,13 @@ class _HortPlantFormState extends ConsumerState<HortPlantForm> {
 
         if (data['via_metabolica'] != null) {
           final v = data['via_metabolica'].toString().toLowerCase();
-          if (v == 'c4')
+          if (v == 'c4') {
             _viaMetabolica = HortViaMetabolica.c4;
-          else if (v == 'cam')
+          } else if (v == 'cam') {
             _viaMetabolica = HortViaMetabolica.cam;
-          else
+          } else {
             _viaMetabolica = HortViaMetabolica.c3;
+          }
         }
 
         // Parse Part Comestible
@@ -275,6 +276,12 @@ class _HortPlantFormState extends ConsumerState<HortPlantForm> {
         distanciaPlantacio: double.tryParse(_distanciaCtrl.text) ?? 30.0,
         distanciaLinies: double.tryParse(_linesCtrl.text) ?? 40.0,
         color: _color,
+        // Agronomic Data
+        rendiment: double.tryParse(_rendimentCtrl.text) ?? 0.0,
+        diesEnCamp: int.tryParse(_cicleCtrl.text) ?? 90,
+        tipusSembra: _tipusSembra,
+        viaMetabolica: _viaMetabolica,
+        grupRotacio: _calculateRotationGroup(_partComestible),
         // Preserve or default others
         aliats: aliatsList,
         enemics: enemicsList,

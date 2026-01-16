@@ -1,5 +1,9 @@
 ﻿# Release Notes
 
+## v1.7.3
+Hort: Ara es veuen la collita estimada i plantes.
+Hort: Carreguem kgm2 i cicles a cada planter.
+Petits canvis visuals en dispositus petits
 ## v1.7.2
 Hem millorat la plantació de l'hort.
 Ara carrega patrons a l'hort.
@@ -77,6 +81,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

@@ -912,7 +912,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
             physics: const NeverScrollableScrollPhysics(),
             childAspectRatio: MediaQuery.of(context).size.width > 600
                 ? 2.5
-                : 2.0,
+                : 1.5,
             mainAxisSpacing: 8,
             crossAxisSpacing: 8,
             children: [

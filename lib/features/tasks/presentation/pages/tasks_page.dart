@@ -281,82 +281,83 @@ class _TasksPageState extends ConsumerState<TasksPage> {
               onPressed: () => setState(() => _isSearching = true),
             ),
 
-          PopupMenuButton<SortMethod>(
-            icon: const Icon(Icons.sort),
-            tooltip: 'Ordenar',
-            initialValue: _sortMethod,
-            onSelected: (val) => setState(() => _sortMethod = val),
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: SortMethod.manual,
-                child: Text('Manual (Drag & Drop)'),
-              ),
-              const PopupMenuItem(
-                value: SortMethod.dateAsc,
-                child: Text('Data Límit (Ascendent)'),
-              ),
-              const PopupMenuItem(
-                value: SortMethod.dateDesc,
-                child: Text('Data Límit (Descendent)'),
-              ),
-              const PopupMenuItem(
-                value: SortMethod.createdDesc,
-                child: Text('Més recents'),
-              ),
-            ],
-          ),
-
-          IconButton(
-            icon: const Icon(Icons.history, color: Colors.blue),
-            tooltip: 'Històric de Reformes',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const TasksTimelinePage()),
-              );
-            },
-          ),
-          IconButton(
-            icon: Icon(
-              _showCompleted
-                  ? Icons.visibility_outlined
-                  : Icons.visibility_off_outlined,
+          if (!_isSearching) ...[
+            PopupMenuButton<SortMethod>(
+              icon: const Icon(Icons.sort),
+              tooltip: 'Ordenar',
+              initialValue: _sortMethod,
+              onSelected: (val) => setState(() => _sortMethod = val),
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: SortMethod.manual,
+                  child: Text('Manual (Drag & Drop)'),
+                ),
+                const PopupMenuItem(
+                  value: SortMethod.dateAsc,
+                  child: Text('Data Límit (Ascendent)'),
+                ),
+                const PopupMenuItem(
+                  value: SortMethod.dateDesc,
+                  child: Text('Data Límit (Descendent)'),
+                ),
+                const PopupMenuItem(
+                  value: SortMethod.createdDesc,
+                  child: Text('Més recents'),
+                ),
+              ],
             ),
-            tooltip: _showCompleted
-                ? 'Amagar tasques completades'
-                : 'Mostrar tasques completades',
-            onPressed: () {
-              setState(() {
-                _showCompleted = !_showCompleted;
-              });
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.view_column_outlined),
-            tooltip: 'Gestionar Columnes',
-            onPressed: _openBucketManagement,
-          ),
-          IconButton(
-            icon: const Icon(Icons.calendar_month),
-            tooltip: 'Calendari de Tasques',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const TasksCalendarPage()),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.camera_alt_outlined),
-            tooltip: 'Sincronització Analògica (OCR)',
-            onPressed: () {
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                builder: (context) => const ScanWhiteboardSheet(),
-              );
-            },
-          ),
+            IconButton(
+              icon: const Icon(Icons.history, color: Colors.blue),
+              tooltip: 'Històric de Reformes',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const TasksTimelinePage()),
+                );
+              },
+            ),
+            IconButton(
+              icon: Icon(
+                _showCompleted
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+              ),
+              tooltip: _showCompleted
+                  ? 'Amagar tasques completades'
+                  : 'Mostrar tasques completades',
+              onPressed: () {
+                setState(() {
+                  _showCompleted = !_showCompleted;
+                });
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.view_column_outlined),
+              tooltip: 'Gestionar Columnes',
+              onPressed: _openBucketManagement,
+            ),
+            IconButton(
+              icon: const Icon(Icons.calendar_month),
+              tooltip: 'Calendari de Tasques',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const TasksCalendarPage()),
+                );
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.camera_alt_outlined),
+              tooltip: 'Sincronització Analògica (OCR)',
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  builder: (context) => const ScanWhiteboardSheet(),
+                );
+              },
+            ),
+          ],
           const SizedBox(width: 8),
         ],
       ),

@@ -983,28 +983,14 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
             ),
           const SizedBox(width: 8),
 
-          // Action Buttons
+          // Undo (Keep visible)
           IconButton(
             icon: const Icon(Icons.undo),
             tooltip: 'Desfer',
             onPressed: _undoStack.isNotEmpty ? _undo : null,
           ),
 
-          // Actions depending on Tool
-          if (_selectedTool == DesignerTool.patterns)
-            IconButton(
-              icon: const Icon(Icons.auto_awesome),
-              tooltip: 'Aplicar Patrons (Auto-Omplir)',
-              onPressed: _applyPatternsToGrid,
-            ),
-
-          // Clear All (Trash) - Always Valid if not empty
-          IconButton(
-            icon: const Icon(Icons.delete_forever),
-            tooltip: 'Eliminar Tot',
-            onPressed: _placedPlants.isEmpty ? null : _clearPlants,
-          ),
-
+          // Save (Keep visible)
           IconButton(
             icon: const Icon(Icons.save),
             color: _hasChanges
@@ -1015,28 +1001,75 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
             tooltip: 'Guardar Canvis',
             onPressed: _hasChanges ? _saveChanges : null,
           ),
-          IconButton(
-            icon: const Icon(Icons.delete),
-            color: Colors.red[100],
-            tooltip: 'Eliminar Espai',
-            onPressed: () async {
-              await _confirmAndDeleteEspai(context);
+
+          // Overflow Menu
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (val) {
+              switch (val) {
+                case 'autofill':
+                  _applyPatternsToGrid();
+                  break;
+                case 'clear':
+                  _clearPlants();
+                  break;
+                case 'library':
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const HortLibraryPage()),
+                  );
+                  break;
+                case 'settings':
+                  _showSettingsDialog();
+                  break;
+                case 'delete_espai':
+                  _confirmAndDeleteEspai(context);
+                  break;
+              }
             },
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: 'Configuració',
-            onPressed: _showSettingsDialog,
-          ),
-          IconButton(
-            icon: const Icon(Icons.local_library),
-            tooltip: 'Biblioteca d\'Hort',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const HortLibraryPage()),
-              );
-            },
+            itemBuilder: (context) => [
+              if (_selectedTool == DesignerTool.patterns)
+                const PopupMenuItem(
+                  value: 'autofill',
+                  child: ListTile(
+                    leading: Icon(Icons.auto_awesome),
+                    title: Text('Auto-Omplir Patrons'),
+                  ),
+                ),
+              PopupMenuItem(
+                value: 'clear',
+                enabled: _placedPlants.isNotEmpty,
+                child: const ListTile(
+                  leading: Icon(Icons.delete_forever),
+                  title: Text('Netejar Tot'),
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'library',
+                child: ListTile(
+                  leading: Icon(Icons.local_library),
+                  title: Text("Biblioteca d'Hort"),
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'settings',
+                child: ListTile(
+                  leading: Icon(Icons.settings),
+                  title: Text('Configuració'),
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'delete_espai',
+                child: ListTile(
+                  leading: Icon(Icons.delete, color: Colors.red),
+                  title: Text(
+                    'Eliminar Espai',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1650,8 +1683,6 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
       if (!plants.any((p) => p.id == entry.key)) continue;
 
       // Area calculations
-      // Before: grid cells. Now: count * vital space?
-      // Or just sum up rect areas?
       // Real Area = sum(width * height) in cm2 => /10000 -> m2
       double plantAreaM2 = 0;
       for (var p in _placedPlants.where((p) => p.speciesId == entry.key)) {
@@ -1683,34 +1714,237 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
             Icons.scale,
             'Collita',
             '${totalHarvestKg.toStringAsFixed(1)} kg',
+            () => _showDetailedStats('harvest', plants),
           ),
-          _buildStatItem(Icons.local_florist, 'Plantes', '$totalPlants u.'),
-          _buildStatItem(Icons.timer, 'Cicle Màx', '$maxDays dies'),
+          _buildStatItem(
+            Icons.local_florist,
+            'Plantes',
+            '$totalPlants u.',
+            () => _showDetailedStats('plants', plants),
+          ),
+          _buildStatItem(
+            Icons.timer,
+            'Cicle Màx',
+            '$maxDays dies',
+            () => _showDetailedStats('cycle', plants),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildStatItem(IconData icon, String label, String value) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
+  Widget _buildStatItem(
+    IconData icon,
+    String label,
+    String value,
+    VoidCallback onTap,
+  ) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: Colors.grey[700]),
-            const SizedBox(width: 4),
+            Row(
+              children: [
+                Icon(icon, size: 16, color: Colors.grey[700]),
+                const SizedBox(width: 4),
+                Text(
+                  label,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
             Text(
-              label,
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              value,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
           ],
         ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-      ],
+      ),
+    );
+  }
+
+  void _showDetailedStats(String type, List<PlantaHort> startPlants) {
+    if (_espai.layoutConfig == null) return;
+
+    // 1. Group Data by Bed
+    final bedStats = <int, Map<String, dynamic>>{};
+    // Structure: BedIndex -> { 'name': 'Bancal 1', 'items': [ ... ] }
+
+    // Init Beds
+    for (int i = 0; i < _espai.layoutConfig!.numberOfBeds; i++) {
+      bedStats[i] = {
+        'name': _espai.layoutConfig!.beds[i]?.name ?? 'Bancal ${i + 1}',
+        'items': <String, dynamic>{}, // SpeciesId -> Value (Count/Kg/MaxDays)
+      };
+    }
+
+    // Assign Plants to Beds
+    for (var p in _placedPlants) {
+      // Find Bed
+      // p.x is center? NO, Left.
+      // Bed check logic uses meters. p.x is cm.
+      // Logic assumes plant is inside bed?
+      // Use center of plant for more robust 'belonging' check
+      double centerXCm = p.x + p.width / 2;
+      double centerXM = centerXCm / 100.0;
+      int? bedIndex = _getBedIndexFromX(centerXM);
+
+      if (bedIndex != null) {
+        final plantDef = startPlants.firstWhere(
+          (sp) => sp.id == p.speciesId,
+          orElse: () => startPlants.first,
+        );
+
+        final items = bedStats[bedIndex]!['items'] as Map<String, dynamic>;
+
+        if (type == 'harvest') {
+          // Add Kg
+          double areaM2 = (p.width * p.height) / 10000.0;
+          double kg = areaM2 * plantDef.rendiment;
+          items[p.speciesId] = (items[p.speciesId] ?? 0.0) + kg;
+        } else if (type == 'plants') {
+          // Add Count
+          items[p.speciesId] = (items[p.speciesId] ?? 0) + 1;
+        } else if (type == 'cycle') {
+          // Max Cycle
+          int currentMax = items[p.speciesId] ?? 0;
+          if (plantDef.diesEnCamp > currentMax) {
+            items[p.speciesId] = plantDef.diesEnCamp;
+          }
+        }
+      }
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          height: MediaQuery.of(context).size.height * 0.6,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Detall de ${type == 'harvest'
+                    ? 'Collita'
+                    : type == 'plants'
+                    ? 'Plantes'
+                    : 'Cicle'}',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: bedStats.length,
+                  itemBuilder: (context, index) {
+                    final bIndex = bedStats.keys.elementAt(index);
+                    final data = bedStats[bIndex]!;
+                    final items = data['items'] as Map<String, dynamic>;
+
+                    if (items.isEmpty) return const SizedBox.shrink();
+
+                    double totalBedValue = 0;
+                    if (type == 'harvest' || type == 'plants') {
+                      for (var v in items.values) {
+                        totalBedValue += (v as num).toDouble();
+                      }
+                    } else {
+                      // Max of bed
+                      for (var v in items.values) {
+                        if ((v as num) > totalBedValue) {
+                          totalBedValue = (v).toDouble();
+                        }
+                      }
+                    }
+
+                    if (totalBedValue == 0) return const SizedBox.shrink();
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  data['name'],
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                Text(
+                                  type == 'harvest'
+                                      ? '${totalBedValue.toStringAsFixed(1)} kg'
+                                      : type == 'plants'
+                                      ? '${totalBedValue.toInt()} u.'
+                                      : '${totalBedValue.toInt()} dies',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Divider(),
+                            ...items.entries.map((e) {
+                              final plant = startPlants.firstWhere(
+                                (sp) => sp.id == e.key,
+                                orElse: () => startPlants.first,
+                              );
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 4,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          plant.partComestible.icon,
+                                          size: 16,
+                                          color: plant.color,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(plant.nomComu),
+                                      ],
+                                    ),
+                                    Text(
+                                      type == 'harvest'
+                                          ? '${(e.value as double).toStringAsFixed(1)} kg'
+                                          : type == 'plants'
+                                          ? '${e.value} u.'
+                                          : '${e.value} dies',
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
