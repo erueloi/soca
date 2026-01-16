@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
+
 import '../../domain/entities/planta_hort.dart';
+import '../../domain/entities/placed_plant.dart';
 import '../../../trees/presentation/pages/location_picker_page.dart';
 
 import '../../data/repositories/hort_repository.dart';
@@ -10,6 +12,7 @@ import '../../domain/entities/garden_layout_config.dart';
 
 import '../../domain/entities/espai_hort.dart';
 import '../../domain/entities/hort_rotation_pattern.dart';
+import 'rotation_patterns_page.dart';
 
 final rotationPatternsStreamProvider =
     StreamProvider<List<HortRotationPattern>>((ref) {
@@ -24,15 +27,15 @@ class GardenDesignerPage extends ConsumerStatefulWidget {
   ConsumerState<GardenDesignerPage> createState() => _GardenDesignerPageState();
 }
 
-enum DesignerTool { plants, patterns }
+enum DesignerTool { plants, patterns, eraser }
 
 class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
   final _repository = HortRepository();
   late EspaiHort _espai;
   String? _selectedSpeciesId;
 
-  // Grid Data: "row_col" -> speciesId
-  final Map<String, String> _grid = {};
+  // New Coordinate System State
+  List<PlacedPlant> _placedPlants = [];
 
   late Stream<List<PlantaHort>> _plantsStream;
 
@@ -49,16 +52,41 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
   bool _isPaintMode = false;
   DesignerTool _selectedTool = DesignerTool.plants;
   String? _selectedPatternId; // For Pattern Tool (instead of selectedSpeciesId)
-  final Set<String> _draggedCells = {};
 
   // Dirty flag to show save button
   bool _hasChanges = false;
+
+  // Undo Stack
+  final List<List<PlacedPlant>> _undoStack = [];
+
+  void _pushUndo() {
+    // Limit stack size? e.g. 20
+    if (_undoStack.length >= 20) {
+      _undoStack.removeAt(0);
+    }
+    // Deep copy of the list (PlacedPlant is immutable so shallow list copy is fine as long as we create a new list)
+    _undoStack.add(List.from(_placedPlants));
+  }
+
+  void _undo() {
+    if (_undoStack.isEmpty) return;
+    setState(() {
+      _placedPlants = _undoStack.removeLast();
+      _hasChanges = true;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Acció desfeta'),
+        duration: Duration(milliseconds: 500),
+      ),
+    );
+  }
 
   @override
   void initState() {
     super.initState();
     _espai = widget.espai;
-    _grid.addAll(widget.espai.gridState);
+    _placedPlants = List.from(widget.espai.placedPlants);
     _plantsStream = _repository.getPlantsStream();
   }
 
@@ -75,56 +103,8 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
   // User Requirement: "Form to create new spaces (Name, Dimensions) ... then show grid".
   // So we default to "All Valid".
 
-  bool _isBed(int colIndex) {
-    if (_espai.layoutConfig == null) {
-      return true; // No config? All valid.
-    }
-
-    final config = _espai.layoutConfig!;
-    // Calculate if this colIndex corresponds to a Path
-    // X position in meters
-    final double x = colIndex * config.cellSize;
-
-    // Logic: Path | Bed | Path | Bed | Path ...
-    // Assuming starts with Path? "Formula N+1 Passadissos" implies P B P B P
-
-    // Check if within the first path
-    if (x < config.pathWidth) return false;
-
-    // Modulo arithmetic?
-    // x falls into a pattern.
-    // Shift by first path
-
-    // How many Full Segments (Bed+Path) have passed?
-    // A segment is Bed then Path.
-    // Wait, Formula N+1 Path means: Path, Bed, Path, Bed, Path.
-    // So distinct regions:
-    // [0, P) -> Path
-    // [P, P+B) -> Bed 1
-    // [P+B, 2P+B) -> Path
-    // [2P+B, 2P+2B) -> Bed 2
-    // etc.
-
-    // Let's implement robust check
-    double currentX = 0.0;
-    // Iterate until we pass x or run out of beds
-    for (int i = 0; i < config.numberOfBeds; i++) {
-      // Path before bed
-      if (x >= currentX && x < currentX + config.pathWidth) return false;
-      currentX += config.pathWidth;
-
-      // Bed
-      if (x >= currentX && x < currentX + config.bedWidth) return true;
-      currentX += config.bedWidth;
-    }
-    // Final path
-    if (x >= currentX) return false;
-
-    return false;
-  }
-
   Future<void> _saveChanges() async {
-    final updatedEspai = _espai.copyWith(gridState: _grid);
+    final updatedEspai = _espai.copyWith(placedPlants: _placedPlants);
     await ref.read(hortRepositoryProvider).saveEspai(updatedEspai);
     if (!mounted) return;
     setState(() {
@@ -136,96 +116,408 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
     );
   }
 
-  void _plantAt(int row, int col, List<PlantaHort> availablePlants) {
-    // If erasing
-    if (_selectedSpeciesId == null) {
-      if (_grid.containsKey('${row}_$col')) {
+  // --- Coordinate System Logic ---
+
+  void _handleTapOnCanvas(
+    Offset localPos,
+    double extraPadding,
+    double scale,
+    List<PlantaHort> plants,
+  ) {
+    // 1. Convert to CM (Relative coordinates in the canvas space)
+    // localPos includes padding? The detector is around the Painter?
+    // If the detector wraps custom paint, localPos is relative to the paint.
+    // We remove padding.
+    double dx = localPos.dx - extraPadding;
+    double dy = localPos.dy - extraPadding;
+
+    // Convert pixels to cm
+    // scale is pixels per meter (calculated in build as cellPixelSize / 0.2)
+    // cm = (pixels / scale) * 100
+    double xCm = (dx / scale) * 100;
+    double yCm = (dy / scale) * 100;
+
+    if (xCm < 0 || yCm < 0) return; // Margin area
+
+    // Eraser Logic
+    if (_selectedTool == DesignerTool.eraser) {
+      final index = _placedPlants.lastIndexWhere((p) {
+        final r = Rect.fromLTWH(p.x, p.y, p.width, p.height);
+        // Inflate rect slightly for easier touch
+        return r.inflate(5).contains(Offset(xCm, yCm));
+      });
+      if (index != -1) {
+        _pushUndo();
         setState(() {
-          _grid.remove('${row}_$col');
+          _placedPlants.removeAt(index);
           _hasChanges = true;
         });
       }
       return;
     }
 
-    final selected = availablePlants.firstWhere(
-      (s) => s.id == _selectedSpeciesId,
-      orElse: () => availablePlants.first,
+    // 2. Select Plant
+    if (_selectedSpeciesId == null) return;
+
+    final selected = plants.firstWhere(
+      (p) => p.id == _selectedSpeciesId,
+      orElse: () => plants.first,
     );
-    bool exists = availablePlants.any((s) => s.id == _selectedSpeciesId);
-    if (!exists) return;
 
-    // Dynamic Size Logic (Rectangular Brush)
-    // Width (Cols) = Lines Spacing (assuming lines run parallel to bed length)
-    // Height (Rows) = Plant Spacing within line
-    int widthCells = (selected.distanciaLinies / 20.0).round();
-    int heightCells = (selected.distanciaPlantacio / 20.0).round();
-    if (widthCells < 1) widthCells = 1;
-    if (heightCells < 1) heightCells = 1;
+    // 3. Dimensions
+    double pW = selected.distanciaLinies.toDouble();
+    double pH = selected.distanciaPlantacio.toDouble();
+    if (pW <= 0) pW = 30; // Safety
+    if (pH <= 0) pH = 30;
 
-    // Just loop and paint valid cells (Clipping)
-    int paintedCount = 0;
-    for (int r = 0; r < heightCells; r++) {
-      for (int c = 0; c < widthCells; c++) {
-        final tr = row + r;
-        final tc = col + c;
-        // Skip out of bounds or paths
-        if (tr >= _rows || tc >= _cols) continue;
-        if (!_isBed(tc)) continue;
+    // 4. Snapping
+    Offset snapped = _applySnapping(xCm, yCm, pW, pH);
+    double finalX = snapped.dx;
+    double finalY = snapped.dy;
 
-        final key = '${tr}_$tc';
+    // 5. Centering Logic
+    // If we snapped, we are at the top-left of the new plant.
+    // If we didn't snap, 'snapped' returned the touch point.
+    // The touch point should be the CENTER of the plant usually.
+    // If _applySnapping returns the adjusted TOP-LEFT, we use it directly.
+    // Let's refine _applySnapping to return the TOP-LEFT of the target position.
 
-        // Compatibility Check (if needed, but overwrite is standard)
+    // Check if we are in a valid bed?
+    // Conversion to meters
+    double xMeters = finalX / 100.0;
 
-        _grid[key] = selected.id;
-        if (_isPaintMode) {
-          _draggedCells.add(key);
+    // Bed Restriction (Snap to Bed Edge if in Path)
+    // Pass width in meters
+    double clampedMeters = _clampToBed(xMeters, pW / 100.0);
+    if (clampedMeters != xMeters) {
+      // We were in a path, update finalX
+      finalX = clampedMeters * 100.0;
+
+      // Show feedback? No, implicit snap is better.
+    }
+
+    // Final check just in case (e.g. margin error)
+    if (!_isBedAt(finalX / 100.0)) {
+      // Should not happen if _clampToBed works, unless logic differs.
+      // Let's trust _clampToBed.
+    }
+
+    // 6. Check Collision (Overlap)
+    final candidateRect = Rect.fromLTWH(finalX, finalY, pW, pH);
+    if (_checkCollision(candidateRect)) {
+      // Collision detected! Abort.
+      if (!_isPaintMode) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '🚫 Espai ocupat! No es pot plantar a sobre d\'una altra planta.',
+            ),
+            duration: Duration(milliseconds: 500),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Save State for Undo
+    _pushUndo(); // <--- ADDED
+
+    setState(() {
+      _placedPlants.add(
+        PlacedPlant.create(
+          speciesId: selected.id,
+          x: finalX,
+          y: finalY,
+          width: pW,
+          height: pH,
+        ),
+      );
+      _hasChanges = true;
+    });
+  }
+
+  void _handleDragInCanvas(
+    Offset localPos,
+    double extraPadding,
+    double scale,
+    List<PlantaHort> plants,
+  ) {
+    // Eraser Logic Handled Here
+    if (_selectedTool == DesignerTool.eraser) {
+      // Find plant under finger
+
+      // Convert to CM?
+      // No, _placedPlants are in CM. We need to convert touch to CM.
+      double xCm = ((localPos.dx - extraPadding) / scale) * 100;
+      double yCm = ((localPos.dy - extraPadding) / scale) * 100;
+
+      // Find intersecting plant
+      final index = _placedPlants.indexWhere((p) {
+        final pRect = Rect.fromLTWH(p.x, p.y, p.width, p.height);
+        return pRect.contains(Offset(xCm, yCm));
+      });
+
+      if (index != -1) {
+        _pushUndo();
+        setState(() {
+          _placedPlants.removeAt(index);
+          _hasChanges = true;
+        });
+        // Haptic feedback?
+      }
+      return;
+    }
+
+    if (!_isPaintMode || _selectedSpeciesId == null) return;
+
+    // We only paint if we moved enough from the last placed plant of this species/stroke
+    // But `_placedPlants` is just a list.
+    // Minimal distance logic: look at the last added plant.
+    if (_placedPlants.isEmpty) {
+      if (_selectedTool == DesignerTool.plants) {
+        _handleTapOnCanvas(localPos, extraPadding, scale, plants);
+      }
+      return;
+    }
+
+    // Check distance to last plant
+    // We want to simulate a "row".
+    // Find the last plant added?
+    // Or just check if the cursor is far enough from *any* plant?
+    // "Pintar per arrossegament: ... segellant plantes automàticament respectant marges"
+
+    double dx = localPos.dx - extraPadding;
+    double dy = localPos.dy - extraPadding;
+    double xCm = (dx / scale) * 100;
+    double yCm = (dy / scale) * 100;
+
+    final last = _placedPlants.last;
+    // Distance check (using the last plant's own spacing)
+    // Euclidean distance
+    double distSq =
+        (xCm - (last.x + last.width / 2)) * (xCm - (last.x + last.width / 2)) +
+        (yCm - (last.y + last.height / 2)) * (yCm - (last.y + last.height / 2));
+
+    // If dist > planting_distance, place.
+    // Let's use the smaller dimension or the planting distance?
+    // 'distanciaPlantacio' is usually "in row".
+
+    final selected = plants.firstWhere((p) => p.id == _selectedSpeciesId);
+    double threshold = selected.distanciaPlantacio.toDouble();
+    if (distSq >= threshold * threshold) {
+      _handleTapOnCanvas(localPos, extraPadding, scale, plants);
+    }
+  }
+
+  Offset _applySnapping(double tapX, double tapY, double width, double height) {
+    double bestX = tapX - (width / 2);
+    double bestY = tapY - (height / 2);
+
+    // 1. Grid Snapping (Background 10cm or 20cm grid)
+    // Helps with "Coherence"
+    double gridStep = _cellSize * 100; // e.g. 20cm
+    double gridX = (bestX / gridStep).round() * gridStep;
+    double gridY = (bestY / gridStep).round() * gridStep;
+
+    if ((bestX - gridX).abs() < 5.0) bestX = gridX; // 5cm threshold
+    if ((bestY - gridY).abs() < 5.0) bestY = gridY;
+
+    // 2. Neighbor Snapping (Stronger than Grid)
+    // "Magnet" effect if close to 1.5x planting frame
+
+    double thresholdX = width * 1.5;
+    double thresholdY = height * 1.5;
+
+    // We want to find the BEST neighbor snap, so we track min distance
+    double minDistX = double.infinity;
+    double minDistY = double.infinity;
+
+    for (final other in _placedPlants) {
+      double ox = other.x;
+      double oy = other.y;
+
+      // --- X Alignment ---
+      // Candidates: Same Col (ox), Next Col (ox + ow), Prev Col (ox - w)
+      List<double> candidatesX = [ox, ox + other.width, ox - width];
+
+      for (final cx in candidatesX) {
+        double dist = (bestX - cx).abs();
+        if (dist < thresholdX && dist < minDistX) {
+          // Only snap if significantly better or close enough
+          if (dist < 15.0) {
+            // Hard snap distance
+            bestX = cx;
+            minDistX = dist;
+
+            // Validate Collision for this candidate?
+            // If the snap causes collision but original TAP didn't...
+            // But we don't have TAP valid status here easily.
+            // Better to verify AFTER all bestX found, or during selection.
+            // For now, let's select best geometric match.
+            // _checkCollision at the end will block if invalid.
+            // Improvement: If 'bestX' collides, revert to tapX?
+          }
         }
-        paintedCount++;
+      }
+
+      // --- Y Alignment ---
+      // Candidates: Same Row (oy), Next Row (oy + oh), Prev Row (oy - h)
+      List<double> candidatesY = [oy, oy + other.height, oy - height];
+
+      for (final cy in candidatesY) {
+        double dist = (bestY - cy).abs();
+        if (dist < thresholdY && dist < minDistY) {
+          if (dist < 15.0) {
+            bestY = cy;
+            minDistY = dist;
+          }
+        }
       }
     }
 
-    if (paintedCount > 0) {
-      setState(() {
-        _hasChanges = true;
-      });
-    }
-  }
+    // 3. Collision Fallback
+    // If the best snapped position causes a collision, try to revert to original tap
+    // to see if that fits. Priority: Valid Position > Aligned Position.
+    final snappedRect = Rect.fromLTWH(bestX, bestY, width, height);
+    if (_checkCollision(snappedRect)) {
+      double rawX = tapX - (width / 2);
+      double rawY = tapY - (height / 2);
 
-  void _onCellTap(int row, int col, List<PlantaHort> plants) {
-    if (!_isBed(col)) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('🚫 Zona de pas (Passadís). No s\'hi pot plantar.'),
-          duration: Duration(milliseconds: 500),
-        ),
+      // Try reverting X (Keep Y snapped)
+      bool validUnsnapX = !_checkCollision(
+        Rect.fromLTWH(rawX, bestY, width, height),
       );
-      return;
+
+      // Try reverting Y (Keep X snapped)
+      bool validUnsnapY = !_checkCollision(
+        Rect.fromLTWH(bestX, rawY, width, height),
+      );
+
+      // Try reverting BOTH
+      bool validUnsnapBoth = !_checkCollision(
+        Rect.fromLTWH(rawX, rawY, width, height),
+      );
+
+      if (validUnsnapX && !validUnsnapY) {
+        bestX = rawX; // Unsnap X
+      } else if (!validUnsnapX && validUnsnapY) {
+        bestY = rawY; // Unsnap Y
+      } else if (validUnsnapBoth) {
+        // Fallback to completely unsnapped
+        bestX = rawX;
+        bestY = rawY;
+      }
     }
-    _plantAt(row, col, plants);
+
+    return Offset(bestX, bestY);
   }
 
-  void _handlePaint(
-    Offset localPos,
-    double cellPixelSize,
-    int maxRows,
-    int maxCols,
-    double padding,
-    List<PlantaHort> plants,
-  ) {
-    if (!_isPaintMode) return;
-    final dx = localPos.dx - padding;
-    final dy = localPos.dy - padding;
-    if (dx < 0 || dy < 0) return;
-    final col = (dx / cellPixelSize).floor();
-    final row = (dy / cellPixelSize).floor();
-    if (col < 0 || col >= maxCols || row < 0 || row >= maxRows) return;
-    final key = '${row}_$col';
-    if (!_draggedCells.contains(key)) {
-      _draggedCells.add(key);
-      _plantAt(row, col, plants);
+  double _clampToBed(double xMeters, double widthMeters) {
+    if (_espai.layoutConfig == null) return xMeters;
+    final config = _espai.layoutConfig!;
+
+    double currentX = 0.0;
+
+    // We want to find the BEST bed for this xMeters.
+    // If inside a bed, use that bed.
+    // If in path, use closest bed.
+
+    int closestBedIndex = -1;
+    double minDistToBe = double.infinity;
+
+    // 1. Identify Target Bed
+    for (int i = 0; i < config.numberOfBeds; i++) {
+      double pathEnd = currentX + config.pathWidth;
+      double bedStart = pathEnd;
+      double bedEnd = bedStart + config.bedWidth;
+
+      // Check containment (relaxed)
+      if (xMeters >= bedStart && xMeters <= bedEnd) {
+        closestBedIndex = i;
+        break;
+      }
+
+      // Distance to bed
+      double dist = 0;
+      if (xMeters < bedStart) {
+        dist = bedStart - xMeters;
+      } else if (xMeters > bedEnd) {
+        dist = xMeters - bedEnd;
+      }
+
+      if (dist < minDistToBe) {
+        minDistToBe = dist;
+        closestBedIndex = i;
+      }
+
+      currentX = bedEnd;
     }
+
+    if (closestBedIndex == -1) return xMeters; // Should not happen
+
+    // 2. Clamp to THAT Bed
+    currentX = 0.0;
+    // Fast forward to that bed
+    for (int i = 0; i < closestBedIndex; i++) {
+      currentX += config.pathWidth + config.bedWidth;
+    }
+
+    double bedStart = currentX + config.pathWidth;
+    double bedEnd = bedStart + config.bedWidth;
+
+    // STRICT CLAMP
+    // x must be >= bedStart
+    // x + width must be <= bedEnd -> x <= bedEnd - width
+
+    double minX = bedStart;
+    double maxX = bedEnd - widthMeters;
+
+    if (maxX < minX) {
+      // Plant is wider than bed!
+      // Center it in the bed
+      double bedCenter = bedStart + config.bedWidth / 2;
+      return bedCenter - widthMeters / 2;
+    }
+
+    if (xMeters < minX) return minX;
+    if (xMeters > maxX) return maxX;
+
+    return xMeters;
+  }
+
+  bool _isBedAt(double xMeters) {
+    if (_espai.layoutConfig == null) return true;
+    final config = _espai.layoutConfig!;
+
+    // Similar legacy logic
+    double x = xMeters;
+    double currentX = 0.0;
+    for (int i = 0; i < config.numberOfBeds; i++) {
+      // Path
+      if (x >= currentX && x < currentX + config.pathWidth) return false;
+      currentX += config.pathWidth;
+      // Bed
+      if (x >= currentX && x < currentX + config.bedWidth) return true;
+      currentX += config.bedWidth;
+    }
+    return false;
+  }
+
+  bool _checkCollision(Rect candidate) {
+    // Tweak: allow microscopic overlap?
+    // Rect.overlaps is strict.
+    // Let's shrink candidate slightly to ignore edge-touching.
+    final shrunken = candidate.deflate(0.1); // 1mm margin
+
+    for (final p in _placedPlants) {
+      final existing = Rect.fromLTWH(p.x, p.y, p.width, p.height);
+      // If overlaps
+      if (shrunken.overlaps(existing)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   Future<void> _confirmAndDeleteEspai(BuildContext context) async {
@@ -660,18 +952,19 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
           ),
           const SizedBox(width: 8),
           // Tool Selector (Plants vs Patterns)
-          if (_isPaintMode ||
-              true) // Always show or only in paint mode? User wanted unified.
+          // Tool Selector (Plants vs Patterns vs Eraser)
+          if (_isPaintMode || true)
             ToggleButtons(
               isSelected: [
                 _selectedTool == DesignerTool.plants,
                 _selectedTool == DesignerTool.patterns,
+                _selectedTool == DesignerTool.eraser, // <--- Added Eraser
               ],
               onPressed: (index) {
                 setState(() {
-                  _selectedTool = index == 0
-                      ? DesignerTool.plants
-                      : DesignerTool.patterns;
+                  if (index == 0) _selectedTool = DesignerTool.plants;
+                  if (index == 1) _selectedTool = DesignerTool.patterns;
+                  if (index == 2) _selectedTool = DesignerTool.eraser;
                 });
               },
               color: Colors.white70,
@@ -682,11 +975,22 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
               children: const [
                 Tooltip(message: 'Plantes', child: Icon(Icons.grass)),
                 Tooltip(message: 'Patrons', child: Icon(Icons.sync)),
+                Tooltip(
+                  message: 'Goma',
+                  child: Icon(Icons.cleaning_services_outlined),
+                ), // Eraser Icon
               ],
             ),
           const SizedBox(width: 8),
 
-          // Auto-Fill Action (Only for Patterns?)
+          // Action Buttons
+          IconButton(
+            icon: const Icon(Icons.undo),
+            tooltip: 'Desfer',
+            onPressed: _undoStack.isNotEmpty ? _undo : null,
+          ),
+
+          // Actions depending on Tool
           if (_selectedTool == DesignerTool.patterns)
             IconButton(
               icon: const Icon(Icons.auto_awesome),
@@ -694,12 +998,12 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
               onPressed: _applyPatternsToGrid,
             ),
 
-          if (_isPaintMode && _selectedTool == DesignerTool.plants)
-            IconButton(
-              icon: const Icon(Icons.cleaning_services),
-              tooltip: 'Netejar Tot',
-              onPressed: _clearPlants,
-            ),
+          // Clear All (Trash) - Always Valid if not empty
+          IconButton(
+            icon: const Icon(Icons.delete_forever),
+            tooltip: 'Eliminar Tot',
+            onPressed: _placedPlants.isEmpty ? null : _clearPlants,
+          ),
 
           IconButton(
             icon: const Icon(Icons.save),
@@ -755,7 +1059,8 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
           // Metrics
           final int cols = _cols;
           final int rows = _rows;
-          final double pixelsPerMeter = 50.0 / (_cellSize / 0.2);
+          // Increase resolution: Base 200px (40px per 20cm cell)
+          final double pixelsPerMeter = 200.0 / (_cellSize / 0.2);
           final double cellPixelSize = _cellSize * pixelsPerMeter;
           const double gridPadding = 64.0;
           final double contentWidth =
@@ -769,9 +1074,7 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
               Container(
                 height: 100,
                 color: Colors.grey[50], // Light background
-                child: _selectedTool == DesignerTool.plants
-                    ? _buildPlantsList(plants)
-                    : _buildPatternsList(),
+                child: _buildToolPanel(plants),
               ),
               const Divider(height: 1),
 
@@ -802,115 +1105,101 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                       constrained: false,
                       panEnabled: !_isPaintMode,
                       scaleEnabled: !_isPaintMode,
-                      child: Listener(
-                        onPointerDown: (event) {
-                          if (_isPaintMode &&
-                              _selectedTool == DesignerTool.plants) {
-                            _draggedCells.clear();
-                            _handlePaint(
-                              event.localPosition,
-                              cellPixelSize,
-                              rows,
-                              cols,
-                              gridPadding,
-                              plants,
-                            );
-                          }
-                        },
-                        onPointerMove: (event) {
-                          if (_isPaintMode &&
-                              _selectedTool == DesignerTool.plants) {
-                            _handlePaint(
-                              event.localPosition,
-                              cellPixelSize,
-                              rows,
-                              cols,
-                              gridPadding,
-                              plants,
-                            );
-                          }
-                        },
-                        child: Container(
-                          width: contentWidth,
-                          height: contentHeight,
-                          color: Colors.transparent,
-                          child: Stack(
-                            children: [
-                              Positioned.fill(
-                                child: Container(
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFFF5F5DC),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black12,
-                                        blurRadius: 20,
-                                      ),
-                                    ],
-                                  ),
-                                  child: GestureDetector(
-                                    onTapUp: (details) {
-                                      final dx =
-                                          details.localPosition.dx -
-                                          gridPadding;
-                                      final dy =
-                                          details.localPosition.dy -
-                                          gridPadding;
-                                      final c = (dx / cellPixelSize).floor();
-                                      final r = (dy / cellPixelSize).floor();
-
-                                      if (c >= 0 &&
-                                          c < cols &&
-                                          r >= 0 &&
-                                          r < rows) {
-                                        if (_isPaintMode) {
-                                          if (_selectedTool ==
-                                              DesignerTool.plants) {
-                                            _onCellTap(r, c, plants);
-                                          } else if (_selectedTool ==
-                                              DesignerTool.patterns) {
-                                            _onBedTap(c); // Or direct assign?
-                                          }
-                                        } else {
-                                          _onBedTap(
-                                            c,
-                                          ); // Always config bed if Move Mode
-                                        }
-                                      }
-                                    },
-                                    child: Consumer(
-                                      builder: (context, ref, child) {
-                                        final patterns =
-                                            ref
-                                                .watch(
-                                                  rotationPatternsStreamProvider,
-                                                )
-                                                .asData
-                                                ?.value ??
-                                            [];
-                                        return CustomPaint(
-                                          size: Size(
-                                            cols * cellPixelSize,
-                                            rows * cellPixelSize,
-                                          ),
-                                          painter: GardenGridPainter(
-                                            rows: rows,
-                                            cols: cols,
-                                            cellPixelSize: cellPixelSize,
-                                            gridState: _grid,
-                                            plants: plants,
-                                            isBed: _isBed,
-                                            layoutConfig: _espai.layoutConfig,
-                                            patterns: patterns,
-                                            padding: gridPadding,
-                                          ),
-                                        );
-                                      },
+                      child: Container(
+                        width: contentWidth,
+                        height: contentHeight,
+                        color: Colors.transparent,
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: Container(
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFF5F5DC),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black12,
+                                      blurRadius: 20,
                                     ),
+                                  ],
+                                ),
+                                child: GestureDetector(
+                                  onTapUp: (details) {
+                                    // Local Position relative to the Container (Canvas)
+                                    final localPos = details.localPosition;
+
+                                    if (_isPaintMode) {
+                                      if (_selectedTool ==
+                                              DesignerTool.plants ||
+                                          _selectedTool ==
+                                              DesignerTool.eraser) {
+                                        _handleTapOnCanvas(
+                                          localPos,
+                                          gridPadding,
+                                          pixelsPerMeter,
+                                          plants,
+                                        );
+                                      } else if (_selectedTool ==
+                                          DesignerTool.patterns) {
+                                        // Pattern assignment: check if we tapped a bed
+                                        double dx = localPos.dx - gridPadding;
+                                        double xMeters = dx / pixelsPerMeter;
+                                        _onBedTap(xMeters);
+                                      }
+                                    } else {
+                                      // Move/View Mode -> Open Config
+                                      double dx = localPos.dx - gridPadding;
+                                      double xMeters = dx / pixelsPerMeter;
+                                      _onBedTap(xMeters);
+                                    }
+                                  },
+                                  onPanUpdate:
+                                      (_isPaintMode &&
+                                          (_selectedTool ==
+                                                  DesignerTool.plants ||
+                                              _selectedTool ==
+                                                  DesignerTool.eraser))
+                                      ? (details) {
+                                          _handleDragInCanvas(
+                                            details.localPosition,
+                                            gridPadding,
+                                            pixelsPerMeter,
+                                            plants,
+                                          );
+                                        }
+                                      : null,
+                                  child: Consumer(
+                                    builder: (context, ref, child) {
+                                      final patterns =
+                                          ref
+                                              .watch(
+                                                rotationPatternsStreamProvider,
+                                              )
+                                              .asData
+                                              ?.value ??
+                                          [];
+                                      return CustomPaint(
+                                        size: Size(
+                                          cols * cellPixelSize,
+                                          rows * cellPixelSize,
+                                        ),
+                                        painter: GardenGridPainter(
+                                          rows: rows,
+                                          cols: cols,
+                                          cellPixelSize: cellPixelSize,
+                                          placedPlants: _placedPlants,
+                                          plants: plants,
+                                          isBedAt: _isBedAt,
+                                          layoutConfig: _espai.layoutConfig,
+                                          patterns: patterns,
+                                          padding: gridPadding,
+                                        ),
+                                      );
+                                    },
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
                     );
@@ -926,6 +1215,33 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
   }
 
   // --- Helpers ---
+
+  Widget _buildToolPanel(List<PlantaHort> plants) {
+    switch (_selectedTool) {
+      case DesignerTool.plants:
+        return _buildPlantsList(plants);
+      case DesignerTool.patterns:
+        return _buildPatternsList();
+      case DesignerTool.eraser:
+        return Center(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.cleaning_services_outlined, color: Colors.grey[600]),
+              const SizedBox(width: 8),
+              Text(
+                'Toca o arrossega per esborrar plantes',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 16,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        );
+    }
+  }
 
   Widget _buildPlantsList(List<PlantaHort> plants) {
     return ListView.builder(
@@ -1025,6 +1341,15 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                 onTap: () => setState(
                   () => _selectedPatternId = isSelected ? null : p.id,
                 ),
+                onLongPress: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          RotationPatternsPage(initialPatternId: p.id),
+                    ),
+                  );
+                },
                 child: Container(
                   width: 110,
                   margin: const EdgeInsets.only(right: 8),
@@ -1124,25 +1449,88 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
       }
 
       if (suggestedId != null) {
-        // Fill Bed with suggestedId
-        // Iterate all cells in garden. If cell is in bed i, paint it.
-        // This is loop heavy. Optimization: Determine Bed X range.
+        // Find plant dimensions
+        // Strategy:
+        // 1. Try Exact ID Match
+        // 2. Try Case-Insensitive Name Match
+        PlantaHort? plant;
+        try {
+          plant = _currentPlantsList.firstWhere((p) => p.id == suggestedId);
+        } catch (e) {
+          // Not found by ID, try Common Name
+          try {
+            plant = _currentPlantsList.firstWhere(
+              (p) => p.nomComu.toLowerCase() == suggestedId!.toLowerCase(),
+            );
+          } catch (e2) {
+            // Still not found
+            continue;
+          }
+        }
+
+        // Fill Bed with Smart Tiling
+        // Calculate Bed Bounds in CM
         final p = config.pathWidth;
         final b = config.bedWidth;
         final bedStartM = p + i * (b + p);
-        final bedEndM = bedStartM + b;
 
-        // Convert to cell info
-        // _plantAt logic handles individual cells. Simple loop:
-        for (int c = 0; c < _cols; c++) {
-          double cellM = c * _cellSize; // Start of cell
-          // Check overlap. Center of cell?
-          double centerM = cellM + (_cellSize / 2);
-          if (centerM >= bedStartM && centerM < bedEndM) {
-            for (int r = 0; r < _rows; r++) {
-              _grid['${r}_$c'] = suggestedId;
-              changesCount++;
-            }
+        // Start from top of bed (y=0) to bottom (totalLength)
+        // Iterate Y by plantingDistance
+        // Iterate X by linesDistance (centered in bed?)
+
+        double bedWidthCm = b * 100;
+        double bedLengthCm = config.totalLength * 100;
+        double bedStartXCm = bedStartM * 100;
+
+        double plantWCm = plant.distanciaLinies.toDouble();
+        double plantHCm = plant.distanciaPlantacio.toDouble();
+
+        // Safety check to avoid infinite loops
+        if (plantWCm <= 0) plantWCm = 30;
+        if (plantHCm <= 0) plantHCm = 30;
+
+        // Calculate Grid Dimensions
+        // Rows (Y) and Cols (X) based on spacing
+        // Standard formula: floor(BedDim / Spacing)
+        int numCols = (bedWidthCm / plantWCm).floor();
+        int numRows = (bedLengthCm / plantHCm).floor();
+
+        // Ensure at least 1 if it fits loosely (or strict?)
+        // User asked for floor logic, so if width 113 and spacing 120, result 0.
+        // But usually we can fit 1. Let's strictly follow floor for multi-row logic,
+        // but if 0 and bed > 20cm, maybe force 1?
+        // Let's stick to floor for strict standard density.
+        if (numCols == 0 && bedWidthCm > plantWCm * 0.5) numCols = 1;
+        if (numRows == 0 && bedLengthCm > plantHCm * 0.5) numRows = 1;
+
+        // Calculate Centering Offsets
+        double usedWidth = numCols * plantWCm;
+        double usedHeight = numRows * plantHCm;
+
+        double offsetX = (bedWidthCm - usedWidth) / 2;
+        double offsetY = (bedLengthCm - usedHeight) / 2;
+
+        // Fill Grid
+        for (int r = 0; r < numRows; r++) {
+          for (int c = 0; c < numCols; c++) {
+            // Absolute placement
+            double relX = offsetX + c * plantWCm;
+            double relY = offsetY + r * plantHCm;
+
+            double absX = bedStartXCm + relX;
+            double absY = relY;
+
+            // Add Plant
+            _placedPlants.add(
+              PlacedPlant.create(
+                speciesId: suggestedId,
+                x: absX,
+                y: absY,
+                width: plantWCm,
+                height: plantHCm,
+              ),
+            );
+            changesCount++;
           }
         }
       }
@@ -1178,7 +1566,7 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
       builder: (context) => AlertDialog(
         title: const Text('Netejar Plantes?'),
         content: const Text(
-          'Segur que vols eliminar totes les plantes del disseny? Aquesta acció no es pot desfer.',
+          'Segur que vols eliminar totes les plantes del disseny?',
         ),
         actions: [
           TextButton(
@@ -1194,8 +1582,9 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
     );
 
     if (confirm == true) {
+      _pushUndo(); // Support Undo
       setState(() {
-        _grid.clear();
+        _placedPlants.clear();
         _hasChanges = true;
       });
       if (mounted) {
@@ -1206,9 +1595,9 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
     }
   }
 
-  void _onBedTap(int col) {
+  void _onBedTap(double xMeters) {
     if (_espai.layoutConfig == null) return;
-    final bedIndex = _getBedIndexFromCol(col);
+    final bedIndex = _getBedIndexFromX(xMeters);
     if (bedIndex != null) {
       if (_selectedTool == DesignerTool.patterns &&
           _isPaintMode &&
@@ -1241,16 +1630,16 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
   }
 
   Widget _buildStatsPanel(List<PlantaHort> plants) {
-    if (_grid.isEmpty) return const SizedBox.shrink();
+    if (_placedPlants.isEmpty) return const SizedBox.shrink();
 
     double totalHarvestKg = 0;
-    int totalPlants = 0;
+    int totalPlants = _placedPlants.length;
     int maxDays = 0;
 
     // Group counts
     final counts = <String, int>{};
-    for (var id in _grid.values) {
-      counts[id] = (counts[id] ?? 0) + 1;
+    for (var p in _placedPlants) {
+      counts[p.speciesId] = (counts[p.speciesId] ?? 0) + 1;
     }
 
     for (var entry in counts.entries) {
@@ -1261,20 +1650,16 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
       if (!plants.any((p) => p.id == entry.key)) continue;
 
       // Area calculations
-      // Cell is 20x20cm = 0.04 m2
-      final area = entry.value * 0.04;
-      totalHarvestKg += area * plant.rendiment;
+      // Before: grid cells. Now: count * vital space?
+      // Or just sum up rect areas?
+      // Real Area = sum(width * height) in cm2 => /10000 -> m2
+      double plantAreaM2 = 0;
+      for (var p in _placedPlants.where((p) => p.speciesId == entry.key)) {
+        plantAreaM2 += (p.width * p.height) / 10000.0;
+      }
 
-      // Plant Count
-      // How many cells per plant?
-      // Size = (dist / 20).round()
-      // Cells = size * size
-      int size = (plant.distanciaPlantacio / 20.0).round();
-      if (size < 1) size = 1;
-      int cellsPerPlant = size * size;
-
-      // If cellsPerPlant is 0 (impossible), avoid div by zero.
-      totalPlants += (entry.value / cellsPerPlant).round();
+      // Rendiment is kg/m2
+      totalHarvestKg += plantAreaM2 * plant.rendiment;
 
       if (plant.diesEnCamp > maxDays) maxDays = plant.diesEnCamp;
     }
@@ -1343,13 +1728,9 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
     );
   }
 
-  int? _getBedIndexFromCol(int col) {
+  int? _getBedIndexFromX(double xMeters) {
     final config = _espai.layoutConfig;
     if (config == null) return null;
-
-    final x = col * _cellSize; // Position in meters
-    // We assume layout starts at x=0
-    // Bed i range: [path + i*(bed+path), path + i*(bed+path) + bed]
 
     final p = config.pathWidth;
     final b = config.bedWidth;
@@ -1357,7 +1738,7 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
     for (int i = 0; i < config.numberOfBeds; i++) {
       final start = p + i * (b + p);
       final end = start + b;
-      if (x >= start && x < end) {
+      if (xMeters >= start && xMeters < end) {
         return i;
       }
     }
@@ -1517,9 +1898,9 @@ class GardenGridPainter extends CustomPainter {
   final int rows;
   final int cols;
   final double cellPixelSize;
-  final Map<String, String> gridState;
+  final List<PlacedPlant> placedPlants;
   final List<PlantaHort> plants;
-  final bool Function(int col) isBed;
+  final bool Function(double xMeters) isBedAt;
   final GardenLayoutConfig? layoutConfig;
   final List<HortRotationPattern> patterns;
 
@@ -1529,9 +1910,9 @@ class GardenGridPainter extends CustomPainter {
     required this.rows,
     required this.cols,
     required this.cellPixelSize,
-    required this.gridState,
+    required this.placedPlants,
     required this.plants,
-    required this.isBed,
+    required this.isBedAt,
     this.layoutConfig,
     this.patterns = const [],
     this.padding = 0.0,
@@ -1543,194 +1924,269 @@ class GardenGridPainter extends CustomPainter {
     canvas.translate(padding, padding);
 
     final paint = Paint()..style = PaintingStyle.fill;
-    final borderPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..color = Colors.black12.withValues(alpha: 0.05)
-      ..strokeWidth = 0.5;
 
-    // Pre-calculate Icon Painters to optimize performance
-    final Map<String, TextPainter> iconPainters = {};
-    for (final plant in plants) {
-      final icon = plant.partComestible.icon;
+    // Scale factor: pixels per meter = cellPixelSize / 0.2 (assuming grid is 20cm default step)
+    // Wait, let's use the explicit conversion if we want robust 1cm precision.
+    // The grid is drawn based on rows/cols usually.
+    // Let's stick to drawing the background grid first.
+
+    // Background Grid
+    // Draw Bed backgrounds
+    // We iterate strictly over pixels or use the layout config directly?
+    // Using layout config directly is cleaner for the background.
+
+    double ppm =
+        cellPixelSize /
+        0.2; // Pixels per Meter (approx 50px if cell is 10px and size is 0.2m?)
+    // Actually cellPixelSize is passed in.
+
+    // 1. Draw Layout (Beds/Paths)
+    if (layoutConfig != null) {
+      final totalHeightM = layoutConfig!.totalLength;
+
+      // Draw total ground
+      // canvas.drawRect(Rect.fromLTWH(0, 0, totalWidthM * ppm, totalHeightM * ppm), paint..color = const Color(0xFFEFEBE9));
+
+      double currentX = 0.0;
+      for (int i = 0; i < layoutConfig!.numberOfBeds; i++) {
+        // Path
+        double pathW = layoutConfig!.pathWidth;
+        // Draw Path rect? (It's background color usually)
+        // canvas.drawRect(Rect.fromLTWH(currentX * ppm, 0, pathW * ppm, totalHeightM * ppm), paint..color = Colors.grey[200]!);
+        currentX += pathW;
+
+        // Bed
+        double bedW = layoutConfig!.bedWidth;
+        canvas.drawRect(
+          Rect.fromLTWH(currentX * ppm, 0, bedW * ppm, totalHeightM * ppm),
+          paint..color = const Color(0xFF8D6E63), // Bed Color
+        );
+
+        // Highlight pattern if exists?
+        // ...
+        currentX += bedW;
+      }
+      // Final Path?
+    } else {
+      // No layout, just one big bed? or grid
+      // paint..color = const Color(0xFF8D6E63);
+      // canvas.drawRect(Rect.fromLTWH(0,0, cols*cellPixelSize, rows*cellPixelSize), paint);
+    }
+
+    // 2. Draw Grid Lines (Reference)
+    final linePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..color = Colors.black12.withValues(alpha: 0.1)
+      ..strokeWidth = 1.0;
+
+    // Vertical lines (every cellPixelSize = 20cm)
+    for (int c = 0; c <= cols; c++) {
+      double x = c * cellPixelSize;
+      canvas.drawLine(Offset(x, 0), Offset(x, rows * cellPixelSize), linePaint);
+    }
+    // Horizontal lines
+    for (int r = 0; r <= rows; r++) {
+      double y = r * cellPixelSize;
+      canvas.drawLine(Offset(0, y), Offset(cols * cellPixelSize, y), linePaint);
+    }
+
+    // 3. Draw Plants
+    // Pre-calculate Icon Painters
+
+    // Iterate Placed Plants
+    for (final p in placedPlants) {
+      // p.x, p.y, p.width, p.height are in CM.
+      // Convert to Pixels.
+      // ppm is pixels per meter.
+      // x_px = (p.x / 100) * ppm
+
+      double xPx = (p.x / 100) * ppm;
+      double yPx = (p.y / 100) * ppm;
+      double wPx = (p.width / 100) * ppm;
+      double hPx = (p.height / 100) * ppm;
+
+      final rect = Rect.fromLTWH(xPx, yPx, wPx, hPx);
+
+      final plantDef = plants.firstWhere(
+        (pl) => pl.id == p.speciesId,
+        orElse: () => plants.first,
+      );
+
+      // 1. Area of Respect (Background)
+      // Visual feedback: Faint fill + Outline
+      final respectPaint = Paint()
+        ..style = PaintingStyle.fill
+        ..color = plantDef.color.withValues(alpha: 0.2); // Faint background
+
+      final respectBorderPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..color = plantDef.color
+            .withValues(alpha: 0.5) // Darker border
+        ..strokeWidth = 1.0;
+
+      // Draw dashed effect? Stick to solid for performance/simplicity first.
+      canvas.drawRect(rect, respectPaint);
+      canvas.drawRect(rect, respectBorderPaint);
+
+      // 2. Planting Point (Center)
+      // User request: Small tomato icon at the visual center.
+      // We use the icon from the plant definition (partComestible).
+
+      // Calculate icon size based on cell dimensions to prevent overflow
+      double minDim = wPx < hPx ? wPx : hPx;
+      double iconPixelSize = minDim * 0.6;
+
+      // Clamp slightly to avoid tiny or massive icons if zoom is extreme
+      if (iconPixelSize < 8) iconPixelSize = 8;
+      // if (iconPixelSize > 50) iconPixelSize = 50;
+
       final textSpan = TextSpan(
-        text: String.fromCharCode(icon.codePoint),
+        text: String.fromCharCode(plantDef.partComestible.icon.codePoint),
         style: TextStyle(
-          fontSize: cellPixelSize * 0.6,
-          fontFamily: icon.fontFamily,
-          color: Colors.white.withValues(alpha: 0.9),
-          fontWeight: FontWeight.bold, // Make it pop
+          fontSize: iconPixelSize,
+          fontFamily: plantDef.partComestible.icon.fontFamily,
+          color: plantDef.color.withValues(
+            alpha: 1.0,
+          ), // Solid color for the icon
+          fontWeight: FontWeight.bold,
         ),
       );
+
       final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
       tp.layout();
-      iconPainters[plant.id] = tp;
+
+      // Center exactly
+      final dx = xPx + (wPx - tp.width) / 2;
+      final dy = yPx + (hPx - tp.height) / 2;
+
+      // Draw a small white backing circle for contrast?
+      // canvas.drawCircle(Offset(xPx + wPx/2, yPx + hPx/2), iconPixelSize * 0.6, Paint()..color=Colors.white);
+
+      tp.paint(canvas, Offset(dx, dy));
     }
 
-    final config = layoutConfig;
+    // 4. Ghost / Guide Logic (Rotation Patterns & Bed Names)
+    if (layoutConfig != null) {
+      double currentX = 0.0;
+      final year = DateTime.now().year;
 
-    // ... loop starts ...
-    for (int r = 0; r < rows; r++) {
-      for (int c = 0; c < cols; c++) {
-        final left = c * cellPixelSize;
-        final top = r * cellPixelSize;
-        final rect = Rect.fromLTWH(left, top, cellPixelSize, cellPixelSize);
+      for (int i = 0; i < layoutConfig!.numberOfBeds; i++) {
+        // Path
+        currentX += layoutConfig!.pathWidth;
 
-        // Determine Bed Index
-        int? bedIndex;
-        if (config != null) {
-          final x = c * config.cellSize; // meters
-          final p = config.pathWidth;
-          final b = config.bedWidth;
+        // Bed
+        double bedW = layoutConfig!.bedWidth;
+        final bedData = layoutConfig!.beds[i];
 
-          // Optimization: Calculate directly instead of loop?
-          // Since beds are regular: Start = p + i*(b+p).
-          // We can iterate or use math. Loop is safer for small N.
-          for (int i = 0; i < config.numberOfBeds; i++) {
-            final start = p + i * (b + p);
-            final end = start + b;
-            if (x >= start && x < end) {
-              bedIndex = i;
-              break;
-            }
+        // Prepare TextSpan
+        TextSpan? labelSpan;
+
+        if (bedData != null &&
+            bedData.rotationPatternId != null &&
+            patterns.isNotEmpty) {
+          // ... Pattern Logic ...
+          final pattern = patterns.firstWhere(
+            (p) => p.id == bedData.rotationPatternId,
+            orElse: () => patterns.first,
+          );
+
+          // Determine current stage based on year
+          final startDate = bedData.rotationStartDate ?? DateTime(year, 1, 1);
+          int startYear = startDate.year;
+          int elapsedYears = year - startYear;
+          int stageIndex = elapsedYears % pattern.stages.length;
+          if (stageIndex < 0) stageIndex = 0;
+
+          final currentStage = pattern.stages[stageIndex];
+          String stageText = currentStage.label;
+          if (!stageText.toLowerCase().contains('any ') &&
+              !stageText.toLowerCase().contains('year ')) {
+            stageText = 'Any ${stageIndex + 1}: $stageText';
           }
-        } else {}
 
-        final bool isBedCell = bedIndex != null;
-
-        if (isBedCell) {
-          // Bed Background (Earthy Brown)
-          canvas.drawRect(
-            rect,
-            paint
-              ..color = const Color(0xFF8D6E63), // Brown 400 (Darker, richer)
+          labelSpan = TextSpan(
+            children: [
+              TextSpan(
+                text: '${pattern.name}\n',
+                style: TextStyle(
+                  color: Colors.black87,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              TextSpan(
+                text: '$stageText\n',
+                style: TextStyle(color: Colors.black54, fontSize: 10),
+              ),
+              TextSpan(
+                text: '(${currentStage.exigency.name})',
+                style: TextStyle(
+                  color: Colors.black45,
+                  fontSize: 9,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
           );
         } else {
-          // Path Background (Light Path/Ground)
-          canvas.drawRect(
-            rect,
-            paint..color = const Color(0xFFEFEBE9), // Brown 50 (Neutral ground)
+          // Default Label
+          labelSpan = TextSpan(
+            text: 'Bancal ${i + 1}',
+            style: TextStyle(
+              color: Colors.black87,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
           );
         }
 
-        // Plant Logic
-        final key = '${r}_$c';
-        final plantId = gridState[key];
+        // Draw Label centered in Bed (pushed down to avoid sticking out)
+        double rectX = currentX * ppm;
+        double rectW = bedW * ppm;
 
-        // 1. Draw Actual Plant
-        if (plantId != null) {
-          if (plants.any((p) => p.id == plantId)) {
-            final plant = plants.firstWhere((p) => p.id == plantId);
-            canvas.drawRect(rect, paint..color = plant.color);
+        final tp = TextPainter(
+          text: labelSpan,
+          textDirection: TextDirection.ltr,
+          textAlign: TextAlign.center,
+        );
+        tp.layout(maxWidth: rectW + 80); // Allow slightly wider
 
-            // Draw Icon
-            final tp = iconPainters[plantId];
-            if (tp != null) {
-              // Center the icon
-              final dx = left + (cellPixelSize - tp.width) / 2;
-              final dy = top + (cellPixelSize - tp.height) / 2;
-              tp.paint(canvas, Offset(dx, dy));
-            }
-          }
-        }
+        // Paint background tag ABOVE the bed
+        final tagRect = Rect.fromCenter(
+          center: Offset(rectX + rectW / 2, -35), // 35px above
+          width: tp.width + 12,
+          height: tp.height + 8,
+        );
 
-        // 2. Ghost / Guide Logic
-        if (bedIndex != null && config != null) {
-          final bedData = config.beds[bedIndex];
-          if (bedData != null && bedData.rotationPatternId != null) {
-            final pattern = patterns.firstWhere(
-              (p) => p.id == bedData.rotationPatternId,
-              orElse: () => patterns.isEmpty
-                  ? HortRotationPattern(id: '', name: '', stages: [])
-                  : patterns.first,
-            );
+        // Use a lighter color style since it's outside
+        final tagPaint = Paint()
+          ..color = Colors.white.withValues(alpha: 0.8)
+          ..style = PaintingStyle.fill;
+        final borderPaint = Paint()
+          ..color = Colors.grey.withValues(alpha: 0.5)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1;
 
-            if (pattern.stages.isNotEmpty &&
-                bedData.rotationStartDate != null) {
-              final startDate = bedData.rotationStartDate!;
-              final now = DateTime.now();
-              int monthsDiff =
-                  (now.year - startDate.year) * 12 +
-                  now.month -
-                  startDate.month;
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(tagRect, const Radius.circular(6)),
+          tagPaint,
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(tagRect, const Radius.circular(6)),
+          borderPaint,
+        );
 
-              int totalDuration = pattern.stages.fold(
-                0,
-                (s, e) => s + e.durationMonths,
-              );
+        tp.paint(canvas, tagRect.topLeft + const Offset(6, 4));
 
-              if (totalDuration > 0) {
-                int currentMonth = monthsDiff % totalDuration;
-                if (monthsDiff < 0) currentMonth = 0; // Future
-
-                HortRotationStage? currentStage;
-                int accumulated = 0;
-                for (final stage in pattern.stages) {
-                  if (currentMonth < accumulated + stage.durationMonths) {
-                    currentStage = stage;
-                    break;
-                  }
-                  accumulated += stage.durationMonths;
-                }
-
-                if (currentStage != null &&
-                    currentStage.suggestedSpeciesIds.isNotEmpty) {
-                  final suggId = currentStage.suggestedSpeciesIds.first;
-
-                  // Only draw ghost if NO plant is present
-                  if (plantId == null) {
-                    // Draw Ghost
-                    if (plants.any((p) => p.id == suggId)) {
-                      final suggPlant = plants.firstWhere(
-                        (p) => p.id == suggId,
-                      );
-                      canvas.drawRect(
-                        rect.deflate(4),
-                        paint..color = suggPlant.color.withValues(alpha: 0.3),
-                      );
-                    }
-                  }
-                  // Warning removed as requested
-                }
-              }
-            }
-          }
-        }
-
-        // Border
-        canvas.drawRect(rect, borderPaint);
+        currentX += bedW;
       }
     }
+
     canvas.restore();
   }
 
   @override
   bool shouldRepaint(covariant GardenGridPainter oldDelegate) {
-    // Re-paint if grid changes, or dimensions, or plants list update
-    if (oldDelegate.gridState != gridState) return true;
-    if (oldDelegate.cellPixelSize != cellPixelSize) return true;
-    if (oldDelegate.rows != rows || oldDelegate.cols != cols) return true;
-    // Deep check depends on map identity. `_grid` is mutated or replaced?
-    // In `_plantAt` we mutate `_grid` but we call `setState`.
-    // If we passed the SAME map instance, `!=` checks reference equality.
-    // `_grid` is final in state? No, it's `Map<String, String> _grid = {}`.
-    // In `_plantAt`: `_grid['...'] = ...`. Reference is same.
-    // So `oldDelegate.gridState != gridState` might contain same ref.
-    // CustomPainter usually repaints if parameters change.
-    // We should pass a *copy* or force repaint?
-    // Or just return true?
-    // Usually efficient to return true only if needed.
-    // But since we mutate the map in place, CustomPainter might think it's same.
-    // Workaround: Pass `gridState.length` or a version/hash?
-    // Or just return true? Canvas drawing is fast enough.
-    // Let's rely on Flutter passing a new instance of Painter on build,
-    // BUT the properties inside might be same ref.
-    // Actually, `shouldRepaint` compares the *old delegate*.
-    // If we create a NEW delegate instance every build (which we do),
-    // `oldDelegate` is the previous one.
-    // If `gridState` is the SAME object, `!=` is false.
-    // So we need to detect content change.
-    // Simplest: Pass a `changeToken` or similar (e.g. `_grid.length` + `_grid.keys.last` hash?).
-    // Or just always return true for now? It's cleaner than stale UI.
-    return true;
+    return true; // Simplified for now
   }
 }

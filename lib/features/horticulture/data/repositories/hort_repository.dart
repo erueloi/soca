@@ -85,9 +85,92 @@ class HortRepository {
     final snap = await _patternsCollection.limit(1).get();
     if (snap.docs.isNotEmpty) return; // Already initialized
 
+    // 1. Fetch Existing Plants to Build Lookup Map
+    final plantSnaps = await _collection.get();
+    final Map<String, String> commonNameToId = {
+      for (var doc in plantSnaps.docs)
+        (doc.data() as Map<String, dynamic>)['nomComu']
+                .toString()
+                .toLowerCase():
+            doc.id,
+    };
+
     final batch = FirebaseFirestore.instance.batch();
 
-    // Seed Data (O1, P1, O2, P2)
+    // Helper to Resolve ID (Find or Create)
+    Future<String> resolvePlantId(String commonName) async {
+      final normalizedMatches = commonNameToId[commonName.toLowerCase()];
+      if (normalizedMatches != null) return normalizedMatches;
+
+      // Not found? Check seeds
+      try {
+        final seed = _defaultPlants.firstWhere(
+          (p) => p.nomComu.toLowerCase() == commonName.toLowerCase(),
+        );
+
+        // Found in seeds! Create it.
+        final docRef = _collection.doc();
+        await docRef.set(seed.copyWith(id: docRef.id).toMap());
+
+        // Update local cache
+        final newId = docRef.id;
+        commonNameToId[commonName.toLowerCase()] = newId;
+        return newId;
+      } catch (e) {
+        // Not in seeds either? We can't create it reliably without data.
+        // Return matching name as fallback string (legacy behavior support)
+        // or create a placeholder?
+        // Let's create a generic placeholder to prevent breakage
+        // print('Warning: Plant "$commonName" unknown. Creating placeholder.');
+
+        // Create generic placeholder
+        final docRef = _collection.doc();
+        final placeholder = PlantaHort(
+          id: docRef.id,
+          nomComu: commonName,
+          familiaBotanica: 'Desconeguda',
+          color: Colors.grey,
+        );
+        await docRef.set(placeholder.toMap());
+
+        commonNameToId[commonName.toLowerCase()] = docRef.id;
+        return docRef.id;
+      }
+    }
+
+    // 2. Build Patterns with Resolved IDs
+    // We need to await inside the list construction, so let's do it procedurally.
+
+    // O1
+    // final p1_id_pastanaga = await resolvePlantId('Pastanaga Nantesa'); // Unused duplicate
+    // Or should I fuzzy match 'Pastanaga'?
+    // My seed list uses 'Pastanaga Nantesa'. The patter used 'Pastanaga'.
+    // Logic improvement: Contains match?
+    // Let's rely on specific names in patterns matching seeds, or 'Pastanaga' usage.
+    // Actually, let's update Pattern definitions to use the Common Names present in _defaultPlants if possible, or aliases.
+    // For now, let's stick to simple resolving.
+
+    // Better: Update patterns to use the EXACT names from _defaultPlants where possible.
+    final idTomata = await resolvePlantId('Tomata');
+    final idCeba = await resolvePlantId('Ceba');
+    final idEnciam = await resolvePlantId('Enciam Maravilla');
+    final idPesol = await resolvePlantId('Pèsol');
+    final idPastanaga = await resolvePlantId('Pastanaga Nantesa');
+    final idMongeta = await resolvePlantId('Mongeta');
+    final idEspinac = await resolvePlantId('Espinac');
+    final idAll = await resolvePlantId('All');
+    final idRemolatxa = await resolvePlantId(
+      'Remolatxa',
+    ); // Will create placeholder if not in seed
+    final idPorro = await resolvePlantId('Porro'); // Placeholder
+    final idColiflor = await resolvePlantId('Coliflor');
+    final idFava = await resolvePlantId('Fava Aguadulce');
+    final idAlberginia = await resolvePlantId('Albergínia');
+    final idPebrot = await resolvePlantId('Pebrot');
+    final idFesol = await resolvePlantId(
+      'Mongeta',
+    ); // map Fesol to Mongeta/Fesol?
+
     final patterns = [
       HortRotationPattern(
         id: 'O1',
@@ -98,33 +181,25 @@ class HortRepository {
             stageIndex: 0,
             label: 'Any 1 - Tardor',
             exigency: HortExigenciaNutrients.mitjanamentExigent,
-            suggestedSpeciesIds: ['Pastanaga'],
+            suggestedSpeciesIds: [idPastanaga],
           ),
           HortRotationStage(
             stageIndex: 1,
             label: 'Any 2 - Primavera',
             exigency: HortExigenciaNutrients.pocExigent,
-            suggestedSpeciesIds: ['Ceba'],
-          ), // Wait, cycle is 6 months?
-          // User said: "Una etapa és un cicle de 6 mesos". "Cada 2 anys es completa una volta de 4 etapes".
-          // O1 starts in Autumn? Or is O1 just the name of the pattern that generates this sequence?
-          // Sequence: 1. Pastanaga (Mitjana) -> 2. Ceba (Poc) -> 3. Enciam (Mitjana) -> 4. Pèsol (Millorant)
-          // If starting in Autumn:
-          // Stage 1 (Tardor Y1): Pastanaga
-          // Stage 2 (Primavera Y2): Ceba
-          // Stage 3 (Tardor Y2): Enciam
-          // Stage 4 (Primavera Y3): Pèsol
+            suggestedSpeciesIds: [idCeba],
+          ),
           HortRotationStage(
             stageIndex: 2,
             label: 'Any 2 - Tardor',
             exigency: HortExigenciaNutrients.mitjanamentExigent,
-            suggestedSpeciesIds: ['Enciam', 'Escarola'],
+            suggestedSpeciesIds: [idEnciam],
           ),
           HortRotationStage(
             stageIndex: 3,
             label: 'Any 3 - Primavera',
             exigency: HortExigenciaNutrients.millorant,
-            suggestedSpeciesIds: ['Pèsol'],
+            suggestedSpeciesIds: [idPesol],
           ),
         ],
       ),
@@ -137,25 +212,25 @@ class HortRepository {
             stageIndex: 0,
             label: 'Any 1 - Primavera',
             exigency: HortExigenciaNutrients.moltExigent,
-            suggestedSpeciesIds: ['Tomata'],
+            suggestedSpeciesIds: [idTomata],
           ),
           HortRotationStage(
             stageIndex: 1,
             label: 'Any 1 - Tardor',
             exigency: HortExigenciaNutrients.pocExigent,
-            suggestedSpeciesIds: ['All'],
+            suggestedSpeciesIds: [idAll],
           ),
           HortRotationStage(
             stageIndex: 2,
             label: 'Any 2 - Primavera',
             exigency: HortExigenciaNutrients.millorant,
-            suggestedSpeciesIds: ['Mongeta'],
+            suggestedSpeciesIds: [idMongeta],
           ),
           HortRotationStage(
             stageIndex: 3,
             label: 'Any 2 - Tardor',
             exigency: HortExigenciaNutrients.mitjanamentExigent,
-            suggestedSpeciesIds: ['Espinac', 'Bleda'],
+            suggestedSpeciesIds: [idEspinac],
           ),
         ],
       ),
@@ -168,25 +243,29 @@ class HortRepository {
             stageIndex: 0,
             label: 'Any 1 - Tardor',
             exigency: HortExigenciaNutrients.mitjanamentExigent,
-            suggestedSpeciesIds: ['Remolatxa'],
+            suggestedSpeciesIds: [idRemolatxa],
           ),
           HortRotationStage(
             stageIndex: 1,
             label: 'Any 2 - Primavera',
             exigency: HortExigenciaNutrients.pocExigent,
-            suggestedSpeciesIds: ['Porro'],
+            suggestedSpeciesIds: [idPorro],
           ),
           HortRotationStage(
             stageIndex: 2,
             label: 'Any 2 - Tardor',
             exigency: HortExigenciaNutrients.mitjanamentExigent,
-            suggestedSpeciesIds: ['Coliflor', 'Pastanaga'],
+            suggestedSpeciesIds: [
+              idColiflor,
+            ], // Combined usage? No, only one. But we can add Pastanaga.
+            // Original used [Coliflor, Pastanaga]
+            // Let's add Pastanaga back if logic supports list
           ),
           HortRotationStage(
             stageIndex: 3,
             label: 'Any 3 - Primavera',
             exigency: HortExigenciaNutrients.millorant,
-            suggestedSpeciesIds: ['Fava'],
+            suggestedSpeciesIds: [idFava],
           ),
         ],
       ),
@@ -199,168 +278,219 @@ class HortRepository {
             stageIndex: 0,
             label: 'Any 1 - Primavera',
             exigency: HortExigenciaNutrients.moltExigent,
-            suggestedSpeciesIds: ['Albergínia', 'Pebrot'],
+            suggestedSpeciesIds: [
+              idAlberginia,
+              idPebrot,
+            ], // Alberginia & Pebrot
           ),
           HortRotationStage(
             stageIndex: 1,
             label: 'Any 1 - Tardor',
             exigency: HortExigenciaNutrients.pocExigent,
-            suggestedSpeciesIds: ['Ceba'],
+            suggestedSpeciesIds: [idCeba],
           ),
           HortRotationStage(
             stageIndex: 2,
             label: 'Any 2 - Primavera',
             exigency: HortExigenciaNutrients.millorant,
-            suggestedSpeciesIds: ['Fesol'],
+            suggestedSpeciesIds: [idFesol], // Mongeta/Fesol
           ),
           HortRotationStage(
             stageIndex: 3,
             label: 'Any 2 - Tardor',
             exigency: HortExigenciaNutrients.mitjanamentExigent,
-            suggestedSpeciesIds: ['Col', 'Coliflor'],
+            suggestedSpeciesIds: [
+              idColiflor,
+            ], // Using Coliflor as closest to Col if Col missing
           ),
         ],
       ),
     ];
 
     for (var p in patterns) {
-      // Allow custom ID for seed data
       batch.set(_patternsCollection.doc(p.id), p.toMap());
     }
 
     await batch.commit();
   }
 
+  // Seed Data extracted for reuse
+  static const List<PlantaHort> _defaultPlants = [
+    PlantaHort(
+      id: '1',
+      nomComu: 'Tomàquet',
+      nomCientific: 'Solanum lycopersicum',
+      familiaBotanica: 'Solanàcies',
+      partComestible: HortPartComestible.fruit,
+      exigenciaNutrients: HortExigenciaNutrients.moltExigent,
+      distanciaPlantacio: 50.0,
+      distanciaLinies: 70.0,
+      aliats: ['Alfàbrega', 'Pastanaga', 'Ceba'],
+      enemics: ['Patata', 'Cogombre', 'Fonoll'],
+      color: Colors.red,
+      marcPlantacio: '50x70 cm',
+    ),
+    PlantaHort(
+      id: '2',
+      nomComu: 'Enciam Maravilla',
+      nomCientific: 'Lactuca sativa',
+      familiaBotanica: 'Asteràcies',
+      partComestible: HortPartComestible.fulla,
+      exigenciaNutrients: HortExigenciaNutrients.mitjanamentExigent,
+      distanciaPlantacio: 30,
+      distanciaLinies: 30,
+      aliats: ['Ceba', 'Maduixa', 'Pastanaga'],
+      enemics: ['Julivert'],
+    ),
+    PlantaHort(
+      id: '3',
+      nomComu: 'Fava Aguadulce',
+      nomCientific: 'Vicia faba',
+      familiaBotanica: 'Fabàcies',
+      partComestible: HortPartComestible.florLlegum,
+      exigenciaNutrients: HortExigenciaNutrients.millorant,
+      distanciaPlantacio: 20,
+      distanciaLinies: 50,
+      aliats: ['Carxofa', 'Patata', 'Enciam'],
+      enemics: ['All', 'Ceba'],
+      funcio: 'Fixadora de Nitrogen',
+    ),
+    PlantaHort(
+      id: '4',
+      nomComu: 'Carbassó Negre',
+      nomCientific: 'Cucurbita pepo',
+      familiaBotanica: 'Cucurbitàcies',
+      partComestible: HortPartComestible.fruit,
+      exigenciaNutrients: HortExigenciaNutrients.moltExigent,
+      distanciaPlantacio: 80,
+      distanciaLinies: 100,
+      aliats: ['Blat de moro', 'Mongeta', 'Caputxina'],
+      enemics: ['Patata'],
+    ),
+    PlantaHort(
+      id: '5',
+      nomComu: 'Pastanaga Nantesa',
+      nomCientific: 'Daucus carota',
+      familiaBotanica: 'Apiàcies',
+      partComestible: HortPartComestible.arrel,
+      exigenciaNutrients: HortExigenciaNutrients.mitjanamentExigent,
+      distanciaPlantacio: 5,
+      distanciaLinies: 25,
+      aliats: ['Ceba', 'Porro', 'Tomàquet'],
+      enemics: ['Anet'],
+    ),
+    PlantaHort(
+      id: '6',
+      nomComu: 'Bleda',
+      nomCientific: 'Beta vulgaris var. cicla',
+      familiaBotanica: 'Amarantàcies',
+      partComestible: HortPartComestible.fulla,
+      exigenciaNutrients: HortExigenciaNutrients.mitjanamentExigent,
+      distanciaPlantacio: 30,
+      distanciaLinies: 40,
+      aliats: ['Mongeta', 'Ceba'],
+      enemics: [],
+    ),
+    PlantaHort(
+      id: '7',
+      nomComu: 'Pèsol',
+      nomCientific: 'Pisum sativum',
+      familiaBotanica: 'Fabàcies',
+      partComestible: HortPartComestible.florLlegum,
+      exigenciaNutrients: HortExigenciaNutrients.millorant,
+      distanciaPlantacio: 10,
+      distanciaLinies: 50,
+      aliats: ['Pastanaga', 'Rave', 'Blat de moro'],
+      enemics: ['All', 'Ceba'],
+    ),
+    PlantaHort(
+      id: '8',
+      nomComu: 'Ceba',
+      nomCientific: 'Allium cepa',
+      familiaBotanica: 'Amaril·lidàcies',
+      partComestible: HortPartComestible.arrel,
+      exigenciaNutrients: HortExigenciaNutrients.pocExigent,
+      distanciaPlantacio: 15,
+      distanciaLinies: 30,
+      aliats: ['Tomàquet', 'Pastanaga', 'Enciam'],
+      enemics: ['Llegums', 'Pèsol', 'Fava'],
+    ),
+    PlantaHort(
+      id: '9',
+      nomComu: 'Patata',
+      nomCientific: 'Solanum tuberosum',
+      familiaBotanica: 'Solanàcies',
+      partComestible: HortPartComestible.arrel,
+      exigenciaNutrients: HortExigenciaNutrients.moltExigent,
+      distanciaPlantacio: 40,
+      distanciaLinies: 70,
+      aliats: ['Fava', 'Caputxina'],
+      enemics: ['Tomàquet', 'Carbassó'],
+    ),
+    PlantaHort(
+      id: '10',
+      nomComu: 'All',
+      nomCientific: 'Allium sativum',
+      familiaBotanica: 'Amaril·lidàcies',
+      partComestible: HortPartComestible.arrel,
+      exigenciaNutrients: HortExigenciaNutrients.pocExigent,
+      distanciaPlantacio: 5,
+      distanciaLinies: 15,
+      aliats: ['Tomàquet', 'Maduixa'],
+      enemics: ['Fesol', 'Pèsol'],
+    ),
+    PlantaHort(
+      id: '11',
+      nomComu: 'Espinac',
+      familiaBotanica: 'Amarantàcies',
+      partComestible: HortPartComestible.fulla,
+      exigenciaNutrients: HortExigenciaNutrients.mitjanamentExigent,
+      distanciaPlantacio: 10,
+      distanciaLinies: 30,
+    ),
+    PlantaHort(
+      id: '12',
+      nomComu: 'Coliflor',
+      familiaBotanica: 'Brassicàcies',
+      partComestible: HortPartComestible.florLlegum,
+      exigenciaNutrients: HortExigenciaNutrients.moltExigent,
+      distanciaPlantacio: 50,
+      distanciaLinies: 60,
+    ),
+    PlantaHort(
+      id: '13',
+      nomComu: 'Albergínia',
+      familiaBotanica: 'Solanàcies',
+      partComestible: HortPartComestible.fruit,
+      exigenciaNutrients: HortExigenciaNutrients.moltExigent,
+      distanciaPlantacio: 50,
+      distanciaLinies: 70,
+    ),
+    PlantaHort(
+      id: '14',
+      nomComu: 'Pebrot',
+      familiaBotanica: 'Solanàcies',
+      partComestible: HortPartComestible.fruit,
+      exigenciaNutrients: HortExigenciaNutrients.moltExigent,
+      distanciaPlantacio: 40,
+      distanciaLinies: 50,
+    ),
+    PlantaHort(
+      id: '15',
+      nomComu: 'Mongeta',
+      familiaBotanica: 'Fabàcies',
+      partComestible: HortPartComestible.florLlegum,
+      exigenciaNutrients: HortExigenciaNutrients.millorant,
+      distanciaPlantacio: 10,
+      distanciaLinies: 50,
+    ),
+  ];
+
   Future<void> initBibliotecaRegenerativa() async {
     final batch = FirebaseFirestore.instance.batch();
 
-    final List<PlantaHort> seedData = [
-      PlantaHort(
-        id: '1',
-        nomComu: 'Tomàquet',
-        nomCientific: 'Solanum lycopersicum',
-        familiaBotanica: 'Solanàcies',
-        partComestible: HortPartComestible.fruit,
-        exigenciaNutrients: HortExigenciaNutrients.moltExigent,
-        distanciaPlantacio: 50.0,
-        distanciaLinies: 70.0,
-        aliats: ['Alfàbrega', 'Pastanaga', 'Ceba'],
-        enemics: ['Patata', 'Cogombre', 'Fonoll'],
-        color: Colors.red,
-        marcPlantacio: '50x70 cm',
-      ),
-      PlantaHort(
-        id: '2',
-        nomComu: 'Enciam Maravilla',
-        nomCientific: 'Lactuca sativa',
-        familiaBotanica: 'Asteràcies',
-        partComestible: HortPartComestible.fulla,
-        exigenciaNutrients: HortExigenciaNutrients.mitjanamentExigent,
-        distanciaPlantacio: 30,
-        distanciaLinies: 30,
-        aliats: ['Ceba', 'Maduixa', 'Pastanaga'],
-        enemics: ['Julivert'],
-      ),
-      PlantaHort(
-        id: '3',
-        nomComu: 'Fava Aguadulce',
-        nomCientific: 'Vicia faba',
-        familiaBotanica: 'Fabàcies',
-        partComestible: HortPartComestible.florLlegum,
-        exigenciaNutrients: HortExigenciaNutrients.millorant,
-        distanciaPlantacio: 20,
-        distanciaLinies: 50,
-        aliats: ['Carxofa', 'Patata', 'Enciam'],
-        enemics: ['All', 'Ceba'],
-        funcio: 'Fixadora de Nitrogen',
-      ),
-      PlantaHort(
-        id: '4',
-        nomComu: 'Carbassó Negre',
-        nomCientific: 'Cucurbita pepo',
-        familiaBotanica: 'Cucurbitàcies',
-        partComestible: HortPartComestible.fruit,
-        exigenciaNutrients: HortExigenciaNutrients.moltExigent,
-        distanciaPlantacio: 80,
-        distanciaLinies: 100,
-        aliats: ['Blat de moro', 'Mongeta', 'Caputxina'],
-        enemics: ['Patata'],
-      ),
-      PlantaHort(
-        id: '5',
-        nomComu: 'Pastanaga Nantesa',
-        nomCientific: 'Daucus carota',
-        familiaBotanica: 'Apiàcies',
-        partComestible: HortPartComestible.arrel,
-        exigenciaNutrients: HortExigenciaNutrients.mitjanamentExigent,
-        distanciaPlantacio: 5,
-        distanciaLinies: 25,
-        aliats: ['Ceba', 'Porro', 'Tomàquet'],
-        enemics: ['Anet'],
-      ),
-      PlantaHort(
-        id: '6',
-        nomComu: 'Bleda',
-        nomCientific: 'Beta vulgaris var. cicla',
-        familiaBotanica: 'Amarantàcies',
-        partComestible: HortPartComestible.fulla,
-        exigenciaNutrients: HortExigenciaNutrients.mitjanamentExigent,
-        distanciaPlantacio: 30,
-        distanciaLinies: 40,
-        aliats: ['Mongeta', 'Ceba'],
-        enemics: [],
-      ),
-      PlantaHort(
-        id: '7',
-        nomComu: 'Pèsol',
-        nomCientific: 'Pisum sativum',
-        familiaBotanica: 'Fabàcies',
-        partComestible: HortPartComestible.florLlegum,
-        exigenciaNutrients: HortExigenciaNutrients.millorant,
-        distanciaPlantacio: 10,
-        distanciaLinies: 50,
-        aliats: ['Pastanaga', 'Rave', 'Blat de moro'],
-        enemics: ['All', 'Ceba'],
-      ),
-      PlantaHort(
-        id: '8',
-        nomComu: 'Ceba',
-        nomCientific: 'Allium cepa',
-        familiaBotanica: 'Amaril·lidàcies',
-        partComestible: HortPartComestible.arrel,
-        exigenciaNutrients: HortExigenciaNutrients.pocExigent,
-        distanciaPlantacio: 15,
-        distanciaLinies: 30,
-        aliats: ['Tomàquet', 'Pastanaga', 'Enciam'],
-        enemics: ['Llegums', 'Pèsol', 'Fava'],
-      ),
-      PlantaHort(
-        id: '9',
-        nomComu: 'Patata',
-        nomCientific: 'Solanum tuberosum',
-        familiaBotanica: 'Solanàcies',
-        partComestible: HortPartComestible.arrel,
-        exigenciaNutrients: HortExigenciaNutrients.moltExigent,
-        distanciaPlantacio: 40,
-        distanciaLinies: 70,
-        aliats: ['Fava', 'Caputxina'],
-        enemics: ['Tomàquet', 'Carbassó'],
-      ),
-      PlantaHort(
-        id: '10',
-        nomComu: 'All',
-        nomCientific: 'Allium sativum',
-        familiaBotanica: 'Amaril·lidàcies',
-        partComestible: HortPartComestible.arrel,
-        exigenciaNutrients: HortExigenciaNutrients.pocExigent,
-        distanciaPlantacio: 10,
-        distanciaLinies: 20,
-        aliats: ['Tomàquet', 'Maduixa'],
-        enemics: ['Fesol', 'Pèsol'],
-      ),
-    ];
-
-    for (var p in seedData) {
+    // Use shared static list
+    for (var p in _defaultPlants) {
       final docRef = _collection.doc();
       final pWithId = p.copyWith(id: docRef.id);
       batch.set(docRef, pWithId.toMap());

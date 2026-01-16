@@ -167,7 +167,34 @@ class _HortPlantFormState extends ConsumerState<HortPlantForm> {
           _enemicsCtrl.text = (data['enemics'] as List).join(', ');
         }
 
+        if (data['rendiment'] != null) {
+          _rendimentCtrl.text = data['rendiment'].toString();
+        }
+        if (data['dies_cicle'] != null) {
+          _cicleCtrl.text = data['dies_cicle'].toString();
+        }
+
         // Parse Enums
+        if (data['tipus_sembra'] != null) {
+          final s = data['tipus_sembra'].toString().toLowerCase();
+          if (s.contains('direct')) {
+            _tipusSembra = HortTipusSembra.directa;
+          } else {
+            _tipusSembra = HortTipusSembra.trasplantament;
+          }
+        }
+
+        if (data['via_metabolica'] != null) {
+          final v = data['via_metabolica'].toString().toLowerCase();
+          if (v == 'c4')
+            _viaMetabolica = HortViaMetabolica.c4;
+          else if (v == 'cam')
+            _viaMetabolica = HortViaMetabolica.cam;
+          else
+            _viaMetabolica = HortViaMetabolica.c3;
+        }
+
+        // Parse Part Comestible
         if (data['part_comestible'] != null) {
           final p = data['part_comestible'].toString().toLowerCase();
           if (p.contains('fruit')) {
@@ -203,7 +230,11 @@ class _HortPlantFormState extends ConsumerState<HortPlantForm> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Dades màgiques aplicades! ✨')),
+          const SnackBar(
+            content: Text(
+              'Dades agronòmiques estimades per a Lleida (DARP)! 🚜',
+            ),
+          ),
         );
       }
     } catch (e) {

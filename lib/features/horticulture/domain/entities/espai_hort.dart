@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'garden_layout_config.dart';
 import 'package:latlong2/latlong.dart';
+import 'placed_plant.dart';
 
 class EspaiHort {
   final String id;
@@ -15,7 +16,10 @@ class EspaiHort {
 
   // Grid properties
   final double gridCellSize;
-  final Map<String, String> gridState; // "row_col": "speciesId"
+  final Map<String, String> gridState; // Legacy: "row_col": "speciesId"
+
+  // New Coordinate System
+  final List<PlacedPlant> placedPlants;
 
   // Layout Configuration (Beds/Paths)
   final GardenLayoutConfig? layoutConfig;
@@ -29,6 +33,7 @@ class EspaiHort {
     this.rotationAngle = 0.0,
     this.gridCellSize = 0.2, // 20cm default
     this.gridState = const {},
+    this.placedPlants = const [],
     this.layoutConfig,
   });
 
@@ -42,7 +47,7 @@ class EspaiHort {
       'rotationAngle': rotationAngle,
       'gridCellSize': gridCellSize,
       'gridState': gridState,
-
+      'placedPlants': placedPlants.map((e) => e.toMap()).toList(),
       'layoutConfig': layoutConfig?.toMap(),
     };
   }
@@ -58,7 +63,7 @@ class EspaiHort {
       'rotationAngle': rotationAngle,
       'gridCellSize': gridCellSize,
       'gridState': gridState,
-
+      'placedPlants': placedPlants.map((e) => e.toMap()).toList(),
       'layoutConfig': layoutConfig?.toMap(),
     };
   }
@@ -89,6 +94,11 @@ class EspaiHort {
       rotationAngle: (map['rotationAngle'] as num?)?.toDouble() ?? 0.0,
       gridCellSize: (map['gridCellSize'] as num?)?.toDouble() ?? 0.2,
       gridState: parsedGrid,
+      placedPlants: map['placedPlants'] != null
+          ? (map['placedPlants'] as List)
+                .map((e) => PlacedPlant.fromMap(e))
+                .toList()
+          : [],
       layoutConfig: map['layoutConfig'] != null
           ? GardenLayoutConfig.fromMap(
               Map<String, dynamic>.from(map['layoutConfig']),
@@ -105,6 +115,7 @@ class EspaiHort {
     double? rotationAngle,
     double? gridCellSize,
     Map<String, String>? gridState,
+    List<PlacedPlant>? placedPlants,
     GardenLayoutConfig? layoutConfig,
   }) {
     return EspaiHort(
@@ -116,6 +127,7 @@ class EspaiHort {
       rotationAngle: rotationAngle ?? this.rotationAngle,
       gridCellSize: gridCellSize ?? this.gridCellSize,
       gridState: gridState ?? this.gridState,
+      placedPlants: placedPlants ?? this.placedPlants,
       layoutConfig: layoutConfig ?? this.layoutConfig,
     );
   }

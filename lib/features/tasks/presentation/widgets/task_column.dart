@@ -117,19 +117,21 @@ class TaskColumn extends StatelessWidget {
                             right: 0,
                             top: 0,
                             bottom: 0,
-                            child: ReorderableDragStartListener(
-                              index: index,
-                              child: Container(
-                                width: 30,
-                                color: Colors.transparent,
-                                alignment: Alignment.center,
-                                child: const Icon(
-                                  Icons.drag_indicator,
-                                  color: Colors.grey,
-                                  size: 20,
-                                ),
-                              ),
-                            ),
+                            child: onReorder != null
+                                ? ReorderableDragStartListener(
+                                    index: index,
+                                    child: Container(
+                                      width: 30,
+                                      color: Colors.transparent,
+                                      alignment: Alignment.center,
+                                      child: const Icon(
+                                        Icons.drag_indicator,
+                                        color: Colors.grey,
+                                        size: 20,
+                                      ),
+                                    ),
+                                  )
+                                : const SizedBox(width: 30),
                           ),
                         ],
                       ),

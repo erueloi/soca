@@ -1,5 +1,9 @@
 ﻿# Release Notes
 
+## v1.7.2
+Hem millorat la plantació de l'hort.
+Ara carrega patrons a l'hort.
+Les tasques es poden buscar i ordenar.
 ## v1.7.1
 Modificacions per anar creant el dissenyador de l'hort.
 Bancals, files, patrons, planter, etc.
@@ -73,6 +77,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

@@ -30,11 +30,31 @@ class TaskEditSheet extends ConsumerStatefulWidget {
   ConsumerState<TaskEditSheet> createState() => _TaskEditSheetState();
 }
 
+class _ItemController {
+  final TextEditingController description;
+  final TextEditingController quantity;
+  final TextEditingController cost;
+
+  _ItemController(TaskItem item)
+    : description = TextEditingController(text: item.description),
+      quantity = TextEditingController(text: item.quantity.toString()),
+      cost = TextEditingController(text: item.cost.toString());
+
+  void dispose() {
+    description.dispose();
+    quantity.dispose();
+    cost.dispose();
+  }
+}
+
 class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
   late String _phase;
-  late List<TaskItem> _items;
+  // late List<TaskItem> _items; // Removed in favor of controllers source of truth
+  late List<_ItemController> _itemControllers;
+  late List<bool> _itemDoneStates;
+  late List<DateTime?> _itemCompletedDates;
   late List<String> _contactIds;
   DateTime? _dueDate;
   double? _latitude;
@@ -53,11 +73,26 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
       text: widget.task?.description ?? '',
     );
     _phase = widget.task?.phase ?? '';
-    _items = List.from(widget.task?.items ?? []);
+
+    final initialItems = widget.task?.items ?? [];
+    _itemControllers = initialItems.map((i) => _ItemController(i)).toList();
+    _itemDoneStates = initialItems.map((i) => i.isDone).toList();
+    _itemCompletedDates = initialItems.map((i) => i.completedAt).toList();
+
     _contactIds = List.from(widget.task?.contactIds ?? []);
     _dueDate = widget.task?.dueDate;
     _latitude = widget.task?.latitude;
     _longitude = widget.task?.longitude;
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    for (var c in _itemControllers) {
+      c.dispose();
+    }
+    super.dispose();
   }
 
   Future<void> _pickDate() async {
@@ -401,10 +436,16 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
     double totalSpent = 0;
     double totalPending = 0;
 
-    for (var item in _items) {
-      final itemTotal = item.cost * item.quantity;
+    // Calculate totals on the fly from controllers
+    for (int i = 0; i < _itemControllers.length; i++) {
+      final c = _itemControllers[i];
+      final q = double.tryParse(c.quantity.text) ?? 0.0;
+      final cost = double.tryParse(c.cost.text) ?? 0.0;
+      final isDone = _itemDoneStates[i];
+
+      final itemTotal = cost * q;
       totalBudget += itemTotal;
-      if (item.isDone) {
+      if (isDone) {
         totalSpent += itemTotal;
       } else {
         totalPending += itemTotal;
@@ -423,15 +464,19 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                 icon: const Icon(Icons.add_circle, color: Colors.green),
                 onPressed: () {
                   setState(() {
-                    _items.add(
-                      TaskItem(description: '', quantity: 1.0, cost: 0.0),
+                    _itemControllers.add(
+                      _ItemController(
+                        TaskItem(description: '', quantity: 1.0, cost: 0.0),
+                      ),
                     );
+                    _itemDoneStates.add(false);
+                    _itemCompletedDates.add(null);
                   });
                 },
               ),
           ],
         ),
-        if (_items.isEmpty)
+        if (_itemControllers.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8.0),
             child: Text(
@@ -439,47 +484,44 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
               style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
             ),
           ),
-        ..._items.asMap().entries.map((entry) {
+        ..._itemControllers.asMap().entries.map((entry) {
           final index = entry.key;
-          final item = entry.value;
+          final controller = entry.value;
           return Padding(
             padding: const EdgeInsets.only(bottom: 8.0),
             child: Row(
               children: [
                 Checkbox(
-                  value: item.isDone,
+                  value: _itemDoneStates[index],
                   onChanged: widget.isReadOnly
                       ? null
                       : (val) {
                           setState(() {
                             final isDone = val ?? false;
-                            _items[index] = item.copyWith(
-                              isDone: isDone,
-                              completedAt: isDone ? DateTime.now() : null,
-                            );
+                            _itemDoneStates[index] = isDone;
+                            _itemCompletedDates[index] = isDone
+                                ? DateTime.now()
+                                : null;
                           });
                         },
                 ),
                 Expanded(
                   flex: 3,
-                  child: TextFormField(
-                    initialValue: item.description,
+                  child: TextField(
+                    controller: controller.description,
                     decoration: const InputDecoration(
                       labelText: 'Descripció',
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
                     readOnly: widget.isReadOnly,
-                    onChanged: (val) {
-                      _items[index] = item.copyWith(description: val);
-                    },
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   flex: 1,
-                  child: TextFormField(
-                    initialValue: item.quantity.toString(),
+                  child: TextField(
+                    controller: controller.quantity,
                     decoration: const InputDecoration(
                       labelText: 'Quant.',
                       border: OutlineInputBorder(),
@@ -489,21 +531,14 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                       decimal: true,
                     ),
                     readOnly: widget.isReadOnly,
-                    onChanged: (val) {
-                      final quantity = double.tryParse(val);
-                      if (quantity != null) {
-                        setState(() {
-                          _items[index] = item.copyWith(quantity: quantity);
-                        });
-                      }
-                    },
+                    onChanged: (_) => setState(() {}), // Trigger recalc
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   flex: 2,
-                  child: TextFormField(
-                    initialValue: item.cost.toString(),
+                  child: TextField(
+                    controller: controller.cost,
                     decoration: const InputDecoration(
                       labelText: 'Preu U. (€)',
                       border: OutlineInputBorder(),
@@ -513,20 +548,20 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                       decimal: true,
                     ),
                     readOnly: widget.isReadOnly,
-                    onChanged: (val) {
-                      final cost = double.tryParse(val);
-                      if (cost != null) {
-                        setState(() {
-                          _items[index] = item.copyWith(cost: cost);
-                        });
-                      }
-                    },
+                    onChanged: (_) => setState(() {}), // Trigger recalc
                   ),
                 ),
                 if (!widget.isReadOnly)
                   IconButton(
                     icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    onPressed: () => setState(() => _items.removeAt(index)),
+                    onPressed: () {
+                      setState(() {
+                        _itemControllers[index].dispose();
+                        _itemControllers.removeAt(index);
+                        _itemDoneStates.removeAt(index);
+                        _itemCompletedDates.removeAt(index);
+                      });
+                    },
                   ),
               ],
             ),
@@ -688,7 +723,17 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
       description: _descriptionController.text,
       phase: _phase,
       isDone: widget.task?.isDone ?? false,
-      items: _items,
+      items: _itemControllers.asMap().entries.map((entry) {
+        final index = entry.key;
+        final c = entry.value;
+        return TaskItem(
+          description: c.description.text,
+          quantity: double.tryParse(c.quantity.text) ?? 1.0,
+          cost: double.tryParse(c.cost.text) ?? 0.0,
+          isDone: _itemDoneStates[index],
+          completedAt: _itemCompletedDates[index],
+        );
+      }).toList(),
       contactIds: _contactIds,
       dueDate: _dueDate,
       latitude: _latitude,

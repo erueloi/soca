@@ -402,7 +402,12 @@ exports.getHorticulturalData = functions.https.onCall(async (data, context) => {
     });
 
     const prompt = `
-    Ets un expert en HORTICULTURA REGENERATIVA i PERMACULTURA. Per a la planta d'hort "${speciesName}", retorna EXCLUSIVAMENT un objecte JSON amb aquests camps:
+    Ets un expert en HORTICULTURA REGENERATIVA i PERMACULTURA amb especial coneixement del clima de PONENT (Lleida, Catalunya). 
+    Objectiu: Proporcionar dades precises per a l'espècie "${speciesName}" cultivada a "La Floresta, Lleida" (Clima Continental: Hivern fred, Estiu molt calorós).
+    
+    Consulta (simuladament) bases de dades agronòmiques com les del DARP (Generalitat) o el "Calendari de l'Hortolà" per ajustar dates i rendiments.
+
+    Retorna EXCLUSIVAMENT un objecte JSON amb aquests camps:
     - nom_cientific: (text) Nom científic.
     - nom_comu: (text) Nom comú principal en Català.
     - familia: (text) Família botànica.
@@ -410,22 +415,22 @@ exports.getHorticulturalData = functions.https.onCall(async (data, context) => {
     
     - exigencia: Un de ["Molt exigent", "Mitjanament exigent", "Poc exigent", "Millorant"].
         * CLASSIFICACIÓ ESTRICTA:
-        - "Molt exigent": Solanàcies (Tomata, Pebrot, Patata), Cucurbitàcies (Meló, Síndria, Carbassa), Panís.
-        - "Mitjanament exigent": Bleda, Espinac, Remolatxa, Api, Bràssiques (Cols), Pastanaga, Rave, Nap, Enciam, Escarola.
-        - "Poc exigent": All, Ceba, Porro.
-        - "Millorant": Totes les Fabàcies (Lleguminoses: Fesol, Pèsol, Fava...). REGLA D'OR: Si és Fabaceae = Millorant.
+        - "Molt exigent": Solanàcies, Cucurbitàcies, Panís, Coliflor.
+        - "Mitjanament exigent": Bleda, Enciam, Pastanaga.
+        - "Poc exigent": All, Ceba.
+        - "Millorant": Lleguminoses (Fabàcies).
 
-    - rendiment: (float) Rendiment estimat en kg/m2 (intensiu regeneratiu, clima Lleida).
-    - dies_cicle: (int) Dies des de plantació a fi collita.
-    - tipus_sembra: Un de ["directa", "trasplantament"].
+    - rendiment: (float) Rendiment estimat en kg/m2 per a cultiu intensiu-regeneratiu a l'aire lliure a Lleida. Sigues realista (ex: Tomata 6-8 kg/m2).
+    - dies_cicle: (int) Dies aproximats des de plantació al camp fins a final de collita (o cicle complert).
     
-    - via_metabolica: Un de ["c3", "c4", "cam"]. (Ciència: Fixació Carboni).
-        * NOTA: No confondre "Millorant" amb C4. Blat de moro és C4 però Molt Exigent. Faves són C3 però Millorant.
-
-    - distancia_plantes: (int) cm.
-    - distancia_linies: (int) cm.
-    - aliats: (array strings) 3-5 favorables.
-    - enemics: (array strings).
+    - tipus_sembra: Un de ["directa", "trasplantament"].
+    - via_metabolica: Un de ["c3", "c4", "cam"].
+    
+    - distancia_plantes: (int) cm entre plantes.
+    - distancia_linies: (int) cm entre línies/cavallons.
+    
+    - aliats: (array strings) 3-5 plantes companyes favorables.
+    - enemics: (array strings) Plantes a evitar a prop.
 
     Retorna només el JSON.
     `;

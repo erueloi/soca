@@ -19,13 +19,27 @@ class TasksPage extends ConsumerStatefulWidget {
   ConsumerState<TasksPage> createState() => _TasksPageState();
 }
 
+enum SortMethod { manual, dateDesc, dateAsc, createdDesc }
+
 class _TasksPageState extends ConsumerState<TasksPage> {
   final ScrollController _scrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
+
   bool _showCompleted = false;
+  bool _isSearching = false;
+  SortMethod _sortMethod = SortMethod.dateAsc;
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.toLowerCase();
+      });
+    });
+
+    // ... existing initState logic ...
     if (widget.initialDate != null) {
       // If a date is provided, navigate directly to calendar
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -42,8 +56,11 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
+
+  // ... (Keep existing methods: _createTask, _editTask, _deleteTask, _toggleTask, _onTaskDropped, _onArchiveDrop, _promptCompletionWithResolution, _openBucketManagement)
 
   void _createTask(String bucket) {
     showModalBottomSheet(
@@ -233,8 +250,62 @@ class _TasksPageState extends ConsumerState<TasksPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Pissarra de Tasques'),
+        title: _isSearching
+            ? TextField(
+                controller: _searchController,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'Cercar tasques...',
+                  border: InputBorder.none,
+                  hintStyle: TextStyle(color: Colors.white70),
+                ),
+                style: const TextStyle(color: Colors.white),
+              )
+            : const Text('Pissarra de Tasques'),
         actions: [
+          if (_isSearching)
+            IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () {
+                setState(() {
+                  _isSearching = false;
+                  _searchController.clear();
+                  _searchQuery = '';
+                });
+              },
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.search),
+              tooltip: 'Cercar',
+              onPressed: () => setState(() => _isSearching = true),
+            ),
+
+          PopupMenuButton<SortMethod>(
+            icon: const Icon(Icons.sort),
+            tooltip: 'Ordenar',
+            initialValue: _sortMethod,
+            onSelected: (val) => setState(() => _sortMethod = val),
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: SortMethod.manual,
+                child: Text('Manual (Drag & Drop)'),
+              ),
+              const PopupMenuItem(
+                value: SortMethod.dateAsc,
+                child: Text('Data Límit (Ascendent)'),
+              ),
+              const PopupMenuItem(
+                value: SortMethod.dateDesc,
+                child: Text('Data Límit (Descendent)'),
+              ),
+              const PopupMenuItem(
+                value: SortMethod.createdDesc,
+                child: Text('Més recents'),
+              ),
+            ],
+          ),
+
           IconButton(
             icon: const Icon(Icons.history, color: Colors.blue),
             tooltip: 'Històric de Reformes',
@@ -315,12 +386,58 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                       itemCount: activeBuckets.length,
                       itemBuilder: (context, index) {
                         final bucket = activeBuckets[index];
-                        final bucketTasks =
-                            tasks
-                                .where((t) => t.bucket == bucket.name)
-                                .where((t) => _showCompleted || !t.isDone)
-                                .toList()
-                              ..sort((a, b) => a.order.compareTo(b.order));
+
+                        // 1. Filter by Bucket and Completion
+                        var filteredTasks = tasks
+                            .where((t) => t.bucket == bucket.name)
+                            .where((t) => _showCompleted || !t.isDone);
+
+                        // 2. Filter by Search
+                        if (_searchQuery.isNotEmpty) {
+                          filteredTasks = filteredTasks.where((t) {
+                            return t.title.toLowerCase().contains(
+                                  _searchQuery,
+                                ) ||
+                                t.description.toLowerCase().contains(
+                                  _searchQuery,
+                                ) ||
+                                t.items.any(
+                                  (i) => i.description.toLowerCase().contains(
+                                    _searchQuery,
+                                  ),
+                                );
+                          });
+                        }
+
+                        // 3. Sort
+                        var bucketTasks = filteredTasks.toList();
+                        switch (_sortMethod) {
+                          case SortMethod.manual:
+                            bucketTasks.sort(
+                              (a, b) => a.order.compareTo(b.order),
+                            );
+                            break;
+                          case SortMethod.dateAsc:
+                            bucketTasks.sort((a, b) {
+                              if (a.dueDate == null) return 1;
+                              if (b.dueDate == null) return -1;
+                              return a.dueDate!.compareTo(b.dueDate!);
+                            });
+                            break;
+                          case SortMethod.dateDesc:
+                            bucketTasks.sort((a, b) {
+                              if (a.dueDate == null) return 1;
+                              if (b.dueDate == null) return -1;
+                              return b.dueDate!.compareTo(a.dueDate!);
+                            });
+                            break;
+                          case SortMethod.createdDesc:
+                            // Assuming ID is vague timestamp or we don't have created date,
+                            // falling back to ID string compare as proxy (if time-based IDs) or just ID.
+                            // Actually ID is time millis string in TaskEditSheet.
+                            bucketTasks.sort((a, b) => b.id.compareTo(a.id));
+                            break;
+                        }
 
                         return TaskColumn(
                           title: bucket.name,
@@ -335,27 +452,27 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                           },
                           onTaskDropped: (task) =>
                               _onTaskDropped(task, bucket.name),
-                          onReorder: (oldIndex, newIndex) {
-                            // Update order of tasks in this bucket
-                            if (oldIndex < newIndex) {
-                              newIndex -= 1;
-                            }
-                            final item = bucketTasks.removeAt(oldIndex);
-                            bucketTasks.insert(newIndex, item);
+                          onReorder: _sortMethod == SortMethod.manual
+                              ? (oldIndex, newIndex) {
+                                  // Update order of tasks in this bucket
+                                  if (oldIndex < newIndex) {
+                                    newIndex -= 1;
+                                  }
+                                  final item = bucketTasks.removeAt(oldIndex);
+                                  bucketTasks.insert(newIndex, item);
 
-                            // Initial simple implementation: update all tasks in bucket with new indices
-                            // A more robust way would be using a dedicated usecase/repository method to batch update
-                            for (int i = 0; i < bucketTasks.length; i++) {
-                              if (bucketTasks[i].order != i) {
-                                final updated = bucketTasks[i].copyWith(
-                                  order: i,
-                                );
-                                ref
-                                    .read(tasksRepositoryProvider)
-                                    .updateTask(updated);
-                              }
-                            }
-                          },
+                                  for (int i = 0; i < bucketTasks.length; i++) {
+                                    if (bucketTasks[i].order != i) {
+                                      final updated = bucketTasks[i].copyWith(
+                                        order: i,
+                                      );
+                                      ref
+                                          .read(tasksRepositoryProvider)
+                                          .updateTask(updated);
+                                    }
+                                  }
+                                }
+                              : null, // Disable reorder callback if sorted
                           onAddTask: () => _createTask(bucket.name),
                           onEditTask: _editTask,
                           onDeleteTask: _deleteTask,
