@@ -95,57 +95,89 @@ class TaskColumn extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           // Financial Summary
-                          if (summaryTasks.any(
-                            (t) => t.totalBudget > 0 || t.totalSpent > 0,
-                          ))
-                            InkWell(
-                              onTap: () =>
-                                  _showCostBreakdown(context, summaryTasks),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      'Pressupost: ${summaryTasks.fold<double>(0, (sum, t) => sum + t.totalBudget).toStringAsFixed(0)}€',
-                                      style: TextStyle(
-                                        fontSize: 10,
+                          Builder(
+                            builder: (context) {
+                              final totalBudget = summaryTasks.fold<double>(
+                                0,
+                                (sum, t) => sum + t.totalBudget,
+                              );
+                              final totalSpent = summaryTasks.fold<double>(
+                                0,
+                                (sum, t) => sum + t.totalSpent,
+                              );
+                              final saldo = totalBudget - totalSpent;
+
+                              if (totalBudget == 0 && totalSpent == 0) {
+                                return const SizedBox.shrink();
+                              }
+
+                              return InkWell(
+                                onTap: () =>
+                                    _showCostBreakdown(context, summaryTasks),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'Pressupost: ${totalBudget.toStringAsFixed(0)}€',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.blue.shade800,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      Text(
+                                        ' | ',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.grey.shade400,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Gastat: ${totalSpent.toStringAsFixed(0)}€',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.green.shade800,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      Text(
+                                        ' | ',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.grey.shade400,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Saldo: ${saldo.toStringAsFixed(0)}€',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: saldo < 0
+                                              ? Colors.red
+                                              : Colors.orange.shade800,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Icon(
+                                        Icons.info_outline,
+                                        size: 12,
                                         color: Colors.blue.shade800,
-                                        fontWeight: FontWeight.w500,
                                       ),
-                                    ),
-                                    Text(
-                                      ' | ',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: Colors.grey.shade400,
-                                      ),
-                                    ),
-                                    Text(
-                                      'Gastat: ${summaryTasks.fold<double>(0, (sum, t) => sum + t.totalSpent).toStringAsFixed(0)}€',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: Colors.green.shade800,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Icon(
-                                      Icons.info_outline,
-                                      size: 12,
-                                      color: Colors.blue.shade800,
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ),
+                              );
+                            },
+                          ),
                         ],
                       ),
                     ),

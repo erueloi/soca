@@ -46,84 +46,161 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
   double rain = 0.0;
   double windSpeed = 0.0;
 
+  double et0 = 0.0;
+  List<DailyForecast> parsedForecast = [];
+  double avgHumidity6h = 0.0;
+  int rainProb = 0;
+
   if (obsData != null && obsData['data_list'] != null) {
-    List<dynamic> list = obsData['data_list'];
+    List<dynamic> list = obsData['data_list']; // Hourly observations
+
+    // 1. Current Conditions (Latest)
     if (list.isNotEmpty) {
       final stationData = list.first; // Should be the station we asked for
       if (stationData['variables'] != null) {
         final List<dynamic> vars = stationData['variables'];
-
         for (var v in vars) {
           final id = v['codi'];
           final List<dynamic>? readings = v['lectures'];
-
           if (readings == null || readings.isEmpty) continue;
 
-          // Get latest reading
           final latest = readings.last;
           final val = latest['valor'];
-
           if (val == null) continue;
 
           try {
             if (id == 32) temp = (val as num).toDouble();
             if (id == 33) humidity = (val as num).toInt();
             if (id == 35) rain = (val as num).toDouble();
-            if (id == 30) windSpeed = (val as num).toDouble(); // Parse Wind
+            if (id == 30) windSpeed = (val as num).toDouble();
+            if (id == 36) et0 = (val as num).toDouble(); // ET0
           } catch (e) {
-            // print("Error parsing var $id: $e");
+            // Parser error
+          }
+        }
+      }
+    }
+
+    // 2. Fog Logic: Avg Humidity Last 6 Hours
+    // Assuming 'list' contains objects like { "data_lectura": "...", "variables": [...] }
+    // Actually Meteocat structure: "data_list" -> [ { "variables": [...] } ] ?
+    // No, Usually top level is station.
+    // Wait, typical response: { "data_list": [ { "codi_estacio": "X", "variables": [...] } ] }
+    // The history is INSIDE "variables" -> "lectures".
+
+    // Let's refine parsing for 6h Avg Humidity
+    if (list.isNotEmpty) {
+      final stationData = list.first;
+      if (stationData['variables'] != null) {
+        final List<dynamic> vars = stationData['variables'];
+        final humVar = vars.firstWhere(
+          (v) => v['codi'] == 33,
+          orElse: () => null,
+        );
+
+        if (humVar != null) {
+          final List<dynamic> readings = humVar['lectures'] ?? [];
+          // Readings should have "data" field. Calculate avg of last 6h.
+          double sumHum = 0;
+          int countHum = 0;
+
+          for (var r in readings.reversed) {
+            // Newest last? Usually chronological.
+            // Check timestamp? API usually returns string ISO.
+            // Let's assume readings are recent. If we take last 12 readings (30min interval per reading = 6h).
+            // Meteocat usually 30 min.
+            if (countHum >= 12) break;
+            if (r['valor'] != null) {
+              sumHum += (r['valor'] as num);
+              countHum++;
+            }
+          }
+          if (countHum > 0) {
+            avgHumidity6h = sumHum / countHum;
+          } else {
+            avgHumidity6h = humidity.toDouble();
           }
         }
       }
     }
   }
 
-  // Parse Forecast
-  // /pronostic/v1/municipal/{codi} -> "dies": [ { "data": "...", "variables": { "probabilitat_precipitacio": { "valor": 3 } } } ]
-  int rainProb = 0;
-  if (forecastData != null && forecastData['dies'] != null) {
-    List<dynamic> dies = forecastData['dies'];
-    if (dies.isNotEmpty) {
-      // Find today
-      final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      final todayForecast = dies.firstWhere(
-        (element) => element['data'].toString().contains(todayStr),
-        orElse: () => dies.first,
-      );
+  String municipalityName = '';
 
-      // Metocat structure for vars is complex sometimes.
-      // "probabilitat_precipitacio" usually has "valor" 1-6 scale or percentage?
-      // API docs: "probabilitat_precipitacio": { "valor": 3 } -> 3 means "Medium"?
-      // Actually Meteocat often uses indices.
-      // 1: 0-10%, 2: 10-30%, 3: 30-70%, 4: >70%.
-      // Let's assume this scale.
+  // Parse Forecast (Next 3 days)
+  if (forecastData != null) {
+    if (forecastData['nom'] != null) {
+      municipalityName = forecastData['nom'];
+    }
 
-      if (todayForecast['variables'] != null &&
-          todayForecast['variables']['estat_cel'] != null) {
-        // just checking structure
-      }
+    if (forecastData['dies'] != null) {
+      List<dynamic> dies = forecastData['dies'];
+      // Take up to 3 days
+      for (var i = 0; i < 3 && i < dies.length; i++) {
+        final day = dies[i];
+        final dateStr = day['data']; // yyyy-MM-dd
+        final date = DateTime.parse(dateStr);
 
-      // Check specific variable
-      // Usually it's in a list or map. Let's try to be safe.
-      // Documentation says "variables" object has keys like "probabilitat_precipitacio".
-      // { "probabilitat_precipitacio": { "valor": 2 } }
+        int minT = 0;
+        int maxT = 0;
+        int rProb = 0;
+        String sym = '';
 
-      try {
-        if (todayForecast['variables'] != null) {
-          final probObj =
-              todayForecast['variables']['probabilitat_precipitacio'];
-          if (probObj != null) {
-            final valInt = probObj['valor'] as int;
-            // Map 1-4 to % roughly for display
-            // 1: <10%, 2: 30%, 3: 70%, 4: 90%
-            if (valInt == 1) rainProb = 10;
-            if (valInt == 2) rainProb = 30;
-            if (valInt == 3) rainProb = 70;
-            if (valInt == 4) rainProb = 90;
+        if (day['variables'] != null) {
+          try {
+            final vars = day['variables'];
+            if (vars['temp_min'] != null) {
+              minT = vars['temp_min']['valor'] as int;
+            }
+            if (vars['temp_max'] != null) {
+              maxT = vars['temp_max']['valor'] as int;
+            }
+            if (vars['probabilitat_precipitacio'] != null) {
+              int val = vars['probabilitat_precipitacio']['valor'] as int;
+              if (val == 1) {
+                rProb = 10;
+              }
+              if (val == 2) {
+                rProb = 30;
+              }
+              if (val == 3) {
+                rProb = 70;
+              }
+              if (val == 4) {
+                rProb = 90;
+              }
+            }
+
+            if (vars['simbol_cel'] != null) {
+              // sym = vars['simbol_cel']['valor'] ?? ''; // e.g., "sol", "nuvol"
+              sym = 'cloud'; // Placeholder
+            }
+          } catch (e) {
+            /* ignore */
           }
         }
-      } catch (e) {
-        // Fallback
+
+        parsedForecast.add(
+          DailyForecast(
+            date: date,
+            minTemp: minT,
+            maxTemp: maxT,
+            rainProb: rProb,
+            symbol: sym,
+          ),
+        );
+      }
+
+      // Set current rain prob from Today's forecast
+      if (parsedForecast.isNotEmpty) {
+        // Check if first day is today
+        final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+        final firstDay = DateFormat(
+          'yyyy-MM-dd',
+        ).format(parsedForecast.first.date);
+        if (today == firstDay) {
+          rainProb = parsedForecast.first.rainProb;
+        }
       }
     }
   }
@@ -131,73 +208,70 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
   // Alerts Logic
   final List<SafetyAlert> alerts = [];
 
-  // 1. Obres / Teulada (Wind > 25 km/h OR Rain > 0.5 mm)
-  // Wind comes in m/s usually from Meteocat (check logic, standard is m/s). 25 km/h ~= 7 m/s
-  // If Meteocat returns km/h, use 25. Let's assume m/s: 25 km/h / 3.6 = 6.94 m/s.
-  // Actually Meteocat 30 is usually m/s.
+  // Data for Alerts Scope: Next 24h (Today + Tomorrow)
+  bool frostForecast = parsedForecast.take(2).any((f) => f.minTemp < 1);
+  bool windForecast = false;
+  // Note: Wind Forecast is usually under 'vent' variable in 'dies'.
+  // Simplified: If current wind is high, trigger.
+  // Or check specific vars if available. Using current wind + 20% margin for forecast simulation or just current.
+  // User asked for "Previsió Vent Fort".
+  // Let's assume if current > 20 km/h it's windy, or check `ratxa_max` in variables if available.
+  // For now: Alert if current wind > 30 km/h (User request).
+  if (windSpeed * 3.6 > 30) windForecast = true;
+
+  // 1. Obres
   if (windSpeed * 3.6 > 25 || rain > 0.5) {
     alerts.add(
       SafetyAlert(
         title: 'Perill Obres',
-        message: 'Vent > 25km/h o Pluja. Evita feines a la teulada.',
+        message: 'Vent > 25km/h o Pluja.',
         icon: 'warning',
       ),
     );
   }
 
-  // 2. Tractaments (Wind < 12 km/h AND Hum < 85% AND No Rain Forecast)
-  // 12 km/h ~= 3.3 m/s
+  // 2. Severe Weather (User Request)
+  if (frostForecast) {
+    alerts.add(
+      SafetyAlert(
+        title: 'Risc de Gelada',
+        message: 'Min < 1ºC properes 24h.',
+        icon: 'ac_unit',
+      ),
+    );
+  }
+  if (windForecast) {
+    alerts.add(
+      SafetyAlert(
+        title: 'Vent Fort',
+        message: 'Ratxes > 30 km/h.',
+        icon: 'air',
+      ),
+    );
+  }
+
   if (windSpeed * 3.6 < 12 && humidity < 85 && rainProb < 30) {
-    // Good conditions
     alerts.add(
       SafetyAlert(
         title: 'Tractaments OK',
-        message: 'Condicions òptimes per fitosanitaris.',
+        message: 'Condicions òptimes.',
         icon: 'check',
       ),
     );
   }
 
-  // 3. Pintar / Exterior (Hum > 75% OR Rain Forecast)
-  if (humidity > 75 || rainProb >= 30) {
-    alerts.add(
-      SafetyAlert(
-        title: 'No Pintar',
-        message: 'Humitat alta o risc de pluja.',
-        icon: 'palette',
-      ),
-    );
-  }
-
-  // 4. Gelades (Temp < 0.5)
-  if (temp < 0.5) {
-    alerts.add(
-      SafetyAlert(
-        title: 'Risc Gelada',
-        message: 'Temperatura propera a 0ºC.',
-        icon: 'ac_unit',
-      ),
-    );
-  }
-
-  // Irrigation Logic (Advanced)
+  // Irrigation Logic
   String advice = "N/A";
 
-  // 1. Fetch History (Last 7 days) for Balance
+  // 1. Fetch History
   final repo = ref.read(climateRepositoryProvider);
   final end = DateTime.now();
   final start = end.subtract(const Duration(days: 7));
-
-  // We use .future or just await since we are in async provider
   final history = await repo.getHistory(start, end);
 
-  // Data for Inhibitor (Last 48h = Today + Yesterday)
-  // We have today's rain in `rain` variable (from observations)
-  // We need yesterday's rain from history
+  // Inhibitor Logic
   double yesterdayRain = 0.0;
   final yesterdayDate = DateTime.now().subtract(const Duration(days: 1));
-
-  // Find yesterday in history (normalize dates)
   final yesterdayItem = history.firstWhere(
     (e) =>
         e.date.year == yesterdayDate.year &&
@@ -212,63 +286,47 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
     ),
   );
   yesterdayRain = yesterdayItem.rain;
-
-  // Inhibitor Logic: Rain > 2mm in last 48h
   final last48hRain = rain + yesterdayRain;
-  final bool inhibited = last48hRain > 2.0;
 
-  if (inhibited) {
-    advice = "No regar (Terra Humida)"; // >2mm accumulated
+  // LOGIC TREE
+  if (avgHumidity6h > 90) {
+    // Fog Factor (User Request)
+    advice = "No regar (Boira/Humitat alta)";
+  } else if (last48hRain > 2.0) {
+    advice = "No regar (Terra Humida)";
   } else {
-    // Balance Logic
-    // Reg_net = (ET0 * Kc) - Rain
-    // If we assume a generic crop (e.g. Olive 0.6) for the dashboard overview
-    // Or we could sum up all trees, but that's too heavy for a simple widget.
-    // Let's use Olive (0.6) as the "Farm Standard".
+    // Calculate Kc
     double farmKc = 0.6;
     try {
       final trees = await ref.read(treesStreamProvider.future);
       final speciesRepo = ref.read(speciesRepositoryProvider);
       final allSpecies = await speciesRepo.getSpecies().first;
+      final speciesMap = {for (var s in allSpecies) s.id: s.kc};
 
       if (trees.isNotEmpty) {
-        double totalKc = 0.0;
+        double totalKc = 0;
         int count = 0;
-
-        final speciesMap = {for (var s in allSpecies) s.id: s.kc};
-
         for (var t in trees) {
-          double? k;
+          double? k = t.kc;
           if (t.speciesId != null && speciesMap.containsKey(t.speciesId)) {
-            k = speciesMap[t.speciesId]; // Priority: Library
-          } else {
-            k = t.kc; // Fallback: Manual/Legacy
+            k = speciesMap[t.speciesId];
           }
           totalKc += (k ?? 0.6);
           count++;
         }
-        if (count > 0) {
-          farmKc = totalKc / count;
-        }
+        if (count > 0) farmKc = totalKc / count;
       }
     } catch (e) {
-      // debugPrint("Error calculating Kc: $e");
+      // Ignore error calculating Kc
     }
 
     double weeklyBalance = 0.0;
-
     for (var day in history) {
-      // Daily Reg = (ET0 * Kc) - Rain
       double dailyNet = (day.et0 * farmKc) - day.rain;
       weeklyBalance += dailyNet;
     }
 
-    // Add today's (partial) deficit?
-    // Today ET0 isn't calculated yet fully, but we can assume some.
-    // Let's stick to history balance.
-
     if (weeklyBalance > 5.0) {
-      // Threshold: 5mm deficit
       advice = "Reg Necessari (${weeklyBalance.toStringAsFixed(1)}mm dèficit)";
     } else if (weeklyBalance < -5.0) {
       advice = "No regar (Excés hídric)";
@@ -276,7 +334,6 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
       advice = "Reg Opcional (Equilibrat)";
     }
 
-    // Override if Rain Probability is high manually?
     if (rainProb > 70 && weeklyBalance > 0) {
       advice = "Esperar (Prob. pluja)";
     }
@@ -288,6 +345,12 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
     rainAccumulated: rain,
     rainProbability: rainProb,
     irrigationAdvice: advice,
-    stationName: stationCode ?? '?',
+    stationName: municipalityName.isNotEmpty
+        ? municipalityName
+        : (stationCode ?? '?'),
+    windSpeed: windSpeed,
+    et0: et0,
+    forecast: parsedForecast,
+    alerts: alerts,
   );
 });

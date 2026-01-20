@@ -462,7 +462,6 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
   Widget _buildItemsList(FarmConfig config) {
     double totalBudget = 0;
     double totalSpent = 0;
-    double totalPending = 0;
 
     // Calculate totals on the fly from controllers
     for (int i = 0; i < _itemControllers.length; i++) {
@@ -475,8 +474,6 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
       totalBudget += itemTotal;
       if (isDone) {
         totalSpent += itemTotal;
-      } else {
-        totalPending += itemTotal;
       }
     }
 
@@ -704,7 +701,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
               Column(
                 children: [
                   const Text(
-                    'PENDENT',
+                    'SALDO',
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
@@ -712,11 +709,13 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                     ),
                   ),
                   Text(
-                    '${totalPending.toStringAsFixed(2)} €',
-                    style: const TextStyle(
+                    '${(totalBudget - totalSpent).toStringAsFixed(2)} €',
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: Colors.orange,
+                      color: (totalBudget - totalSpent) < 0
+                          ? Colors.red
+                          : Colors.orange,
                     ),
                   ),
                 ],

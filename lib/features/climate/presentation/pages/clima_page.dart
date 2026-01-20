@@ -51,34 +51,73 @@ class ClimaPage extends ConsumerWidget {
 
     if (picked == null || !context.mounted) return;
 
-    // --- Validation ---
+    // Default to false
+    bool overwrite = false;
+
+    // ALways show confirmation dialog to allow 'Overwrite' selection
     final days = picked.end.difference(picked.start).inDays + 1;
-    if (days > 31) {
-      final bool confirm =
-          await showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('⚠️ Atenció: Rang Gran'),
-              content: Text(
-                'Has seleccionat $days dies.\n'
-                'Per protegir la quota, el sistema comprovarà dia a dia si ja ténim la info.\n\n'
-                'Vols continuar?',
+
+    final Map<String, dynamic>? result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) {
+        bool localOverwrite = false;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Confirmar descàrrega'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Has seleccionat $days dies.'),
+                  if (days > 31)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Text(
+                        '⚠️ Atenció: Rang gran, pot tardar.',
+                        style: TextStyle(color: Colors.orange),
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  CheckboxListTile(
+                    title: const Text('Sobreescriure dades existents'),
+                    subtitle: const Text(
+                      'Forçar actualització (útil per avui)',
+                    ),
+                    value: localOverwrite,
+                    onChanged: (val) {
+                      setState(() => localOverwrite = val == true);
+                    },
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                  ),
+                ],
               ),
               actions: [
                 TextButton(
-                  child: const Text('No'),
-                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel·lar'),
+                  onPressed: () => Navigator.pop(context, null),
                 ),
                 FilledButton(
-                  child: const Text('Sí, endavant'),
-                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Descarregar'),
+                  onPressed: () => Navigator.pop(context, {
+                    'confirmed': true,
+                    'overwrite': localOverwrite,
+                  }),
                 ),
               ],
-            ),
-          ) ??
-          false;
-      if (!confirm) return;
-    }
+            );
+          },
+        );
+      },
+    );
+
+    if (result == null || result['confirmed'] != true) return;
+    overwrite = result['overwrite'] ?? false;
+
+    debugPrint(
+      'Climate Sync: Range ${picked.start} - ${picked.end}. Overwrite: $overwrite',
+    );
 
     if (!context.mounted) return;
 
@@ -129,6 +168,7 @@ class ClimaPage extends ConsumerWidget {
         (current, total) {
           progressNotifier.value = {'current': current, 'total': total};
         },
+        overwrite: overwrite,
       );
 
       // Close Progress Dialog

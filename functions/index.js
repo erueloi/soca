@@ -562,7 +562,6 @@ exports.dailyTaskSummary = functions.pubsub
                 // Update Config if notifications were sent
                 if (Object.keys(updates).length > 0) {
                     await configDoc.ref.update(updates);
-                    console.log(`Config updated for ${fincaId}:`, updates);
                 }
             } // End for loop
 

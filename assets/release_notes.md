@@ -1,5 +1,9 @@
 ﻿# Release Notes
 
+## v1.8.2
+Notificacions arreglades.
+Hem afinat com es mostren les finances.
+Es mostren mes dades del clima amb el meteocat, per saber si hem de regar o no.
 ## v1.8.1
 Tasques: Mostrar les icones bé amb dispositus petits.
 ## v1.8.0
@@ -87,6 +91,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

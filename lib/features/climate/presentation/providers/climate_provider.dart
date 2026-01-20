@@ -97,8 +97,9 @@ class ManualClimateController {
   Future<int> syncRange(
     DateTime start,
     DateTime end,
-    Function(int current, int total) onProgress,
-  ) async {
+    Function(int current, int total) onProgress, {
+    bool overwrite = false,
+  }) async {
     final service = _ref.read(meteocatServiceProvider);
     final repository = _ref.read(climateRepositoryProvider);
 
@@ -120,7 +121,9 @@ class ManualClimateController {
       // Skip future
       if (normalized.isAfter(DateTime.now())) continue;
 
-      if (!existingDates.contains(normalized)) {
+      // Logic: If overwrite is true, we add it regardless of existingDates.
+      // If overwrite is false, we only add if NOT in existingDates.
+      if (overwrite || !existingDates.contains(normalized)) {
         missingDays.add(normalized);
       }
     }

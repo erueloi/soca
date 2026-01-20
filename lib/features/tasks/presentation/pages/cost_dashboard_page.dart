@@ -24,10 +24,19 @@ class CostDashboardPage extends ConsumerStatefulWidget {
 class _CostDashboardPageState extends ConsumerState<CostDashboardPage> {
   String _filter = 'Tots'; // 'Tots', 'Pendents', 'Gastats'
   bool _showZeroCost = false;
+  int _sortColumnIndex = 0; // Default: Data
+  bool _sortAscending = true; // Default: Ascending
+
+  void _onSort(int columnIndex, bool ascending) {
+    setState(() {
+      _sortColumnIndex = columnIndex;
+      _sortAscending = ascending;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Watch Farm Config
+    // ... same build ...
     final configAsync = ref.watch(farmConfigStreamProvider);
 
     return Scaffold(
@@ -43,6 +52,7 @@ class _CostDashboardPageState extends ConsumerState<CostDashboardPage> {
   }
 
   Widget _buildContent(BuildContext context, FarmConfig config) {
+    // ... same prep ...
     // 0. Prepare Data
     final allItems = <_DashboardItem>[];
     for (var task in widget.tasks) {
@@ -52,16 +62,56 @@ class _CostDashboardPageState extends ConsumerState<CostDashboardPage> {
     }
 
     // Filter
-    final filteredItems = allItems.where((d) {
-      // Zero cost filter
+    var filteredItems = allItems.where((d) {
       if (!_showZeroCost && d.totalCost == 0) return false;
-
-      // Status filter
       if (_filter == 'Tots') return true;
       if (_filter == 'Pendents') return !d.isSpent;
       if (_filter == 'Gastats') return d.isSpent;
       return true;
     }).toList();
+
+    // Sort
+    filteredItems.sort((a, b) {
+      int compareResult = 0;
+      switch (_sortColumnIndex) {
+        case 0: // Data (Due Date)
+          final dateA = a.task.dueDate;
+          final dateB = b.task.dueDate;
+          if (dateA == null && dateB == null) {
+            compareResult = 0;
+          } else if (dateA == null) {
+            compareResult = 1; // Put nulls at bottom
+          } else if (dateB == null) {
+            compareResult = -1;
+          } else {
+            compareResult = dateA.compareTo(dateB);
+          }
+          break;
+        case 1: // Concepte
+          compareResult = a.item.description.compareTo(b.item.description);
+          break;
+        case 2: // Categoria
+          final catA = _getCategoryName(a.item.categoryId, config);
+          final catB = _getCategoryName(b.item.categoryId, config);
+          compareResult = catA.compareTo(catB);
+          break;
+        case 3: // Quant.
+          compareResult = a.item.quantity.compareTo(b.item.quantity);
+          break;
+        case 4: // Preu Unit.
+          compareResult = a.item.cost.compareTo(b.item.cost);
+          break;
+        case 5: // Total
+          compareResult = a.totalCost.compareTo(b.totalCost);
+          break;
+        case 6: // Estat
+          final statusA = a.isSpent ? 1 : 0;
+          final statusB = b.isSpent ? 1 : 0;
+          compareResult = statusA.compareTo(statusB);
+          break;
+      }
+      return _sortAscending ? compareResult : -compareResult;
+    });
 
     // Calculate Totals & Stats
     final totalBudget = allItems.fold<double>(
@@ -103,6 +153,16 @@ class _CostDashboardPageState extends ConsumerState<CostDashboardPage> {
                   totalSpent,
                   Colors.green,
                   Icons.payments,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildSummaryCard(
+                  context,
+                  'Saldo Pendent',
+                  totalBudget - totalSpent,
+                  (totalBudget - totalSpent) < 0 ? Colors.red : Colors.orange,
+                  Icons.savings,
                 ),
               ),
             ],
@@ -212,19 +272,37 @@ class _CostDashboardPageState extends ConsumerState<CostDashboardPage> {
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: DataTable(
+                  sortColumnIndex: _sortColumnIndex,
+                  sortAscending: _sortAscending,
                   columnSpacing: 20,
-                  columns: const [
-                    DataColumn(label: Text('Concepte')),
-                    DataColumn(label: Text('Categoria')),
-                    DataColumn(label: Text('Quant.')),
-                    DataColumn(label: Text('Preu Unit.')),
-                    DataColumn(label: Text('Total')),
-                    DataColumn(label: Text('Estat')),
+                  columns: [
+                    DataColumn(label: const Text('Data'), onSort: _onSort),
+                    DataColumn(label: const Text('Concepte'), onSort: _onSort),
+                    DataColumn(label: const Text('Categoria'), onSort: _onSort),
+                    DataColumn(
+                      label: const Text('Quant.'),
+                      numeric: true,
+                      onSort: _onSort,
+                    ),
+                    DataColumn(
+                      label: const Text('Preu Unit.'),
+                      numeric: true,
+                      onSort: _onSort,
+                    ),
+                    DataColumn(
+                      label: const Text('Total'),
+                      numeric: true,
+                      onSort: _onSort,
+                    ),
+                    DataColumn(label: const Text('Estat'), onSort: _onSort),
                   ],
                   rows: filteredItems.map((d) {
                     final isOverBudget =
                         d.item.realCost != null &&
                         d.item.realCost! > d.item.cost;
+                    final dateStr = d.task.dueDate != null
+                        ? DateFormat('dd/MM/yy').format(d.task.dueDate!)
+                        : '-';
 
                     return DataRow(
                       color: WidgetStateProperty.resolveWith((states) {
@@ -234,6 +312,12 @@ class _CostDashboardPageState extends ConsumerState<CostDashboardPage> {
                         return null;
                       }),
                       cells: [
+                        DataCell(
+                          Text(
+                            dateStr,
+                            style: TextStyle(color: Colors.grey[600]),
+                          ),
+                        ),
                         DataCell(
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,

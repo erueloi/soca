@@ -94,6 +94,19 @@ class _FinancesPageState extends ConsumerState<FinancesPage> {
                         globalSpent,
                         Colors.green,
                       ),
+                      Container(
+                        width: 1,
+                        height: 40,
+                        color: Colors.grey.withValues(alpha: 0.3),
+                      ),
+                      _buildGlobalStat(
+                        context,
+                        'Saldo Pendent',
+                        globalBudget - globalSpent,
+                        (globalBudget - globalSpent) < 0
+                            ? Colors.red
+                            : Colors.orange,
+                      ),
                     ],
                   ),
                 ),
@@ -131,7 +144,13 @@ class _FinancesPageState extends ConsumerState<FinancesPage> {
                   itemCount: sortedKeys.length,
                   itemBuilder: (context, index) {
                     final groupKey = sortedKeys[index];
-                    final tasksInGroup = groupedTasks[groupKey]!;
+                    final tasksInGroup = groupedTasks[groupKey]!
+                      ..sort((a, b) {
+                        if (a.dueDate == null && b.dueDate == null) return 0;
+                        if (a.dueDate == null) return 1; // Nulls last
+                        if (b.dueDate == null) return -1;
+                        return a.dueDate!.compareTo(b.dueDate!);
+                      });
 
                     // Group Totals
                     final groupBudget = tasksInGroup.fold<double>(
@@ -142,6 +161,7 @@ class _FinancesPageState extends ConsumerState<FinancesPage> {
                       0,
                       (sum, t) => sum + t.totalSpent,
                     );
+                    final groupBalance = groupBudget - groupSpent;
 
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -166,6 +186,17 @@ class _FinancesPageState extends ConsumerState<FinancesPage> {
                               style: TextStyle(
                                 color: Colors.green.shade700,
                                 fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              'Saldo: ${groupBalance.toStringAsFixed(0)}€',
+                              style: TextStyle(
+                                color: groupBalance < 0
+                                    ? Colors.red
+                                    : Colors.orange.shade800,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                           ],
@@ -251,6 +282,11 @@ class _FinancesPageState extends ConsumerState<FinancesPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(task.title, style: const TextStyle(fontSize: 14)),
+                  if (task.dueDate != null)
+                    Text(
+                      DateFormat('dd/MM/yy').format(task.dueDate!),
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                    ),
                   if (task.isDone)
                     Container(
                       margin: const EdgeInsets.only(top: 2),
