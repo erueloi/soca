@@ -275,14 +275,12 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                 });
               },
             )
-          else
+          else ...[
             IconButton(
               icon: const Icon(Icons.search),
               tooltip: 'Cercar',
               onPressed: () => setState(() => _isSearching = true),
             ),
-
-          if (!_isSearching) ...[
             PopupMenuButton<SortMethod>(
               icon: const Icon(Icons.sort),
               tooltip: 'Ordenar',
@@ -307,67 +305,180 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                 ),
               ],
             ),
-            IconButton(
-              icon: const Icon(Icons.euro_symbol),
-              tooltip: 'Finances i Costos',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const FinancesPage()),
-                );
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.history, color: Colors.blue),
-              tooltip: 'Històric de Reformes',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const TasksTimelinePage()),
-                );
-              },
-            ),
-            IconButton(
-              icon: Icon(
-                _showCompleted
-                    ? Icons.visibility_outlined
-                    : Icons.visibility_off_outlined,
+            // Responsive Actions
+            if (MediaQuery.of(context).size.width >= 600) ...[
+              // Desktop: Show all icons
+              IconButton(
+                icon: const Icon(Icons.euro_symbol),
+                tooltip: 'Finances i Costos',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const FinancesPage()),
+                  );
+                },
               ),
-              tooltip: _showCompleted
-                  ? 'Amagar tasques completades'
-                  : 'Mostrar tasques completades',
-              onPressed: () {
-                setState(() {
-                  _showCompleted = !_showCompleted;
-                });
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.view_column_outlined),
-              tooltip: 'Gestionar Columnes',
-              onPressed: _openBucketManagement,
-            ),
-            IconButton(
-              icon: const Icon(Icons.calendar_month),
-              tooltip: 'Calendari de Tasques',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const TasksCalendarPage()),
-                );
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.camera_alt_outlined),
-              tooltip: 'Sincronització Analògica (OCR)',
-              onPressed: () {
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  builder: (context) => const ScanWhiteboardSheet(),
-                );
-              },
-            ),
+              IconButton(
+                icon: const Icon(Icons.history, color: Colors.blue),
+                tooltip: 'Històric de Reformes',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const TasksTimelinePage(),
+                    ),
+                  );
+                },
+              ),
+              IconButton(
+                icon: Icon(
+                  _showCompleted
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                ),
+                tooltip: _showCompleted
+                    ? 'Amagar tasques completades'
+                    : 'Mostrar tasques completades',
+                onPressed: () {
+                  setState(() {
+                    _showCompleted = !_showCompleted;
+                  });
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.view_column_outlined),
+                tooltip: 'Gestionar Columnes',
+                onPressed: _openBucketManagement,
+              ),
+              IconButton(
+                icon: const Icon(Icons.calendar_month),
+                tooltip: 'Calendari de Tasques',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const TasksCalendarPage(),
+                    ),
+                  );
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.camera_alt_outlined),
+                tooltip: 'Sincronització Analògica (OCR)',
+                onPressed: () {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (context) => const ScanWhiteboardSheet(),
+                  );
+                },
+              ),
+            ] else ...[
+              // Mobile: Show overflow menu
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert),
+                tooltip: 'Més opcions',
+                onSelected: (value) {
+                  switch (value) {
+                    case 'finances':
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const FinancesPage()),
+                      );
+                      break;
+                    case 'history':
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const TasksTimelinePage(),
+                        ),
+                      );
+                      break;
+                    case 'toggle_completed':
+                      setState(() {
+                        _showCompleted = !_showCompleted;
+                      });
+                      break;
+                    case 'buckets':
+                      _openBucketManagement();
+                      break;
+                    case 'calendar':
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const TasksCalendarPage(),
+                        ),
+                      );
+                      break;
+                    case 'ocr':
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        builder: (context) => const ScanWhiteboardSheet(),
+                      );
+                      break;
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'finances',
+                    child: ListTile(
+                      leading: Icon(Icons.euro_symbol),
+                      title: Text('Finances i Costos'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'history',
+                    child: ListTile(
+                      leading: Icon(Icons.history, color: Colors.blue),
+                      title: Text('Històric de Reformes'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'toggle_completed',
+                    child: ListTile(
+                      leading: Icon(
+                        _showCompleted
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                      ),
+                      title: Text(
+                        _showCompleted
+                            ? 'Amagar completades'
+                            : 'Mostrar completades',
+                      ),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'buckets',
+                    child: ListTile(
+                      leading: Icon(Icons.view_column_outlined),
+                      title: Text('Gestionar Columnes'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'calendar',
+                    child: ListTile(
+                      leading: Icon(Icons.calendar_month),
+                      title: Text('Calendari'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'ocr',
+                    child: ListTile(
+                      leading: Icon(Icons.camera_alt_outlined),
+                      title: Text('Sincronització (OCR)'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
           const SizedBox(width: 8),
         ],

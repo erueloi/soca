@@ -1,5 +1,7 @@
 ﻿# Release Notes
 
+## v1.8.1
+Tasques: Mostrar les icones bé amb dispositus petits.
 ## v1.8.0
 General: Nova funció d'autenticació i login/registre per perfil i finques.
 Login Google.
@@ -85,6 +87,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 
