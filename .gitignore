@@ -49,3 +49,6 @@ lib/firebase_options.dart
 lib/core/config/firebase_options.dart
 **/node_modules/
 
+
+# VS Code Chrome Profile Data
+**/.vscode/chrome_dev_data/

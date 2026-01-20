@@ -5,7 +5,11 @@ import 'package:soca/core/calculators/et0_calculator.dart';
 import '../../data/repositories/climate_repository.dart';
 import 'package:soca/features/settings/presentation/providers/settings_provider.dart';
 
-// final climateRepositoryProvider = Provider((ref) => ClimateRepository());
+final climateRepositoryProvider = Provider((ref) {
+  final configAsync = ref.watch(farmConfigStreamProvider);
+  final fincaId = configAsync.value?.fincaId;
+  return ClimateRepository(fincaId: fincaId);
+});
 
 // --- State Management for Climate View ---
 
@@ -124,7 +128,9 @@ class ManualClimateController {
     if (missingDays.isEmpty) return 0;
 
     int downloaded = 0;
+    int failed = 0;
     int total = missingDays.length;
+    String? lastError;
 
     // 3. Fetch missing days one by one
     for (int i = 0; i < total; i++) {
@@ -139,19 +145,25 @@ class ManualClimateController {
 
         final rawData = await service.fetchDailyObservation(date);
 
-        // 0. Fetch Farm Config for Lat (Ideally fetch once outside loop, but here is fine for now or fetch above)
+        // 0. Fetch Farm Config (used for ET0 calc)
         final config = await _ref.read(farmConfigStreamProvider.future);
 
         if (rawData.isNotEmpty && rawData.containsKey('data_list')) {
           final List<dynamic> list = rawData['data_list'];
+
+          // Debug Print
+          // debugPrint("Meteocat Response for $date: $list");
+
           final newItems = list.map((item) {
-            final d = DateTime.parse(item['date']);
+            // The API response root (Station) does not have a date field.
+            // We already know the date we requested from the loop variable.
+            final d = date;
 
-            // Create temp object to extract values easily (or parse manual)
-            // We'll trust fromMeteocat to parse values, but we need those values for ET0.
-            // Option A: Parse to object, then Calculate ET0, then Update object (copyWith or recreate).
+            // Debug
+            // debugPrint("Processing item for date $d: ${item.keys}");
 
-            final tempObj = ClimateDailyData.fromMeteocat(d, item['data']);
+            // The 'item' represents the Station object containing 'variables'.
+            final tempObj = ClimateDailyData.fromMeteocat(d, item);
 
             // Calculate ET0
             final et0 = ET0Calculator.calculate(
@@ -181,16 +193,31 @@ class ManualClimateController {
           // Save immediately so partial progress is kept
           await repository.saveHistory(newItems);
           downloaded++;
+        } else {
+          failed++; // Empty response means no data found for this date
         }
       } catch (e) {
+        failed++;
+        lastError = e.toString();
         // debugPrint("Error syncing date $date: $e");
-        // Continue to next day even if one fails
       }
     }
 
     // 4. Invalidate Providers to refresh UI
     _ref.invalidate(climateComparisonProvider);
     _ref.invalidate(climateHistoryProvider);
+
+    // Return simple int for compatibility, or change return type?
+    // Let's pack it into an int for now (upper bits?) or just return downloaded.
+    // Better: Change return type to Future<Map<String, dynamic>>
+    // But then I need to update ClimaPage.
+    // Let's allow ClimaPage to assume returned int is "successes".
+    // I will throw if ALL failed?
+    if (downloaded == 0 && failed > 0) {
+      throw Exception(
+        "Fallat en $failed dies. Últim error: ${lastError ?? 'Dades no disponibles'}",
+      );
+    }
 
     return downloaded;
   }

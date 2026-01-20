@@ -43,12 +43,14 @@ class HortRotationPattern {
   final String id;
   final String name; // e.g. "O1", "P1"
   final String description;
+  final String? fincaId;
   final List<HortRotationStage> stages;
 
   HortRotationPattern({
     required this.id,
     required this.name,
     this.description = '',
+    this.fincaId,
     required this.stages,
   });
 
@@ -57,6 +59,7 @@ class HortRotationPattern {
       'id': id,
       'name': name,
       'description': description,
+      'fincaId': fincaId,
       'stages': stages.map((x) => x.toMap()).toList(),
     };
   }
@@ -66,6 +69,7 @@ class HortRotationPattern {
       id: id ?? map['id'] ?? '',
       name: map['name'] ?? '',
       description: map['description'] ?? '',
+      fincaId: map['fincaId'],
       stages: map['stages'] != null
           ? List<HortRotationStage>.from(
               (map['stages'] as List).map(

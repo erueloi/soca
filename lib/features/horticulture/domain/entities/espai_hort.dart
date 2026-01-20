@@ -6,6 +6,7 @@ import 'placed_plant.dart';
 class EspaiHort {
   final String id;
   final String nom;
+  final String? fincaId;
 
   // Physical properties
   final LatLng center;
@@ -27,6 +28,7 @@ class EspaiHort {
   EspaiHort({
     required this.id,
     required this.nom,
+    this.fincaId,
     required this.center,
     required this.width,
     required this.length,
@@ -88,6 +90,7 @@ class EspaiHort {
     return EspaiHort(
       id: id ?? map['id'] ?? '',
       nom: map['nom'] ?? '',
+      fincaId: map['fincaId'],
       center: LatLng(centerMap['lat'] ?? 41.5, centerMap['lng'] ?? 0.9),
       width: (map['width'] as num?)?.toDouble() ?? 1.0,
       length: (map['length'] as num?)?.toDouble() ?? 1.0,
@@ -109,6 +112,7 @@ class EspaiHort {
 
   EspaiHort copyWith({
     String? nom,
+    String? fincaId,
     LatLng? center,
     double? width,
     double? length,
@@ -121,6 +125,7 @@ class EspaiHort {
     return EspaiHort(
       id: id, // ID cannot change
       nom: nom ?? this.nom,
+      fincaId: fincaId ?? this.fincaId,
       center: center ?? this.center,
       width: width ?? this.width,
       length: length ?? this.length,

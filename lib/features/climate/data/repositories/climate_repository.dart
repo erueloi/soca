@@ -1,19 +1,28 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import '../../domain/climate_model.dart';
 
 class ClimateRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static const String _collection = 'clima_historic';
+  final String? fincaId;
+
+  ClimateRepository({this.fincaId});
 
   /// Save or update a list of daily data entries
   Future<void> saveHistory(List<ClimateDailyData> data) async {
+    if (fincaId == null) throw Exception('FincaId not set');
+
     final batch = _firestore.batch();
     for (var item in data) {
       // Use date string YYYY-MM-DD as ID to avoid duplicates
       final String id = item.date.toIso8601String().split('T').first;
       final docRef = _firestore.collection(_collection).doc(id);
-      batch.set(docRef, item.toMap(), SetOptions(merge: true));
+
+      final map = item.toMap();
+      map['fincaId'] = fincaId;
+
+      batch.set(docRef, map, SetOptions(merge: true));
     }
     await batch.commit();
   }
@@ -39,6 +48,7 @@ class ClimateRepository {
           windSpeed: 5.0 + rand,
           et0: 3.5 + (rand / 5), // Fake ET0
           isMock: true,
+          fincaId: fincaId,
         ),
       );
     }
@@ -47,8 +57,10 @@ class ClimateRepository {
 
   /// Deletes all mock data
   Future<void> deleteMocks() async {
+    if (fincaId == null) return;
     final snapshot = await _firestore
         .collection(_collection)
+        .where('fincaId', isEqualTo: fincaId)
         .where('isMock', isEqualTo: true)
         .get();
 
@@ -74,34 +86,54 @@ class ClimateRepository {
         .add(const Duration(days: 1))
         .toIso8601String(); // Exclusive upper bound approx
 
-    final snapshot = await _firestore
-        .collection(_collection)
-        .where('date', isGreaterThanOrEqualTo: startStr)
-        .where('date', isLessThan: endStr)
-        .get();
+    if (fincaId == null) return [];
 
-    return snapshot.docs
-        .map((doc) => ClimateDailyData.fromMap(doc.data()))
-        .toList();
+    try {
+      final snapshot = await _firestore
+          .collection(_collection)
+          .where('fincaId', isEqualTo: fincaId)
+          .where('date', isGreaterThanOrEqualTo: startStr)
+          .where('date', isLessThan: endStr)
+          .get();
+
+      return snapshot.docs
+          .map((doc) => ClimateDailyData.fromMap(doc.data()))
+          .toList();
+    } catch (e) {
+      debugPrint('ClimateRepository: Error getting history: $e');
+      return [];
+    }
   }
 
   /// Get the latest recorded date
   Future<DateTime?> getLastEntryDate() async {
-    final snapshot = await _firestore
-        .collection(_collection)
-        .orderBy('date', descending: true)
-        .limit(1)
-        .get();
+    if (fincaId == null) return null;
 
-    if (snapshot.docs.isNotEmpty) {
-      return DateTime.parse(snapshot.docs.first.data()['date']);
+    try {
+      final snapshot = await _firestore
+          .collection(_collection)
+          .where('fincaId', isEqualTo: fincaId)
+          .orderBy('date', descending: true)
+          .limit(1)
+          .get();
+
+      if (snapshot.docs.isNotEmpty) {
+        return DateTime.parse(snapshot.docs.first.data()['date']);
+      }
+    } catch (e) {
+      debugPrint('ClimateRepository: Error getting last date: $e');
     }
     return null;
   }
 
   /// Deletes ALL history. Use with caution/debug only.
   Future<void> clearHistory() async {
-    final snapshot = await _firestore.collection(_collection).get();
+    if (fincaId == null) return;
+
+    final snapshot = await _firestore
+        .collection(_collection)
+        .where('fincaId', isEqualTo: fincaId)
+        .get();
 
     // Firestore batch limit is 500. We must loop.
     const int batchSize = 500;
@@ -118,5 +150,3 @@ class ClimateRepository {
     }
   }
 }
-
-final climateRepositoryProvider = Provider((ref) => ClimateRepository());

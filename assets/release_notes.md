@@ -1,5 +1,9 @@
 ﻿# Release Notes
 
+## v1.8.0
+General: Nova funció d'autenticació i login/registre per perfil i finques.
+Login Google.
+Tasques: Ara tenim un resum economic per buckets i per categories.
 ## v1.7.3
 Hort: Ara es veuen la collita estimada i plantes.
 Hort: Carreguem kgm2 i cicles a cada planter.
@@ -81,6 +85,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

@@ -5,7 +5,13 @@ import '../../domain/entities/planta_hort.dart';
 import '../../domain/entities/hort_rotation_pattern.dart';
 import '../../domain/entities/espai_hort.dart';
 
-final hortRepositoryProvider = Provider((ref) => HortRepository());
+import '../../../settings/presentation/providers/settings_provider.dart';
+
+final hortRepositoryProvider = Provider((ref) {
+  final configAsync = ref.watch(farmConfigStreamProvider);
+  final fincaId = configAsync.value?.fincaId;
+  return HortRepository(fincaId: fincaId);
+});
 
 class HortRepository {
   final CollectionReference _collection = FirebaseFirestore.instance.collection(
@@ -16,21 +22,44 @@ class HortRepository {
   final CollectionReference _espaisCollection = FirebaseFirestore.instance
       .collection('espais_hort');
 
+  final String? fincaId;
+
+  HortRepository({this.fincaId});
+
   Stream<List<PlantaHort>> getPlantsStream() {
-    return _collection.orderBy('nomComu').snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) {
-        return PlantaHort.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-      }).toList();
-    });
+    if (fincaId == null) return Stream.value([]);
+
+    return _collection
+        .where('fincaId', isEqualTo: fincaId)
+        .orderBy('nomComu')
+        .snapshots()
+        .map((snapshot) {
+          debugPrint(
+            'HortRepository: Plants snapshot: ${snapshot.docs.length} docs',
+          );
+          return snapshot.docs.map((doc) {
+            return PlantaHort.fromMap(
+              doc.data() as Map<String, dynamic>,
+              doc.id,
+            );
+          }).toList();
+        })
+        .handleError((e) {
+          debugPrint('HortRepository: Error in plants stream: $e');
+          return <PlantaHort>[];
+        });
   }
 
   Future<void> savePlant(PlantaHort plant) async {
+    if (fincaId == null) throw Exception('FincaId not set');
+
+    final plantToSave = plant.copyWith(fincaId: fincaId);
     if (plant.id.isEmpty) {
       // Add new
-      await _collection.add(plant.toMap());
+      await _collection.add(plantToSave.toMap());
     } else {
       // Update
-      await _collection.doc(plant.id).update(plant.toMap());
+      await _collection.doc(plant.id).update(plantToSave.toMap());
     }
   }
 
@@ -41,18 +70,38 @@ class HortRepository {
   // --- Espais Hort ---
 
   Stream<List<EspaiHort>> getEspaisStream() {
-    return _espaisCollection.snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) {
-        return EspaiHort.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-      }).toList();
-    });
+    if (fincaId == null) return Stream.value([]);
+
+    return _espaisCollection
+        .where('fincaId', isEqualTo: fincaId)
+        .snapshots()
+        .map((snapshot) {
+          debugPrint(
+            'HortRepository: Espais snapshot: ${snapshot.docs.length} docs',
+          );
+          return snapshot.docs.map((doc) {
+            return EspaiHort.fromMap(
+              doc.data() as Map<String, dynamic>,
+              doc.id,
+            );
+          }).toList();
+        })
+        .handleError((e) {
+          debugPrint('HortRepository: Error in espais stream: $e');
+          return <EspaiHort>[];
+        });
   }
 
   Future<void> saveEspai(EspaiHort espai) async {
+    if (fincaId == null) throw Exception('FincaId not set');
+
+    final espaiToSave = espai.copyWith(fincaId: fincaId);
     if (espai.id.isEmpty) {
-      await _espaisCollection.add(espai.toFirestoreMap());
+      await _espaisCollection.add(espaiToSave.toFirestoreMap());
     } else {
-      await _espaisCollection.doc(espai.id).update(espai.toFirestoreMap());
+      await _espaisCollection
+          .doc(espai.id)
+          .update(espaiToSave.toFirestoreMap());
     }
   }
 
@@ -63,30 +112,59 @@ class HortRepository {
   // --- Rotation Patterns ---
 
   Stream<List<HortRotationPattern>> getPatternsStream() {
-    return _patternsCollection.orderBy('name').snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) {
-        return HortRotationPattern.fromMap(
-          doc.data() as Map<String, dynamic>,
-          doc.id,
-        );
-      }).toList();
-    });
+    if (fincaId == null) return Stream.value([]);
+
+    return _patternsCollection
+        .where('fincaId', isEqualTo: fincaId)
+        .orderBy('name')
+        .snapshots()
+        .map((snapshot) {
+          debugPrint(
+            'HortRepository: Patterns snapshot: ${snapshot.docs.length} docs',
+          );
+          return snapshot.docs.map((doc) {
+            return HortRotationPattern.fromMap(
+              doc.data() as Map<String, dynamic>,
+              doc.id,
+            );
+          }).toList();
+        })
+        .handleError((e) {
+          debugPrint('HortRepository: Error in patterns stream: $e');
+          return <HortRotationPattern>[];
+        });
   }
 
   Future<void> savePattern(HortRotationPattern pattern) async {
+    if (fincaId == null) throw Exception('FincaId not set');
+
+    // Pattern doesn't have copyWith, so let's use map trick or simple clone logic if needed.
+    // Or just modify the map on save.
+    final map = pattern.toMap();
+    map['fincaId'] = fincaId;
+
     if (pattern.id.isEmpty) {
-      await _patternsCollection.add(pattern.toMap());
+      await _patternsCollection.add(map);
     } else {
-      await _patternsCollection.doc(pattern.id).update(pattern.toMap());
+      await _patternsCollection.doc(pattern.id).update(map);
     }
   }
 
   Future<void> initRotationPatterns() async {
-    final snap = await _patternsCollection.limit(1).get();
-    if (snap.docs.isNotEmpty) return; // Already initialized
+    if (fincaId == null) return;
+
+    final snap = await _patternsCollection
+        .where('fincaId', isEqualTo: fincaId)
+        .limit(1)
+        .get();
+
+    if (snap.docs.isNotEmpty) return; // Already initialized for this finca
 
     // 1. Fetch Existing Plants to Build Lookup Map
-    final plantSnaps = await _collection.get();
+    final plantSnaps = await _collection
+        .where('fincaId', isEqualTo: fincaId)
+        .get();
+
     final Map<String, String> commonNameToId = {
       for (var doc in plantSnaps.docs)
         (doc.data() as Map<String, dynamic>)['nomComu']
@@ -110,7 +188,14 @@ class HortRepository {
 
         // Found in seeds! Create it.
         final docRef = _collection.doc();
-        await docRef.set(seed.copyWith(id: docRef.id).toMap());
+        // Inject fincaId
+        final plantWithFinca = seed.copyWith(id: docRef.id, fincaId: fincaId);
+
+        // Use batch not set directly?
+        // Wait, I can't await batch inside here easily and use ID immediately if I rely on batch write...
+        // But docRef.id is generated sync.
+        // Yes, I can use batch.set().
+        batch.set(docRef, plantWithFinca.toMap());
 
         // Update local cache
         final newId = docRef.id;
@@ -130,8 +215,9 @@ class HortRepository {
           nomComu: commonName,
           familiaBotanica: 'Desconeguda',
           color: Colors.grey,
+          fincaId: fincaId,
         );
-        await docRef.set(placeholder.toMap());
+        batch.set(docRef, placeholder.toMap());
 
         commonNameToId[commonName.toLowerCase()] = docRef.id;
         return docRef.id;
@@ -308,7 +394,9 @@ class HortRepository {
     ];
 
     for (var p in patterns) {
-      batch.set(_patternsCollection.doc(p.id), p.toMap());
+      final map = p.toMap();
+      map['fincaId'] = fincaId;
+      batch.set(_patternsCollection.doc(p.id), map);
     }
 
     await batch.commit();
@@ -487,12 +575,14 @@ class HortRepository {
   ];
 
   Future<void> initBibliotecaRegenerativa() async {
+    if (fincaId == null) return;
+
     final batch = FirebaseFirestore.instance.batch();
 
     // Use shared static list
     for (var p in _defaultPlants) {
       final docRef = _collection.doc();
-      final pWithId = p.copyWith(id: docRef.id);
+      final pWithId = p.copyWith(id: docRef.id, fincaId: fincaId);
       batch.set(docRef, pWithId.toMap());
     }
 

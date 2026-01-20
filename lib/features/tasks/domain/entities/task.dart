@@ -16,6 +16,7 @@ class Task {
   final int order;
   final DateTime? completedAt;
   final String? resolution;
+  final String? fincaId;
 
   const Task({
     required this.id,
@@ -33,6 +34,7 @@ class Task {
     this.order = 0,
     this.completedAt,
     this.resolution,
+    this.fincaId,
   });
 
   Task copyWith({
@@ -51,6 +53,7 @@ class Task {
     int? order,
     DateTime? completedAt,
     String? resolution,
+    String? fincaId,
   }) {
     return Task(
       id: id ?? this.id,
@@ -68,6 +71,7 @@ class Task {
       order: order ?? this.order,
       completedAt: completedAt ?? this.completedAt,
       resolution: resolution ?? this.resolution,
+      fincaId: fincaId ?? this.fincaId,
     );
   }
 
@@ -87,6 +91,7 @@ class Task {
       'order': order,
       'completedAt': completedAt?.millisecondsSinceEpoch,
       'resolution': resolution,
+      'fincaId': fincaId,
     };
   }
 
@@ -113,6 +118,7 @@ class Task {
           ? DateTime.fromMillisecondsSinceEpoch(map['completedAt'])
           : null,
       resolution: map['resolution'],
+      fincaId: map['fincaId'],
     );
   }
 
@@ -120,7 +126,10 @@ class Task {
   double get totalBudget =>
       items.fold(0.0, (sum, item) => sum + (item.cost * item.quantity));
 
-  double get totalSpent => items
-      .where((i) => i.isDone)
-      .fold(0.0, (sum, item) => sum + (item.cost * item.quantity));
+  double get totalSpent {
+    if (isDone) return totalBudget;
+    return items
+        .where((i) => i.isDone)
+        .fold(0.0, (sum, item) => sum + (item.cost * item.quantity));
+  }
 }

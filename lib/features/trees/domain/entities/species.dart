@@ -25,10 +25,12 @@ class Species {
   final int droughtResistance; // 1-5
 
   final int? lifeExpectancyYears;
+  final String? fincaId;
   final List<String> commonDiseases;
 
   const Species({
     required this.id,
+    this.fincaId,
     required this.scientificName,
     required this.commonName,
     required this.kc,
@@ -56,6 +58,7 @@ class Species {
 
   Species copyWith({
     String? id,
+    String? fincaId,
     String? scientificName,
     String? commonName,
     double? kc,
@@ -82,6 +85,7 @@ class Species {
   }) {
     return Species(
       id: id ?? this.id,
+      fincaId: fincaId ?? this.fincaId,
       scientificName: scientificName ?? this.scientificName,
       commonName: commonName ?? this.commonName,
       kc: kc ?? this.kc,
@@ -110,6 +114,7 @@ class Species {
 
   Map<String, dynamic> toMap() {
     return {
+      if (fincaId != null) 'fincaId': fincaId,
       'scientificName': scientificName,
       'commonName': commonName,
       'kc': kc,
@@ -145,6 +150,7 @@ class Species {
     }
     return Species(
       id: id,
+      fincaId: map['fincaId'],
       scientificName: map['scientificName'] ?? '',
       commonName: map['commonName'] ?? '',
       kc: (map['kc'] as num?)?.toDouble() ?? 0.6,

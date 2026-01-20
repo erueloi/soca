@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../domain/entities/task.dart';
-import 'task_card.dart';
+import '../widgets/task_card.dart';
+import '../pages/cost_dashboard_page.dart';
 
 class TaskColumn extends StatelessWidget {
   final String title;
@@ -12,6 +13,7 @@ class TaskColumn extends StatelessWidget {
   final Function(Task task)? onDeleteTask;
   final Function(Task task)? onArchiveTask;
   final Function(int oldIndex, int newIndex)? onReorder;
+  final List<Task>? allTasks;
 
   const TaskColumn({
     super.key,
@@ -24,10 +26,12 @@ class TaskColumn extends StatelessWidget {
     this.onDeleteTask,
     this.onArchiveTask,
     this.onReorder,
+    this.allTasks,
   });
 
   @override
   Widget build(BuildContext context) {
+    final summaryTasks = allTasks ?? tasks;
     return DragTarget<Task>(
       onWillAcceptWithDetails: (details) => details.data.bucket != title,
       onAcceptWithDetails: (details) {
@@ -58,27 +62,91 @@ class TaskColumn extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        tasks.length.toString(),
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                title,
+                                style: Theme.of(context).textTheme.titleSmall
+                                    ?.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  tasks.length.toString(),
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          // Financial Summary
+                          if (summaryTasks.any(
+                            (t) => t.totalBudget > 0 || t.totalSpent > 0,
+                          ))
+                            InkWell(
+                              onTap: () =>
+                                  _showCostBreakdown(context, summaryTasks),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Pressupost: ${summaryTasks.fold<double>(0, (sum, t) => sum + t.totalBudget).toStringAsFixed(0)}€',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.blue.shade800,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    Text(
+                                      ' | ',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey.shade400,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Gastat: ${summaryTasks.fold<double>(0, (sum, t) => sum + t.totalSpent).toStringAsFixed(0)}€',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.green.shade800,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      Icons.info_outline,
+                                      size: 12,
+                                      color: Colors.blue.shade800,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ],
@@ -160,6 +228,19 @@ class TaskColumn extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  Future<void> _showCostBreakdown(
+    BuildContext context,
+    List<Task> summaryTasks,
+  ) async {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            CostDashboardPage(columnName: title, tasks: summaryTasks),
+      ),
     );
   }
 }

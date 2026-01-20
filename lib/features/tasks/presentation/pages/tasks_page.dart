@@ -8,6 +8,7 @@ import '../widgets/scan_whiteboard_sheet.dart';
 import '../widgets/bucket_management_sheet.dart';
 import 'tasks_calendar_page.dart';
 import 'tasks_timeline_page.dart';
+import 'finances_page.dart';
 
 class TasksPage extends ConsumerStatefulWidget {
   final String? initialBucketFilter;
@@ -307,6 +308,16 @@ class _TasksPageState extends ConsumerState<TasksPage> {
               ],
             ),
             IconButton(
+              icon: const Icon(Icons.euro_symbol),
+              tooltip: 'Finances i Costos',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const FinancesPage()),
+                );
+              },
+            ),
+            IconButton(
               icon: const Icon(Icons.history, color: Colors.blue),
               tooltip: 'Històric de Reformes',
               onPressed: () {
@@ -388,10 +399,15 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                       itemBuilder: (context, index) {
                         final bucket = activeBuckets[index];
 
-                        // 1. Filter by Bucket and Completion
-                        var filteredTasks = tasks
+                        // 1. Filter by Bucket (for stats)
+                        final allBucketTasks = tasks
                             .where((t) => t.bucket == bucket.name)
-                            .where((t) => _showCompleted || !t.isDone);
+                            .toList();
+
+                        // 2. Filter by Completion (for display)
+                        var filteredTasks = allBucketTasks.where(
+                          (t) => _showCompleted || !t.isDone,
+                        );
 
                         // 2. Filter by Search
                         if (_searchQuery.isNotEmpty) {
@@ -478,6 +494,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                           onEditTask: _editTask,
                           onDeleteTask: _deleteTask,
                           onArchiveTask: _onArchiveDrop,
+                          allTasks: allBucketTasks,
                         );
                       },
                     ),

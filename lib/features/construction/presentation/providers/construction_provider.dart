@@ -3,8 +3,15 @@ import '../../data/repositories/construction_repository.dart';
 import '../../data/models/construction_point.dart';
 
 // Repository Provider
+import '../../../settings/presentation/providers/settings_provider.dart';
+
+// Repository Provider
 final constructionRepositoryProvider = Provider<ConstructionRepository>((ref) {
-  return ConstructionRepository();
+  final configAsync = ref.watch(farmConfigStreamProvider);
+  final fincaId = configAsync.value?.fincaId;
+  final repository = ConstructionRepository(fincaId: fincaId);
+
+  return repository;
 });
 
 // Floor Plans Stream

@@ -9,6 +9,8 @@ import '../../../contacts/data/contacts_data.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../map/presentation/widgets/location_picker_sheet.dart';
 import '../providers/tasks_provider.dart';
+import '../../../settings/domain/entities/farm_config.dart';
+import '../../../settings/presentation/providers/settings_provider.dart';
 
 class TaskEditSheet extends ConsumerStatefulWidget {
   final Task? task;
@@ -34,11 +36,13 @@ class _ItemController {
   final TextEditingController description;
   final TextEditingController quantity;
   final TextEditingController cost;
+  String categoryId; // Changed from ItemCategory enum to String ID
 
   _ItemController(TaskItem item)
     : description = TextEditingController(text: item.description),
       quantity = TextEditingController(text: item.quantity.toString()),
-      cost = TextEditingController(text: item.cost.toString());
+      cost = TextEditingController(text: item.cost.toString()),
+      categoryId = item.categoryId;
 
   void dispose() {
     description.dispose();
@@ -149,146 +153,158 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-        left: 16,
-        right: 16,
-        top: 16,
-      ),
-      child: FractionallySizedBox(
-        heightFactor: 0.9,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(context),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView(
-                children: [
-                  TextField(
-                    controller: _titleController,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: 'Títol de la Tasca',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.title),
-                    ),
-                    readOnly: widget.isReadOnly,
-                  ),
-                  const SizedBox(height: 16),
-                  if (!widget.isReadOnly) _buildActionButtons(context),
-                  if (_imageFile != null) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      height: 100,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey),
-                        borderRadius: BorderRadius.circular(8),
-                        image: DecorationImage(
-                          image: FileImage(_imageFile!),
-                          fit: BoxFit.cover,
+    // Watch FarmConfig for dynamic settings
+    final configAsync = ref.watch(farmConfigStreamProvider);
+
+    return configAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, s) => Center(child: Text('Error carregant configuració: $e')),
+      data: (config) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+            left: 16,
+            right: 16,
+            top: 16,
+          ),
+          child: FractionallySizedBox(
+            heightFactor: 0.9,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(context),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: ListView(
+                    children: [
+                      TextField(
+                        controller: _titleController,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
                         ),
+                        decoration: const InputDecoration(
+                          labelText: 'Títol de la Tasca',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.title),
+                        ),
+                        readOnly: widget.isReadOnly,
                       ),
-                      child: Stack(
+                      const SizedBox(height: 16),
+                      if (!widget.isReadOnly) _buildActionButtons(context),
+                      if (_imageFile != null) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          height: 100,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey),
+                            borderRadius: BorderRadius.circular(8),
+                            image: DecorationImage(
+                              image: FileImage(_imageFile!),
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          child: Stack(
+                            children: [
+                              Positioned(
+                                top: 4,
+                                right: 4,
+                                child: IconButton(
+                                  icon: const Icon(
+                                    Icons.close,
+                                    color: Colors.red,
+                                  ),
+                                  onPressed: () =>
+                                      setState(() => _imageFile = null),
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: Colors.white.withValues(
+                                      alpha: 0.8,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _descriptionController,
+                        decoration: const InputDecoration(
+                          labelText: 'Descripció detallada',
+                          border: OutlineInputBorder(),
+                          alignLabelWithHint: true,
+                        ),
+                        maxLines: 3,
+                        readOnly: widget.isReadOnly,
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
                         children: [
-                          Positioned(
-                            top: 4,
-                            right: 4,
-                            child: IconButton(
-                              icon: const Icon(Icons.close, color: Colors.red),
-                              onPressed: () =>
-                                  setState(() => _imageFile = null),
-                              style: IconButton.styleFrom(
-                                backgroundColor: Colors.white.withValues(
-                                  alpha: 0.8,
+                          Expanded(child: _buildPhaseSelector(config)),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: InkWell(
+                              onTap: widget.isReadOnly ? null : _pickDate,
+                              child: InputDecorator(
+                                decoration: const InputDecoration(
+                                  labelText: 'Data Límit',
+                                  border: OutlineInputBorder(),
+                                  prefixIcon: Icon(Icons.calendar_today),
+                                ),
+                                child: Text(
+                                  _dueDate == null
+                                      ? 'Sense data'
+                                      : '${_dueDate!.day}/${_dueDate!.month}/${_dueDate!.year}',
                                 ),
                               ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _descriptionController,
-                    decoration: const InputDecoration(
-                      labelText: 'Descripció detallada',
-                      border: OutlineInputBorder(),
-                      alignLabelWithHint: true,
-                    ),
-                    maxLines: 3,
-                    readOnly: widget.isReadOnly,
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(child: _buildPhaseSelector()),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: InkWell(
-                          onTap: widget.isReadOnly ? null : _pickDate,
-                          child: InputDecorator(
-                            decoration: const InputDecoration(
-                              labelText: 'Data Límit',
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.calendar_today),
-                            ),
-                            child: Text(
-                              _dueDate == null
-                                  ? 'Sense data'
-                                  : '${_dueDate!.day}/${_dueDate!.month}/${_dueDate!.year}',
-                            ),
-                          ),
-                        ),
-                      ),
+                      const SizedBox(height: 24),
+                      _buildItemsList(config),
+                      const SizedBox(height: 24),
+                      _buildContactsSelector(),
                     ],
                   ),
-                  const SizedBox(height: 24),
-                  _buildItemsList(),
-                  const SizedBox(height: 24),
-                  _buildContactsSelector(),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (!widget.isReadOnly)
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _isUploading ? null : _saveTask,
-                  icon: _isUploading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : const Icon(Icons.save),
-                  label: Text(
-                    _isUploading ? 'PUJANT FOTO...' : 'GUARDAR CANVIS',
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    textStyle: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                ),
+                const SizedBox(height: 16),
+                if (!widget.isReadOnly)
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _isUploading ? null : _saveTask,
+                      icon: _isUploading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(Icons.save),
+                      label: Text(
+                        _isUploading ? 'PUJANT FOTO...' : 'GUARDAR CANVIS',
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        textStyle: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -414,24 +430,36 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
     );
   }
 
-  Widget _buildPhaseSelector() {
+  Widget _buildPhaseSelector(FarmConfig config) {
+    final phases = config.taskPhases;
+    // Ensure current phase is in list or add it temporarily if not found (edge case)
+    final items = [
+      const DropdownMenuItem(value: '', child: Text('Cap')),
+      ...phases.map((p) => DropdownMenuItem(value: p, child: Text(p))),
+    ];
+
+    // If _phase has a value but it's not in the list, we might want to still show it or reset it.
+    // DropdownButtonFormField throws if value is not in items.
+    // So we check:
+    final bool valueExists = _phase.isEmpty || phases.contains(_phase);
+    final String? effectiveValue = valueExists
+        ? (_phase.isEmpty ? null : _phase)
+        : null;
+
+    // If value doesn't exist (e.g. was deleted from config), we default to null (Cap).
+    // Or we could add a temporary item for the missing value. For now, reset to null is safer.
+
     return DropdownButtonFormField<String>(
-      initialValue: _phase.isEmpty ? null : _phase,
+      initialValue: effectiveValue,
       decoration: const InputDecoration(labelText: 'Fase / Etiqueta'),
-      items: const [
-        DropdownMenuItem(value: '', child: Text('Cap')),
-        DropdownMenuItem(value: 'Urgent', child: Text('Urgent 🔴')),
-        DropdownMenuItem(value: 'Compra', child: Text('Compra 🛒')),
-        DropdownMenuItem(value: 'Manteniment', child: Text('Manteniment 🔧')),
-        DropdownMenuItem(value: 'Planificació', child: Text('Planificació 📅')),
-      ],
+      items: items,
       onChanged: widget.isReadOnly
           ? null
           : (val) => setState(() => _phase = val ?? ''),
     );
   }
 
-  Widget _buildItemsList() {
+  Widget _buildItemsList(FarmConfig config) {
     double totalBudget = 0;
     double totalSpent = 0;
     double totalPending = 0;
@@ -504,6 +532,57 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                                 : null;
                           });
                         },
+                ),
+                // Category Icon Button (Dynamic PopMenu)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: PopupMenuButton<String>(
+                    tooltip: 'Canviar Categoria',
+                    initialValue: controller.categoryId,
+                    itemBuilder: (context) => config.expenseCategories.map((
+                      cat,
+                    ) {
+                      return PopupMenuItem(
+                        value: cat.id,
+                        child: Row(
+                          children: [
+                            Icon(
+                              IconData(
+                                cat.iconCode,
+                                fontFamily: 'MaterialIcons',
+                              ),
+                              color: Color(int.parse(cat.colorHex, radix: 16)),
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(cat.name),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    onSelected: widget.isReadOnly
+                        ? null
+                        : (val) {
+                            setState(() {
+                              controller.categoryId = val;
+                            });
+                          },
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: _getCategoryColor(
+                          controller.categoryId,
+                          config,
+                        ).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        _getCategoryIcon(controller.categoryId, config),
+                        color: _getCategoryColor(controller.categoryId, config),
+                        size: 20,
+                      ),
+                    ),
+                  ),
                 ),
                 Expanded(
                   flex: 3,
@@ -732,6 +811,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
           cost: double.tryParse(c.cost.text) ?? 0.0,
           isDone: _itemDoneStates[index],
           completedAt: _itemCompletedDates[index],
+          categoryId: c.categoryId,
         );
       }).toList(),
       contactIds: _contactIds,
@@ -747,5 +827,21 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
       setState(() => _isUploading = false);
       Navigator.pop(context);
     }
+  }
+
+  Color _getCategoryColor(String categoryId, FarmConfig config) {
+    final cat = config.expenseCategories.firstWhere(
+      (c) => c.id == categoryId,
+      orElse: () => config.expenseCategories.first,
+    );
+    return Color(int.parse(cat.colorHex, radix: 16));
+  }
+
+  IconData _getCategoryIcon(String categoryId, FarmConfig config) {
+    final cat = config.expenseCategories.firstWhere(
+      (c) => c.id == categoryId,
+      orElse: () => config.expenseCategories.first,
+    );
+    return IconData(cat.iconCode, fontFamily: 'MaterialIcons');
   }
 }

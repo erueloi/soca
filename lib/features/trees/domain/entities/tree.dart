@@ -34,6 +34,7 @@ class Tree {
   final DateTime plantingDate;
   final String status; // 'Viable', 'Mort', 'Malalt', etc.
   final String notes;
+  final String? fincaId;
 
   // New Fields
   final String? ecologicalFunction; // Nitrogenadora, Fusta, Fruit...
@@ -66,6 +67,7 @@ class Tree {
     required this.plantingDate,
     required this.status,
     this.notes = '',
+    this.fincaId,
     this.ecologicalFunction,
     this.plantingFormat,
     this.provider,
@@ -92,6 +94,7 @@ class Tree {
     DateTime? plantingDate,
     String? status,
     String? notes,
+    String? fincaId,
     String? ecologicalFunction,
     String? plantingFormat,
     String? provider,
@@ -118,6 +121,7 @@ class Tree {
       plantingDate: plantingDate ?? this.plantingDate,
       status: status ?? this.status,
       notes: notes ?? this.notes,
+      fincaId: fincaId ?? this.fincaId,
       ecologicalFunction: ecologicalFunction ?? this.ecologicalFunction,
       plantingFormat: plantingFormat ?? this.plantingFormat,
       provider: provider ?? this.provider,
@@ -146,6 +150,7 @@ class Tree {
       'plantingDate': Timestamp.fromDate(plantingDate),
       'status': status,
       'notes': notes,
+      'fincaId': fincaId,
       'ecologicalFunction': ecologicalFunction,
       'plantingFormat': plantingFormat,
       'provider': provider,
@@ -176,6 +181,7 @@ class Tree {
           (map['plantingDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
       status: map['status'] ?? 'Viable',
       notes: map['notes'] ?? '',
+      fincaId: map['fincaId'],
       ecologicalFunction: map['ecologicalFunction'],
       plantingFormat: map['plantingFormat'],
       provider: map['provider'],

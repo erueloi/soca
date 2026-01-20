@@ -1,0 +1,20 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "soca (Chrome Profile)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "debug",
+            "args": [
+                "--web-port=5000",
+                "--web-browser-flag=--user-data-dir=${workspaceFolder}/.vscode/chrome_dev_data"
+            ]
+        },
+        {
+            "name": "soca (Mobile)",
+            "request": "launch",
+            "type": "dart"
+        }
+    ]
+}

@@ -213,6 +213,7 @@ class ConstructionPoint {
   final PathologySheet? pathology;
   final DateTime createdAt;
   final String status; // "Pendent", "En Progrés", "Finalitzat"
+  final String? fincaId;
 
   ConstructionPoint({
     required this.id,
@@ -222,6 +223,7 @@ class ConstructionPoint {
     this.pathology,
     required this.createdAt,
     this.status = 'Pendent',
+    this.fincaId,
   });
 
   Map<String, dynamic> toMap() {
@@ -232,6 +234,7 @@ class ConstructionPoint {
       'pathology': pathology?.toMap(),
       'createdAt': Timestamp.fromDate(createdAt),
       'status': status,
+      'fincaId': fincaId,
     };
   }
 
@@ -246,6 +249,7 @@ class ConstructionPoint {
           : null,
       createdAt: (map['createdAt'] as Timestamp).toDate(),
       status: map['status'] ?? 'Pendent',
+      fincaId: map['fincaId'],
     );
   }
 
@@ -257,6 +261,7 @@ class ConstructionPoint {
     PathologySheet? pathology,
     DateTime? createdAt,
     String? status,
+    String? fincaId,
   }) {
     return ConstructionPoint(
       id: id ?? this.id,
@@ -266,6 +271,7 @@ class ConstructionPoint {
       pathology: pathology ?? this.pathology,
       createdAt: createdAt ?? this.createdAt,
       status: status ?? this.status,
+      fincaId: fincaId ?? this.fincaId,
     );
   }
 }

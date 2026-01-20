@@ -245,35 +245,40 @@ class _BucketManagementSheetState extends ConsumerState<BucketManagementSheet> {
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            IconButton(
-                              icon: Icon(
-                                bucket.isArchived
-                                    ? Icons.unarchive
-                                    : Icons.archive,
-                                color: bucket.isArchived
-                                    ? Colors.green
-                                    : Colors.orange,
+                            if (bucket.isArchived)
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.unarchive,
+                                  color: Colors.green,
+                                ),
+                                onPressed: () => _toggleArchive(index),
+                                tooltip: 'Desarxivar',
                               ),
-                              onPressed: () => _toggleArchive(index),
-                            ),
                             IconButton(
-                              icon: Icon(
-                                bucket.showOnDashboard
-                                    ? Icons.star
-                                    : Icons.star_border,
-                                color: bucket.showOnDashboard
-                                    ? Colors.amber
-                                    : Colors.grey,
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.grey,
                               ),
-                              onPressed: () => _togglePin(index),
+                              onPressed: () => _onDeleteRequest(index),
+                              tooltip: 'Eliminar/Arxivar',
                             ),
+                            if (!bucket.isArchived)
+                              IconButton(
+                                icon: Icon(
+                                  bucket.showOnDashboard
+                                      ? Icons.star
+                                      : Icons.star_border,
+                                  color: bucket.showOnDashboard
+                                      ? Colors.amber
+                                      : Colors.grey,
+                                ),
+                                onPressed: () => _togglePin(index),
+                              ),
                             IconButton(
                               icon: const Icon(Icons.edit, color: Colors.blue),
                               onPressed: () => _editBucket(index),
                             ),
-                            const SizedBox(
-                              width: 16,
-                            ), // Add some padding at the end
+                            const SizedBox(width: 16),
                           ],
                         ),
                       );
@@ -295,5 +300,90 @@ class _BucketManagementSheetState extends ConsumerState<BucketManagementSheet> {
         ),
       ),
     );
+  }
+
+  void _onDeleteRequest(int index) {
+    if (index >= _localBuckets.length) return;
+
+    final bucket = _localBuckets[index];
+    final tasks = ref.read(tasksStreamProvider).asData?.value ?? [];
+    // Count active or completed tasks in this bucket
+    final tasksInBucket = tasks.where((t) => t.bucket == bucket.name).toList();
+
+    if (tasksInBucket.isEmpty) {
+      // Empty -> Offer real delete
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Eliminar Columna'),
+          content: Text(
+            'Segur que vols eliminar la columna "${bucket.name}"? Aquesta acció no es pot desfer.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel·lar'),
+            ),
+            TextButton(
+              onPressed: () {
+                _deleteBucket(index);
+                Navigator.pop(context);
+              },
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Eliminar'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // Has tasks -> Offer Archive (if not already archived)
+      if (bucket.isArchived) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('No es pot eliminar'),
+            content: Text(
+              'Aquesta columna conté ${tasksInBucket.length} tasques (actives o completades). No es pot eliminar fins que l\'estigui buida.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('D\'acord'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Arxivar Columna?'),
+            content: Text(
+              'La columna "${bucket.name}" conté ${tasksInBucket.length} tasques. No es pot eliminar, però la pots arxivar perquè no surti a la pissarra.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel·lar'),
+              ),
+              TextButton(
+                onPressed: () {
+                  _toggleArchive(index); // Sets represented Logic
+                  Navigator.pop(context);
+                },
+                child: const Text('Arxivar'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+  }
+
+  void _deleteBucket(int index) {
+    setState(() {
+      _localBuckets.removeAt(index);
+    });
+    _saveBuckets();
   }
 }

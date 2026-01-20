@@ -7,6 +7,8 @@ import '../../../../core/services/meteocat_service.dart';
 import '../providers/settings_provider.dart';
 
 import 'package:soca/features/settings/presentation/widgets/zone_edit_dialog.dart';
+import 'app_config_page.dart';
+
 import '../../../trees/data/repositories/species_repository.dart';
 import '../../../trees/presentation/providers/trees_provider.dart'; // Ensure treesRepositoryProvider is here
 
@@ -242,6 +244,18 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Perfil de la Finca'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.settings),
+              tooltip: 'Configuració de l\'Aplicació',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AppConfigPage()),
+                );
+              },
+            ),
+          ],
           bottom: const TabBar(
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,
@@ -622,41 +636,41 @@ class _MeteocatSectionState extends ConsumerState<_MeteocatSection> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _initStation(); // Only set station on load
+    _loadQuota(); // Load quota independent of station logic
   }
 
-  Future<void> _loadData() async {
+  /// Initial logic to sync Widget Param (Source of Truth for Config) vs Cache
+  Future<void> _initStation() async {
     final service = ref.read(meteocatServiceProvider);
-
-    // Load Station - Prefer prop if fresh load, else cache
-    // Actually, local cache is "source of truth for this device until save"
-    // BUT we want to show what's in Config if provided.
-    // Let's use service cache as base, but if widget prop is set, maybe that?
-    // Let's stick to: Service finds it.
-
     String? code = await service.getCachedStationCode();
-    // If cache matches initial, good. If initial is different (from Firestore), show initial?
+
+    // If Config has value, it takes precedence on INIT
     if (widget.initialStationCode != null &&
         widget.initialStationCode != code) {
       code = widget.initialStationCode;
-      // Also sync service locally
       await service.setCachedStation(code!);
     }
 
+    if (mounted) {
+      setState(() => _stationCode = code);
+      if (code != null) widget.onStationChanged(code);
+    }
+  }
+
+  Future<void> _loadQuota() async {
+    final service = ref.read(meteocatServiceProvider);
+
     // Load Quota
     final quota = await service.getQuota();
-
     // Load Saver Status
     final saver = await service.isQuotaSaverEnabled;
 
     if (mounted) {
       setState(() {
-        _stationCode = code;
         _quota = quota;
         _quotaSaverEnabled = saver;
       });
-      // Notify parent of initial load
-      if (code != null) widget.onStationChanged(code);
     }
   }
 
@@ -675,8 +689,9 @@ class _MeteocatSectionState extends ConsumerState<_MeteocatSection> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Estació actualitzada: $newCode')),
         );
-        // Refresh quota too just in case
-        _loadData();
+        // Do NOT call _initStation. Cache is already updated by service.refreshStation
+        // Just reload Quota if needed (though quota is global account limit, not station specific usually)
+        _loadQuota();
       }
     } catch (e) {
       if (mounted) {
@@ -686,6 +701,52 @@ class _MeteocatSectionState extends ConsumerState<_MeteocatSection> {
       }
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _manualEditStation() async {
+    final controller = TextEditingController(text: _stationCode);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Editar Estació Manualment'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Introdueix el codi de l\'estació de Meteocat (ex: X1, YD, VR...).',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Codi Estació',
+                border: OutlineInputBorder(),
+              ),
+              textCapitalization: TextCapitalization.characters,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel·lar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.isNotEmpty) {
+      final service = ref.read(meteocatServiceProvider);
+      await service.setCachedStation(result);
+      if (mounted) {
+        setState(() => _stationCode = result);
+        widget.onStationChanged(result);
+      }
     }
   }
 
@@ -699,15 +760,25 @@ class _MeteocatSectionState extends ConsumerState<_MeteocatSection> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Icon(Icons.cloud, color: Colors.blueAccent),
-                const SizedBox(width: 8),
-                Text(
-                  'Estació Meteocat: ${_stationCode ?? "Desconeguda"}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                Row(
+                  children: [
+                    const Icon(Icons.cloud, color: Colors.blueAccent),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Estació Meteocat: ${_stationCode ?? "Desconeguda"}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit, color: Colors.grey),
+                  onPressed: _manualEditStation,
+                  tooltip: 'Editar manualment',
                 ),
               ],
             ),
@@ -822,9 +893,23 @@ class _MeteocatSectionState extends ConsumerState<_MeteocatSection> {
                 );
               }
 
-              final maxInt = max as int;
-              final percent = maxInt > 0 ? (current / maxInt) : 0.0;
-              final isLow = remaining < 50;
+              final int maxInt = max is int
+                  ? max
+                  : (int.tryParse(max.toString()) ?? 0);
+              final int currentRaw = current is int
+                  ? current
+                  : (int.tryParse(current.toString()) ?? 0);
+              final int remainingInt = remaining is int
+                  ? remaining
+                  : (int.tryParse(remaining.toString()) ?? 0);
+
+              // Handle surplus quota (negative usage)
+              final int displayCurrent = currentRaw < 0 ? 0 : currentRaw;
+              final double percent = maxInt > 0
+                  ? (displayCurrent / maxInt)
+                  : 0.0;
+              final bool isLow = remainingInt < 50;
+              final bool hasSurplus = remainingInt > maxInt;
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -847,7 +932,7 @@ class _MeteocatSectionState extends ConsumerState<_MeteocatSection> {
                     ),
                     const SizedBox(height: 8),
                     LinearProgressIndicator(
-                      value: percent.toDouble(),
+                      value: percent.clamp(0.0, 1.0),
                       backgroundColor: Colors.grey[200],
                       color: isLow
                           ? Colors.red
@@ -859,7 +944,7 @@ class _MeteocatSectionState extends ConsumerState<_MeteocatSection> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('$current / $maxInt utilitzades'),
+                        Text('$displayCurrent / $maxInt utilitzades'),
                         Text(
                           '${(percent * 100).toStringAsFixed(1)}%',
                           style: const TextStyle(fontWeight: FontWeight.bold),
@@ -877,7 +962,7 @@ class _MeteocatSectionState extends ConsumerState<_MeteocatSection> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            'Només queden $remaining consultes!',
+                            'Només queden $remainingInt consultes!',
                             style: const TextStyle(
                               color: Colors.red,
                               fontWeight: FontWeight.bold,
@@ -887,12 +972,38 @@ class _MeteocatSectionState extends ConsumerState<_MeteocatSection> {
                         ],
                       )
                     else
-                      Text(
-                        'Restants: $remaining',
-                        style: TextStyle(
-                          color: Colors.green[700],
-                          fontSize: 12,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            'Restants: $remainingInt',
+                            style: TextStyle(
+                              color: Colors.green[700],
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (hasSurplus) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade100,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '+${remainingInt - maxInt} Extra',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.green.shade800,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                   ],
                 ),

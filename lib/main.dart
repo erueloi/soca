@@ -1,48 +1,28 @@
-import 'package:firebase_auth/firebase_auth.dart';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'core/config/firebase_options.dart';
 import 'core/theme/app_theme.dart';
-import 'features/dashboard/presentation/pages/home_page.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 
-import 'package:intl/date_symbol_data_local.dart';
-import 'core/services/notification_service.dart';
+import 'features/dashboard/presentation/pages/home_page.dart';
 import 'features/settings/presentation/providers/settings_provider.dart';
+import 'features/auth/presentation/pages/login_page.dart';
+import 'features/auth/data/repositories/auth_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('ca_ES', null);
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Authenticate anonymously if not logged in
-  if (FirebaseAuth.instance.currentUser == null) {
-    try {
-      await FirebaseAuth.instance.signInAnonymously();
-    } catch (e) {
-      debugPrint('Error signing in anonymously: $e');
-    }
-  }
-
   // Enable offline persistence
-  // Note regarding Blaze Plan (Pay-as-you-go):
-  // Offline persistence helps reduce read operations by serving data from cache.
-  // Future optimization: implementing specific cache strategies can further minimize costs.
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
   );
-
-  // Initialize Notifications
-  try {
-    await notificationService.initialize();
-  } catch (e) {
-    debugPrint('Error initializing notifications: $e');
-  }
 
   runApp(const ProviderScope(child: SocaApp()));
 }
@@ -53,6 +33,8 @@ class SocaApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final farmConfigAsync = ref.watch(farmConfigStreamProvider);
+    final authStateAsync = ref.watch(authStateProvider);
+
     final farmTitle = farmConfigAsync.when(
       data: (config) => 'Soca - ${config.name}',
       loading: () => 'Soca',
@@ -73,7 +55,21 @@ class SocaApp extends ConsumerWidget {
         Locale('es', 'ES'),
         Locale('en', 'US'),
       ],
-      home: const HomePage(),
+      home: authStateAsync.when(
+        data: (user) {
+          if (user == null) {
+            return const LoginPage();
+          }
+          // Optionally check if email is verified or authorization is strictly needed here?
+          // For now, Firestore rules handle authorization, so even if logged in but unauthorized,
+          // they'll see empty data. We could add an "UnauthorizedPage" later if needed.
+          return const HomePage();
+        },
+        loading: () =>
+            const WelcomeScreen(), // Use WelcomeScreen while checking auth
+        error: (e, s) =>
+            Scaffold(body: Center(child: Text('Error d\'autenticació: $e'))),
+      ),
     );
   }
 }

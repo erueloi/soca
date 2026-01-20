@@ -6,6 +6,9 @@ import 'package:package_info_plus/package_info_plus.dart';
 // import 'package:shared_preferences/shared_preferences.dart'; // Removed
 
 import '../../../../core/services/version_check_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:soca/features/auth/data/repositories/auth_repository.dart';
+import '../../../../core/services/notification_service.dart'; // Added
 import '../../../../features/settings/presentation/providers/settings_provider.dart';
 import '../../../../features/settings/domain/entities/farm_config.dart'; // Added
 import '../../../../features/climate/presentation/pages/clima_page.dart';
@@ -17,6 +20,7 @@ import '../../../trees/presentation/pages/watering_page.dart';
 import '../../../settings/presentation/pages/farm_profile_page.dart';
 import '../../../construction/presentation/pages/construction_page.dart';
 import '../../../horticulture/presentation/pages/horticulture_page.dart';
+import '../../../auth/presentation/pages/user_profile_page.dart';
 
 import '../widgets/irrigation_widget.dart';
 import '../widgets/soca_drawer.dart';
@@ -57,6 +61,12 @@ class _HomePageState extends ConsumerState<HomePage> {
     // Check for updates on startup
     WidgetsBinding.instance.addPostFrameCallback((_) {
       VersionCheckService().checkForUpdates(context);
+    });
+
+    // Initialize Notifications (Post-Login)
+    // This will ask for permission if not granted
+    notificationService.initialize().catchError((e) {
+      debugPrint('Error initializing notifications: $e');
     });
   }
 
@@ -152,6 +162,44 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
   }
 
+  Future<void> _ensureFincaId(FarmConfig config) async {
+    // 1. Auto-repair Config
+    if (config.fincaId == null || config.fincaId!.isEmpty) {
+      debugPrint("FincaId missing. Triggering auto-repair...");
+      final settingsRepo = ref.read(settingsRepositoryProvider);
+      await settingsRepo.saveFarmConfig(config);
+      return; // Return, fetch will happen again via stream
+    }
+
+    // 2. Auto-repair User Authorization
+    final user = ref.read(authRepositoryProvider).currentUser;
+    if (user != null) {
+      final firestoreHandler = FirebaseFirestore.instance;
+      final userDocRef = firestoreHandler.collection('users').doc(user.uid);
+
+      try {
+        final userSnapshot = await userDocRef.get();
+        if (userSnapshot.exists) {
+          final data = userSnapshot.data() ?? {};
+          final List<dynamic> authorized = data['authorizedFincas'] ?? [];
+
+          if (!authorized.contains(config.fincaId)) {
+            debugPrint(
+              "User not authorized for this fincaId. Self-authorizing based on email access...",
+            );
+            // We can do this because they successfully read the config (email match),
+            // and they can write their own user doc.
+            await userDocRef.update({
+              'authorizedFincas': FieldValue.arrayUnion([config.fincaId]),
+            });
+          }
+        }
+      } catch (e) {
+        debugPrint("Error syncing user authorization: $e");
+      }
+    }
+  }
+
   final List<String> _defaultWidgetOrder = [
     'weather',
     'trees',
@@ -203,7 +251,10 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     // Better: Ref listen
     ref.listen(farmConfigStreamProvider, (previous, next) {
-      next.whenData((config) => _loadOrder(config));
+      next.whenData((config) {
+        _loadOrder(config);
+        _ensureFincaId(config);
+      });
     });
 
     final farmName = farmConfigAsync.when(
@@ -309,6 +360,12 @@ class _HomePageState extends ConsumerState<HomePage> {
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (context) => const FarmProfilePage(),
+                        ),
+                      );
+                    } else if (index == 10) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const UserProfilePage(),
                         ),
                       );
                     }
@@ -439,6 +496,11 @@ class _HomePageState extends ConsumerState<HomePage> {
                       icon: Icon(Icons.settings_outlined),
                       selectedIcon: Icon(Icons.settings),
                       label: Text('Configuració'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.person_outline),
+                      selectedIcon: Icon(Icons.person),
+                      label: Text('Perfil'),
                     ),
                   ],
                 ),

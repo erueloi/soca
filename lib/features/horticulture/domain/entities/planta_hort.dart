@@ -137,6 +137,7 @@ class PlantaHort {
   final String familiaBotanica;
   final List<String> aliats;
   final List<String> enemics;
+  final String? fincaId;
 
   // Permaculture specific
   final HortPartComestible partComestible;
@@ -161,6 +162,7 @@ class PlantaHort {
     required this.familiaBotanica,
     this.aliats = const [],
     this.enemics = const [],
+    this.fincaId,
     this.partComestible = HortPartComestible.fruit,
     this.exigenciaNutrients = HortExigenciaNutrients.mitjanamentExigent,
     this.distanciaPlantacio = 30.0,
@@ -183,6 +185,7 @@ class PlantaHort {
       'familiaBotanica': familiaBotanica,
       'aliats': aliats,
       'enemics': enemics,
+      'fincaId': fincaId,
       'partComestible': partComestible.name,
       'exigenciaNutrients': exigenciaNutrients.name,
       'distanciaPlantacio': distanciaPlantacio,
@@ -234,6 +237,7 @@ class PlantaHort {
       familiaBotanica: map['familiaBotanica'] ?? 'Desconeguda',
       aliats: List<String>.from(map['aliats'] ?? []),
       enemics: List<String>.from(map['enemics'] ?? []),
+      fincaId: map['fincaId'],
       partComestible: parsePart(map['partComestible']),
       exigenciaNutrients: parseExigencia(map['exigenciaNutrients']),
       distanciaPlantacio: (map['distanciaPlantacio'] ?? 30.0).toDouble(),
@@ -256,6 +260,7 @@ class PlantaHort {
     String? familiaBotanica,
     List<String>? aliats,
     List<String>? enemics,
+    String? fincaId,
     HortPartComestible? partComestible,
     HortExigenciaNutrients? exigenciaNutrients,
     double? distanciaPlantacio,
@@ -276,6 +281,7 @@ class PlantaHort {
       familiaBotanica: familiaBotanica ?? this.familiaBotanica,
       aliats: aliats ?? this.aliats,
       enemics: enemics ?? this.enemics,
+      fincaId: fincaId ?? this.fincaId,
       partComestible: partComestible ?? this.partComestible,
       exigenciaNutrients: exigenciaNutrients ?? this.exigenciaNutrients,
       distanciaPlantacio: distanciaPlantacio ?? this.distanciaPlantacio,

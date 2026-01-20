@@ -8,97 +8,142 @@ import '../models/construction_point.dart';
 class ConstructionRepository {
   final CollectionReference _pointsCollection = FirebaseFirestore.instance
       .collection('construction_points');
-  // We might store floor plans in a separate collection or config doc.
-  // Let's store floor plans map in a 'settings' doc or generic 'construction_settings' collection.
-  // For simplicity, let's use a dedicated doc 'settings/construction' or similar.
-  // But better: A collection 'construction_floors' where we can add floors dynamically if needed?
-  // User requested "Llista desplegable per a cada pis". Let's assume fixed known floors or dynamic.
-  // Let's allow dynamic floors config stored in Firestore.
-
-  final DocumentReference _floorsConfigDoc = FirebaseFirestore.instance
-      .collection('settings')
-      .doc('construction_floors');
-
+  final CollectionReference _plansCollection = FirebaseFirestore.instance
+      .collection('construction_plans');
   final FirebaseStorage _storage = FirebaseStorage.instance;
+  final String? fincaId;
+
+  ConstructionRepository({this.fincaId});
 
   // --- Points ---
 
   Stream<List<ConstructionPoint>> getPoints(String floorId) {
+    if (fincaId == null) return Stream.value([]);
+
     return _pointsCollection
+        .where('fincaId', isEqualTo: fincaId)
         .where('floorId', isEqualTo: floorId)
         .snapshots()
         .map((snapshot) {
+          debugPrint(
+            'ConstructionRepo: getPoints($floorId) snapshot: ${snapshot.docs.length} docs',
+          );
           return snapshot.docs.map((doc) {
             return ConstructionPoint.fromMap(
               doc.data() as Map<String, dynamic>,
               doc.id,
             );
           }).toList();
+        })
+        .handleError((e) {
+          debugPrint('ConstructionRepo: Error in getPoints: $e');
+          return <ConstructionPoint>[];
         });
   }
 
   Stream<List<ConstructionPoint>> getAllPoints() {
-    return _pointsCollection.snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) {
-        return ConstructionPoint.fromMap(
-          doc.data() as Map<String, dynamic>,
-          doc.id,
-        );
-      }).toList();
-    });
+    if (fincaId == null) return Stream.value([]);
+
+    return _pointsCollection
+        .where('fincaId', isEqualTo: fincaId)
+        .snapshots()
+        .map((snapshot) {
+          debugPrint(
+            'ConstructionRepo: getAllPoints snapshot: ${snapshot.docs.length} docs',
+          );
+          return snapshot.docs.map((doc) {
+            return ConstructionPoint.fromMap(
+              doc.data() as Map<String, dynamic>,
+              doc.id,
+            );
+          }).toList();
+        })
+        .handleError((e) {
+          debugPrint('ConstructionRepo: Error in getAllPoints: $e');
+          return <ConstructionPoint>[];
+        });
   }
 
   Future<void> addPoint(ConstructionPoint point) async {
-    await _pointsCollection.add(point.toMap());
+    if (fincaId == null) throw Exception('FincaId not set');
+
+    final pointToSave = point.copyWith(fincaId: fincaId);
+    await _pointsCollection.add(pointToSave.toMap());
   }
 
   Future<void> updatePoint(ConstructionPoint point) async {
-    await _pointsCollection.doc(point.id).update(point.toMap());
+    if (fincaId == null) throw Exception('FincaId not set');
+
+    final pointToSave = point.copyWith(fincaId: fincaId);
+    await _pointsCollection.doc(point.id).update(pointToSave.toMap());
   }
 
   Future<void> deletePoint(String pointId) async {
     await _pointsCollection.doc(pointId).delete();
   }
 
-  // --- Floor Plans ---
+  // --- Floor Plans (Collection Based) ---
 
-  // Returns a Map of floorId -> imageUrl
+  // Returns a Map of floorId (Name) -> imageUrl
+  // We map 'name' to 'imageUrl' to keep compatibility with UI that expects Map<String, String>
   Stream<Map<String, String>> getFloorPlans() {
-    return _floorsConfigDoc.snapshots().map((snapshot) {
-      if (!snapshot.exists || snapshot.data() == null) {
-        return {};
-      }
-      final data = snapshot.data() as Map<String, dynamic>;
-      // Filter out null values or convert to String safely
-      // Map<String, String>.from might fail if values are not strings.
-      // Better manual conversion:
-      final result = <String, String>{};
-      data.forEach((key, value) {
-        if (value is String) {
-          result[key] = value;
-        } else {
-          // Treat null/other as empty string or ignore?
-          // If we want it to show up, we need a key.
-          result[key] = "";
-        }
-      });
-      return result;
+    if (fincaId == null) return Stream.value({});
+
+    return _plansCollection
+        .where('fincaId', isEqualTo: fincaId)
+        .snapshots()
+        .map((snapshot) {
+          final result = <String, String>{};
+          for (var doc in snapshot.docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            final name = data['name'] as String?;
+            final url = data['imageUrl'] as String?;
+            if (name != null && name.isNotEmpty) {
+              result[name] = url ?? "";
+            }
+          }
+          debugPrint('ConstructionRepo: Loaded ${result.length} plans.');
+          return result;
+        })
+        .handleError((e) {
+          debugPrint('ConstructionRepo: Error loading plans: $e');
+          return <String, String>{};
+        });
+  }
+
+  Future<void> addEmptyFloor(String floorName) async {
+    if (fincaId == null) return;
+
+    // Use name as floorId if we want, or just add a new doc with that name
+    // To prevent duplicates, we can check efficiently or just add.
+    // Let's standardise: Name MUST be unique for UI Map.
+
+    // Check if exists
+    final existing = await _plansCollection
+        .where('fincaId', isEqualTo: fincaId)
+        .where('name', isEqualTo: floorName)
+        .limit(1)
+        .get();
+
+    if (existing.docs.isNotEmpty) return;
+
+    await _plansCollection.add({
+      'fincaId': fincaId,
+      'name': floorName,
+      'imageUrl': "",
+      'createdAt': FieldValue.serverTimestamp(),
     });
   }
 
-  Future<void> addEmptyFloor(String floorId) async {
-    // Store empty string to indicate "no image" but "exists"
-    await _floorsConfigDoc.set({floorId: ""}, SetOptions(merge: true));
-  }
+  Future<void> saveFloorPlan(String floorName, XFile imageFile) async {
+    if (fincaId == null) return;
 
-  Future<void> saveFloorPlan(String floorId, XFile imageFile) async {
     try {
       final ref = _storage.ref().child(
-        'construction_plans/$floorId.jpg', // Overwrite previous plan for same floor is fine
+        'construction_plans/$fincaId/$floorName.jpg',
       );
 
       final metadata = SettableMetadata(contentType: 'image/jpeg');
-
       if (kIsWeb) {
         await ref.putData(await imageFile.readAsBytes(), metadata);
       } else {
@@ -107,8 +152,23 @@ class ConstructionRepository {
 
       final url = await ref.getDownloadURL();
 
-      // Update config doc
-      await _floorsConfigDoc.set({floorId: url}, SetOptions(merge: true));
+      // Find doc to update or create
+      final query = await _plansCollection
+          .where('fincaId', isEqualTo: fincaId)
+          .where('name', isEqualTo: floorName)
+          .limit(1)
+          .get();
+
+      if (query.docs.isNotEmpty) {
+        await query.docs.first.reference.update({'imageUrl': url});
+      } else {
+        await _plansCollection.add({
+          'fincaId': fincaId,
+          'name': floorName,
+          'imageUrl': url,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
     } catch (e) {
       debugPrint('Error uploading floor plan: $e');
       rethrow;
@@ -116,28 +176,30 @@ class ConstructionRepository {
   }
 
   Future<void> renameFloor(String oldName, String newName) async {
+    if (fincaId == null) return;
+
     try {
-      final docSnapshot = await _floorsConfigDoc.get();
-      if (!docSnapshot.exists) return;
+      final query = await _plansCollection
+          .where('fincaId', isEqualTo: fincaId)
+          .where('name', isEqualTo: oldName)
+          .limit(1)
+          .get();
 
-      final data = docSnapshot.data() as Map<String, dynamic>;
-      final url = data[oldName];
-
-      if (url != null) {
+      if (query.docs.isNotEmpty) {
+        final doc = query.docs.first;
         final batch = FirebaseFirestore.instance.batch();
 
-        // 1. Update Config: Remove old key, add new key
-        batch.update(_floorsConfigDoc, {
-          oldName: FieldValue.delete(),
-          newName: url,
-        });
+        // 1. Update Name in Plan Doc
+        batch.update(doc.reference, {'name': newName});
 
-        // 2. Update all Points
+        // 2. Update FloorId (which is Name) in all Points
         final pointsSnapshot = await _pointsCollection
+            .where('fincaId', isEqualTo: fincaId)
             .where('floorId', isEqualTo: oldName)
             .get();
-        for (final doc in pointsSnapshot.docs) {
-          batch.update(doc.reference, {'floorId': newName});
+
+        for (final pDoc in pointsSnapshot.docs) {
+          batch.update(pDoc.reference, {'floorId': newName});
         }
 
         await batch.commit();
@@ -148,27 +210,42 @@ class ConstructionRepository {
     }
   }
 
-  Future<void> deleteFloorPlan(String floorId) async {
-    try {
-      // 1. Remove from Firestore Config
-      await _floorsConfigDoc.update({floorId: FieldValue.delete()});
+  Future<void> deleteFloorPlan(String floorName) async {
+    if (fincaId == null) return;
 
-      // 2. Delete from Storage
-      final ref = _storage.ref().child('construction_plans/$floorId.jpg');
-      await ref.delete();
+    try {
+      final query = await _plansCollection
+          .where('fincaId', isEqualTo: fincaId)
+          .where('name', isEqualTo: floorName)
+          .limit(1)
+          .get();
+
+      for (var doc in query.docs) {
+        await doc.reference.delete();
+      }
+
+      // Cleanup storage?
+      final ref = _storage.ref().child(
+        'construction_plans/$fincaId/$floorName.jpg',
+      );
+      try {
+        await ref.delete();
+      } catch (_) {} // Ignore if not found
     } catch (e) {
       debugPrint('Error deleting floor plan: $e');
-      // It's possible the file doesn't exist if only the config was there, or vice versa.
-      // We can swallow the error or rethrow. For UI "remove", robust is better.
     }
   }
 
   // --- Pathology Images ---
 
   Future<String?> uploadPathologyImage(XFile imageFile) async {
+    final prefix = fincaId != null
+        ? 'construction_images/$fincaId'
+        : 'construction_images/global';
+
     try {
       final ref = _storage.ref().child(
-        'construction_images/${DateTime.now().millisecondsSinceEpoch}.jpg',
+        '$prefix/${DateTime.now().millisecondsSinceEpoch}.jpg',
       );
 
       final metadata = SettableMetadata(contentType: 'image/jpeg');

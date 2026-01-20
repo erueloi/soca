@@ -523,80 +523,146 @@ class _WateringPageState extends ConsumerState<WateringPage> {
     WateringEvent event,
   ) async {
     final controller = TextEditingController(text: event.liters.toString());
+    DateTime selectedDate = event.date;
 
     await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Modificar Reg'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Data: ${DateFormat('dd/MM/yyyy HH:mm').format(event.date)}'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: const InputDecoration(
-                labelText: 'Litres',
-                suffixText: 'L',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          // DELETE BUTTON
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            onPressed: () async {
-              // Confirm Delete
-              final confirm = await showDialog<bool>(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Eliminar Reg?'),
-                  content: const Text('Aquesta acció no es pot desfer.'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('CANCEL·LAR'),
-                    ),
-                    TextButton(
-                      style: TextButton.styleFrom(foregroundColor: Colors.red),
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text('ELIMINAR'),
-                    ),
-                  ],
-                ),
-              );
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('Modificar Reg'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                InkWell(
+                  onTap: () async {
+                    final pickedDate = await showDatePicker(
+                      context: context,
+                      initialDate: selectedDate,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now(),
+                    );
+                    if (pickedDate != null && context.mounted) {
+                      final pickedTime = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.fromDateTime(selectedDate),
+                      );
 
-              if (confirm == true) {
-                await ref
-                    .read(treesRepositoryProvider)
-                    .deleteWateringEvent(treeId, event.id);
-                if (context.mounted) {
-                  Navigator.pop(context); // Close Edit Dialog
-                }
-              }
-            },
-            child: const Text('ELIMINAR'),
-          ),
-          // SAVE BUTTON
-          ElevatedButton(
-            onPressed: () async {
-              final newVal = double.tryParse(controller.text);
-              if (newVal != null && newVal >= 0) {
-                final updatedEvent = event.copyWith(liters: newVal);
-                await ref
-                    .read(treesRepositoryProvider)
-                    .updateWateringEvent(treeId, updatedEvent);
-                if (context.mounted) Navigator.pop(context);
-              }
-            },
-            child: const Text('GUARDAR CANVIS'),
-          ),
-        ],
+                      if (pickedTime != null) {
+                        setState(() {
+                          selectedDate = DateTime(
+                            pickedDate.year,
+                            pickedDate.month,
+                            pickedDate.day,
+                            pickedTime.hour,
+                            pickedTime.minute,
+                          );
+                        });
+                      } else {
+                        // Keep old time if time picker cancelled
+                        setState(() {
+                          selectedDate = DateTime(
+                            pickedDate.year,
+                            pickedDate.month,
+                            pickedDate.day,
+                            selectedDate.hour,
+                            selectedDate.minute,
+                          );
+                        });
+                      }
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calendar_today, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Data: ${DateFormat('dd/MM/yyyy HH:mm').format(selectedDate)}',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.edit, size: 16, color: Colors.grey),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Litres',
+                    suffixText: 'L',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              // DELETE BUTTON
+              TextButton(
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                onPressed: () async {
+                  // Confirm Delete
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Eliminar Reg?'),
+                      content: const Text('Aquesta acció no es pot desfer.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('CANCEL·LAR'),
+                        ),
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.red,
+                          ),
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('ELIMINAR'),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (confirm == true) {
+                    await ref
+                        .read(treesRepositoryProvider)
+                        .deleteWateringEvent(treeId, event.id);
+                    if (context.mounted) {
+                      Navigator.pop(context); // Close Edit Dialog
+                    }
+                  }
+                },
+                child: const Text('ELIMINAR'),
+              ),
+              // SAVE BUTTON
+              ElevatedButton(
+                onPressed: () async {
+                  final newVal = double.tryParse(controller.text);
+                  if (newVal != null && newVal >= 0) {
+                    final updatedEvent = event.copyWith(
+                      liters: newVal,
+                      date: selectedDate,
+                    );
+                    await ref
+                        .read(treesRepositoryProvider)
+                        .updateWateringEvent(treeId, updatedEvent);
+                    if (context.mounted) Navigator.pop(context);
+                  }
+                },
+                child: const Text('GUARDAR CANVIS'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

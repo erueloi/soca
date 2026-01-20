@@ -1,3 +1,14 @@
+// import 'package:flutter/material.dart'; // Unused, but ExpenseCategory uses colors/icons? Actually ExpenseCategory only stores hex string and code point int. But in `FarmConfig` I added `ExpenseCategory` class which might have relied on it?
+// Wait, `ExpenseCategory` in `farm_config.dart` uses `const FarmConfig`. `FarmConfig` uses `Color`? No, it uses Strings and doubles.
+// Ah, `FarmConfig.empty` uses `Colors.blue` which is from material.
+// Let's check `FarmConfig.empty` implementation again.
+// It uses hex strings 'FF2196F3'. It does NOT use `Colors` class directly in my previous edit.
+// So `package:flutter/material.dart` IS truly unused in `farm_config.dart`.
+// Exception: `iconCode` is int.
+// So safe to remove.
+
+import '../../../../features/tasks/domain/entities/bucket.dart';
+
 class FarmConfig {
   final String name;
   final String cif;
@@ -13,6 +24,12 @@ class FarmConfig {
   final bool morningNotificationsEnabled; // Morning
   final String morningNotificationTime; // Morning (e.g. "08:00")
   final List<String> dashboardOrder; // Order of dashboard widgets
+  final List<String> taskPhases; // Custom phases/labels
+  final List<ExpenseCategory> expenseCategories; // Custom expense categories
+  final List<Bucket> buckets; // Task buckets (columns)
+
+  final String? fincaId;
+  final List<String> authorizedEmails;
 
   const FarmConfig({
     required this.name,
@@ -29,6 +46,11 @@ class FarmConfig {
     this.morningNotificationsEnabled = true,
     this.morningNotificationTime = '08:00',
     this.dashboardOrder = const [],
+    this.taskPhases = const [],
+    this.expenseCategories = const [],
+    this.buckets = const [],
+    this.fincaId,
+    this.authorizedEmails = const [],
   });
 
   factory FarmConfig.empty() {
@@ -47,6 +69,36 @@ class FarmConfig {
       morningNotificationsEnabled: true,
       morningNotificationTime: '08:00',
       dashboardOrder: [],
+      taskPhases: ['Urgent', 'Compra', 'Manteniment', 'Planificació'],
+      expenseCategories: [
+        ExpenseCategory(
+          id: 'material',
+          name: 'Material',
+          colorHex: 'FF2196F3',
+          iconCode: 0xe17f,
+        ), // Icons.construction
+        ExpenseCategory(
+          id: 'eina',
+          name: 'Eina',
+          colorHex: 'FFFF9800',
+          iconCode: 0xe182,
+        ), // Icons.build
+        ExpenseCategory(
+          id: 'servei',
+          name: 'Servei',
+          colorHex: 'FF9C27B0',
+          iconCode: 0xefd3,
+        ), // Icons.design_services
+        ExpenseCategory(
+          id: 'altres',
+          name: 'Altres',
+          colorHex: 'FF9E9E9E',
+          iconCode: 0xe3e3,
+        ), // Icons.more_horiz
+      ],
+      buckets: [],
+      fincaId: null,
+      authorizedEmails: [],
     );
   }
 
@@ -66,6 +118,11 @@ class FarmConfig {
       'morningNotificationsEnabled': morningNotificationsEnabled,
       'morningNotificationTime': morningNotificationTime,
       'dashboardOrder': dashboardOrder,
+      'taskPhases': taskPhases,
+      'expenseCategories': expenseCategories.map((e) => e.toMap()).toList(),
+      'buckets': buckets.map((b) => b.toMap()).toList(),
+      'fincaId': fincaId,
+      'authorizedEmails': authorizedEmails,
     };
   }
 
@@ -93,6 +150,52 @@ class FarmConfig {
               ?.map((e) => e.toString())
               .toList() ??
           [],
+      taskPhases:
+          (map['taskPhases'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          ['Urgent', 'Compra', 'Manteniment', 'Planificació'],
+      expenseCategories:
+          (map['expenseCategories'] as List<dynamic>?)
+              ?.map((e) => ExpenseCategory.fromMap(e))
+              .toList() ??
+          [
+            ExpenseCategory(
+              id: 'material',
+              name: 'Material',
+              colorHex: 'FF2196F3',
+              iconCode: 0xe17f,
+            ),
+            ExpenseCategory(
+              id: 'eina',
+              name: 'Eina',
+              colorHex: 'FFFF9800',
+              iconCode: 0xe182,
+            ),
+            ExpenseCategory(
+              id: 'servei',
+              name: 'Servei',
+              colorHex: 'FF9C27B0',
+              iconCode: 0xefd3,
+            ),
+            ExpenseCategory(
+              id: 'altres',
+              name: 'Altres',
+              colorHex: 'FF9E9E9E',
+              iconCode: 0xe3e3,
+            ),
+          ],
+      buckets:
+          (map['buckets'] as List<dynamic>?)
+              ?.map((e) => Bucket.fromMap(e))
+              .toList() ??
+          [],
+      fincaId: map['fincaId'],
+      authorizedEmails:
+          (map['authorizedEmails'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
     );
   }
 
@@ -111,6 +214,11 @@ class FarmConfig {
     bool? morningNotificationsEnabled,
     String? morningNotificationTime,
     List<String>? dashboardOrder,
+    List<String>? taskPhases,
+    List<ExpenseCategory>? expenseCategories,
+    List<Bucket>? buckets,
+    String? fincaId,
+    List<String>? authorizedEmails,
   }) {
     return FarmConfig(
       name: name ?? this.name,
@@ -131,6 +239,11 @@ class FarmConfig {
       morningNotificationTime:
           morningNotificationTime ?? this.morningNotificationTime,
       dashboardOrder: dashboardOrder ?? this.dashboardOrder,
+      taskPhases: taskPhases ?? this.taskPhases,
+      expenseCategories: expenseCategories ?? this.expenseCategories,
+      buckets: buckets ?? this.buckets,
+      fincaId: fincaId ?? this.fincaId,
+      authorizedEmails: authorizedEmails ?? this.authorizedEmails,
     );
   }
 }
@@ -174,6 +287,33 @@ class FarmZone {
       rotationStartDate: map['rotationStartDate'] != null
           ? DateTime.parse(map['rotationStartDate'])
           : null,
+    );
+  }
+}
+
+class ExpenseCategory {
+  final String id;
+  final String name;
+  final String colorHex;
+  final int iconCode; // Store IconData codePoint
+
+  const ExpenseCategory({
+    required this.id,
+    required this.name,
+    required this.colorHex,
+    required this.iconCode,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {'id': id, 'name': name, 'colorHex': colorHex, 'iconCode': iconCode};
+  }
+
+  factory ExpenseCategory.fromMap(Map<String, dynamic> map) {
+    return ExpenseCategory(
+      id: map['id'] ?? '',
+      name: map['name'] ?? '',
+      colorHex: map['colorHex'] ?? 'FF9E9E9E',
+      iconCode: map['iconCode'] ?? 0xe3e3,
     );
   }
 }

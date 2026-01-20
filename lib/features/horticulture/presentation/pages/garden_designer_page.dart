@@ -1663,7 +1663,7 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
   }
 
   Widget _buildStatsPanel(List<PlantaHort> plants) {
-    if (_placedPlants.isEmpty) return const SizedBox.shrink();
+    if (_placedPlants.isEmpty || plants.isEmpty) return const SizedBox.shrink();
 
     double totalHarvestKg = 0;
     int totalPlants = _placedPlants.length;

@@ -4,8 +4,12 @@ import '../../domain/entities/tree.dart';
 import '../../domain/entities/watering_event.dart';
 import '../../data/repositories/trees_repository.dart';
 
+import '../../../settings/presentation/providers/settings_provider.dart';
+
 final treesRepositoryProvider = Provider<TreesRepository>((ref) {
-  return TreesRepository();
+  final configAsync = ref.watch(farmConfigStreamProvider);
+  final fincaId = configAsync.value?.fincaId;
+  return TreesRepository(fincaId: fincaId);
 });
 
 final treesStreamProvider = StreamProvider<List<Tree>>((ref) {

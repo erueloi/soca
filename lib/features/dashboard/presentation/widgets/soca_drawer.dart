@@ -14,6 +14,7 @@ import '../../../../core/services/version_check_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../features/settings/presentation/providers/settings_provider.dart';
 import '../../../horticulture/presentation/pages/horticulture_page.dart';
+import '../../../auth/presentation/pages/user_profile_page.dart';
 
 class SocaDrawer extends ConsumerWidget {
   const SocaDrawer({super.key});
@@ -173,6 +174,18 @@ class SocaDrawer extends ConsumerWidget {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (context) => const FarmProfilePage(),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.person),
+                  title: const Text('Perfil d\'Usuari'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const UserProfilePage(),
                       ),
                     );
                   },

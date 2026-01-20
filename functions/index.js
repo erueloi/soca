@@ -459,97 +459,112 @@ exports.dailyTaskSummary = functions.pubsub
             console.log('Running daily task summary scheduler...');
 
             // 1. Get Farm Configuration
-            const configDoc = await admin.firestore().collection('settings').doc('finca_config').get();
-            if (!configDoc.exists) {
-                console.log('No farm config found.');
+            // 1. Get ALL Farm Configurations
+            const fincasSnapshot = await admin.firestore().collection('finques').get();
+
+            if (fincasSnapshot.empty) {
+                console.log('No fincas found in configuration.');
                 return null;
             }
-            const config = configDoc.data();
 
-            // Get current time in Madrid
-            const now = new Date();
-            const madridDateStr = now.toLocaleString("en-US", { timeZone: "Europe/Madrid" });
-            const madridNow = new Date(madridDateStr);
-            const todayStr = madridNow.toISOString().split('T')[0];
+            console.log(`Processing notifications for ${fincasSnapshot.size} fincas...`);
 
-            const updates = {};
+            // Iterate through each Finca
+            for (const configDoc of fincasSnapshot.docs) {
+                const config = configDoc.data();
+                const fincaId = configDoc.id; // Use Doc ID as the Truth
 
-            // --- MORNING NOTIFICATION (Tasks for TODAY) ---
-            // Default 08:00 if not set
-            if (config.morningNotificationsEnabled !== false) {
-                const morningTime = config.morningNotificationTime || '08:00';
-                const [mHour, mMinute] = morningTime.split(':').map(Number);
-                const morningTarget = new Date(madridNow);
-                morningTarget.setHours(mHour, mMinute, 0, 0);
+                if (!fincaId || fincaId !== config.fincaId) {
+                    console.log(`Warning: Finca ID mismatch or missing in doc ${configDoc.id}. Using doc ID.`);
+                }
 
-                // Check if time passed AND not sent yet
-                if (madridNow >= morningTarget && config.lastMorningNotificationDate !== todayStr) {
-                    console.log(`Sending MORNING notification for ${todayStr}...`);
+                // Get current time in Madrid
+                const now = new Date();
+                const madridDateStr = now.toLocaleString("en-US", { timeZone: "Europe/Madrid" });
+                const madridNow = new Date(madridDateStr);
+                const todayStr = madridNow.toISOString().split('T')[0];
 
-                    // Query for TODAY
-                    const todayStart = new Date(madridNow);
-                    todayStart.setHours(0, 0, 0, 0);
-                    const todayEnd = new Date(madridNow);
-                    todayEnd.setHours(23, 59, 59, 999);
+                const updates = {};
 
-                    // Shift for UTC (-2h safety)
-                    const startMillis = todayStart.getTime() - (2 * 60 * 60 * 1000);
-                    const endMillis = todayEnd.getTime() - (2 * 60 * 60 * 1000);
+                // --- MORNING NOTIFICATION (Tasks for TODAY) ---
+                // Default 08:00 if not set
+                if (config.morningNotificationsEnabled !== false) {
+                    const morningTime = config.morningNotificationTime || '08:00';
+                    const [mHour, mMinute] = morningTime.split(':').map(Number);
+                    const morningTarget = new Date(madridNow);
+                    morningTarget.setHours(mHour, mMinute, 0, 0);
 
-                    const sent = await checkAndSendNotification(
-                        startMillis,
-                        endMillis,
-                        "remind_today", // type
-                        "Bon dia! Feina per avui ☀️" // Title prefix
-                    );
+                    // Check if time passed AND not sent yet
+                    if (madridNow >= morningTarget && config.lastMorningNotificationDate !== todayStr) {
+                        console.log(`Sending MORNING notification for ${todayStr}...`);
 
-                    if (sent) {
-                        updates.lastMorningNotificationDate = todayStr;
+                        // Query for TODAY
+                        const todayStart = new Date(madridNow);
+                        todayStart.setHours(0, 0, 0, 0);
+                        const todayEnd = new Date(madridNow);
+                        todayEnd.setHours(23, 59, 59, 999);
+
+                        // Shift for UTC (-2h safety)
+                        const startMillis = todayStart.getTime() - (2 * 60 * 60 * 1000);
+                        const endMillis = todayEnd.getTime() - (2 * 60 * 60 * 1000);
+
+                        const sent = await checkAndSendNotification(
+                            startMillis,
+                            endMillis,
+                            "remind_today", // type
+                            "Bon dia! Feina per avui ☀️", // Title prefix
+                            fincaId
+                        );
+
+                        if (sent) {
+                            updates.lastMorningNotificationDate = todayStr;
+                        }
                     }
                 }
-            }
 
-            // --- EVENING NOTIFICATION (Tasks for TOMORROW) ---
-            if (config.dailyNotificationsEnabled !== false) {
-                const eveningTime = config.dailyNotificationTime || '20:30';
-                const [eHour, eMinute] = eveningTime.split(':').map(Number);
-                const eveningTarget = new Date(madridNow);
-                eveningTarget.setHours(eHour, eMinute, 0, 0);
+                // --- EVENING NOTIFICATION (Tasks for TOMORROW) ---
+                if (config.dailyNotificationsEnabled !== false) {
+                    const eveningTime = config.dailyNotificationTime || '20:30';
+                    const [eHour, eMinute] = eveningTime.split(':').map(Number);
+                    const eveningTarget = new Date(madridNow);
+                    eveningTarget.setHours(eHour, eMinute, 0, 0);
 
-                // Check if time passed AND not sent yet
-                if (madridNow >= eveningTarget && config.lastNotificationDate !== todayStr) {
-                    console.log(`Sending EVENING notification for ${todayStr}...`);
+                    // Check if time passed AND not sent yet
+                    if (madridNow >= eveningTarget && config.lastNotificationDate !== todayStr) {
+                        console.log(`Sending EVENING notification for ${todayStr}...`);
 
-                    // Calculate "Tomorrow"
-                    const tomorrow = new Date(madridNow);
-                    tomorrow.setDate(tomorrow.getDate() + 1);
-                    tomorrow.setHours(0, 0, 0, 0);
+                        // Calculate "Tomorrow"
+                        const tomorrow = new Date(madridNow);
+                        tomorrow.setDate(tomorrow.getDate() + 1);
+                        tomorrow.setHours(0, 0, 0, 0);
 
-                    const endTomorrow = new Date(tomorrow);
-                    endTomorrow.setHours(23, 59, 59, 999);
+                        const endTomorrow = new Date(tomorrow);
+                        endTomorrow.setHours(23, 59, 59, 999);
 
-                    // Shift for UTC (-2h safety)
-                    const startMillis = tomorrow.getTime() - (2 * 60 * 60 * 1000);
-                    const endMillis = endTomorrow.getTime() - (2 * 60 * 60 * 1000);
+                        // Shift for UTC (-2h safety)
+                        const startMillis = tomorrow.getTime() - (2 * 60 * 60 * 1000);
+                        const endMillis = endTomorrow.getTime() - (2 * 60 * 60 * 1000);
 
-                    const sent = await checkAndSendNotification(
-                        startMillis,
-                        endMillis,
-                        "remind_tomorrow",
-                        "Soca: Previsió per a demà 🌙"
-                    );
+                        const sent = await checkAndSendNotification(
+                            startMillis,
+                            endMillis,
+                            "remind_tomorrow",
+                            "Soca: Previsió per a demà 🌙",
+                            fincaId
+                        );
 
-                    if (sent) {
-                        updates.lastNotificationDate = todayStr; // Keep legacy name for evening
+                        if (sent) {
+                            updates.lastNotificationDate = todayStr; // Keep legacy name for evening
+                        }
                     }
                 }
-            }
 
-            // Update Config if notifications were sent
-            if (Object.keys(updates).length > 0) {
-                await admin.firestore().collection('settings').doc('finca_config').update(updates);
-                console.log('Config updated:', updates);
-            }
+                // Update Config if notifications were sent
+                if (Object.keys(updates).length > 0) {
+                    await configDoc.ref.update(updates);
+                    console.log(`Config updated for ${fincaId}:`, updates);
+                }
+            } // End for loop
 
             return null;
 
@@ -562,15 +577,16 @@ exports.dailyTaskSummary = functions.pubsub
 /**
  * Helper to query tasks and send notification
  */
-async function checkAndSendNotification(startMillis, endMillis, type, titlePrefix) {
+async function checkAndSendNotification(startMillis, endMillis, type, titlePrefix, fincaId) {
     const tasksSnapshot = await admin.firestore().collection('tasks')
         .where('dueDate', '>=', startMillis)
         .where('dueDate', '<=', endMillis)
         .where('isDone', '==', false)
+        .where('fincaId', '==', fincaId) // Ensure we only count tasks for this finca
         .get();
 
     const taskCount = tasksSnapshot.size;
-    console.log(`[${type}] Found ${taskCount} tasks.`);
+    console.log(`[${type}] Found ${taskCount} tasks for finca ${fincaId}.`);
 
     if (taskCount === 0) {
         console.log(`[${type}] No tasks, skipping.`);
@@ -581,14 +597,35 @@ async function checkAndSendNotification(startMillis, endMillis, type, titlePrefi
         return true;
     }
 
-    // Get Recipients
-    const usersSnapshot = await admin.firestore().collection('users').get();
+    // Get Recipients - Correctly filtered by Finca Authorization
+    const usersSnapshot = await admin.firestore().collection('users')
+        .where('authorizedFincas', 'array-contains', fincaId)
+        .get();
     const tokens = [];
 
     usersSnapshot.forEach(doc => {
         const data = doc.data();
-        if (data.fcmToken && data.dailyNotificationsEnabled !== false) {
-            tokens.push(data.fcmToken);
+
+        // Check global notification setting (default true)
+        if (data.dailyNotificationsEnabled !== false) {
+            const userTokens = new Set();
+
+            // 1. New Multi-Device Support
+            if (data.fcmTokens) {
+                Object.values(data.fcmTokens).forEach(device => {
+                    if (device && device.token) {
+                        userTokens.add(device.token);
+                    }
+                });
+            }
+
+            // 2. Legacy Support
+            if (data.fcmToken) {
+                userTokens.add(data.fcmToken);
+            }
+
+            // Add all unique tokens to the list
+            userTokens.forEach(t => tokens.push(t));
         }
     });
 
@@ -637,3 +674,212 @@ async function checkAndSendNotification(startMillis, endMillis, type, titlePrefi
         return false;
     }
 }
+
+/**
+ * Listener for Farm Config changes.
+ * Propagates 'fincaId' to all relevant collections and updates User authorizations.
+ */
+exports.onFarmConfigWrite = functions.firestore
+    .document('finques/{fincaId}')
+    .onWrite(async (change, context) => {
+        const newData = change.after.exists ? change.after.data() : null;
+        const oldData = change.before.exists ? change.before.data() : null;
+
+        if (!newData || !newData.fincaId) {
+            console.log('No fincaId in new config or config deleted. Skipping propagation.');
+            return null;
+        }
+
+        const fincaId = newData.fincaId;
+        const oldFincaId = oldData ? oldData.fincaId : null;
+        const authorizedEmails = newData.authorizedEmails || [];
+        const oldEmails = oldData ? (oldData.authorizedEmails || []) : [];
+
+        // 1. Check if we need to propagate fincaId (if changed or new)
+        // For robustness, we can propagate if authorizedEmails changed too? No, only fincaId.
+        // But if it's the SAME fincaId, we might want to skip heavy updates.
+        // However, if it's a migration (adding previously missing ID), oldFincaId will be null.
+        // if (fincaId !== oldFincaId) {
+        console.log(`Forcing propagation of fincaId: '${fincaId}'...`);
+        await propagateFincaId(fincaId);
+        // }
+
+        // 2. Update Users Authorization
+        // We check if emails list changed OR fincaId changed.
+        const emailsChanged = JSON.stringify(authorizedEmails) !== JSON.stringify(oldEmails);
+        if (fincaId !== oldFincaId || emailsChanged) {
+            console.log('Updating authorized users...');
+            await updateAuthorizedUsers(fincaId, authorizedEmails);
+        }
+
+        return null;
+    });
+
+async function propagateFincaId(fincaId) {
+    const db = admin.firestore();
+    const batchHandler = new BatchHandler(db);
+
+    // List of Root Collections
+    const startCollections = [
+        'trees',
+        'tasks',
+        'plantes_hort',
+        'patrons_rotacio',
+        'espais_hort',
+        'clima_historic', // Root collection
+        'construction_points', // Based on repository inspection
+        'construction_plans', // New collection
+        'species' // Added species
+        // 'settings' is excluded generally, except specific docs, but we are in settings trigger.
+    ];
+
+    // 1. Update Root Collections
+    for (const colName of startCollections) {
+        console.log(`Queuing update for collection: ${colName}`);
+        const snapshot = await db.collection(colName).get();
+        snapshot.forEach(doc => {
+            batchHandler.add(doc.ref, { fincaId: fincaId });
+        });
+    }
+
+    // 2. Update Subcollections (using collectionGroup)
+    // We must be careful not to update unrelated collections if names collide globally, 
+    // but in this app schema names are unique enough or belong to this domain.
+    const subCollections = [
+        'regs', // trees/regs
+        'evolucio', // trees/evolucio - Though migrated to seguiment, kept for safety?
+        'seguiment', // trees/seguiment
+        'historic_ia' // trees/historic_ia
+    ];
+
+    for (const subColName of subCollections) {
+        console.log(`Queuing update for subcollection group: ${subColName}`);
+        const snapshot = await db.collectionGroup(subColName).get();
+        snapshot.forEach(doc => {
+            batchHandler.add(doc.ref, { fincaId: fincaId });
+        });
+    }
+
+
+
+    await batchHandler.commit();
+    console.log(`Propagation complete. Total writes: ${batchHandler.totalWrites}`);
+}
+
+async function updateAuthorizedUsers(fincaId, authorizedEmails) {
+    if (!authorizedEmails || authorizedEmails.length === 0) return;
+
+    const db = admin.firestore();
+    const usersRef = db.collection('users');
+    const batchedWrites = [];
+
+    // 1. Find users matching emails
+    // Firestore 'in' query supports up to 10 items. If we expect >10 authorized emails, we need to chunk or loop.
+    // Assuming small list for now. If > 10, logic needs split.
+    // Let's assume < 10 for "my partner and me".
+
+    // Safety check just in case
+    const chunks = [];
+    const chunkSize = 10;
+    for (let i = 0; i < authorizedEmails.length; i += chunkSize) {
+        chunks.push(authorizedEmails.slice(i, i + chunkSize));
+    }
+
+    for (const chunk of chunks) {
+        const snapshot = await usersRef.where('email', 'in', chunk).get();
+
+        if (snapshot.empty) continue;
+
+        const batch = db.batch();
+        let count = 0;
+
+        snapshot.forEach(doc => {
+            batch.update(doc.ref, {
+                authorizedFincas: admin.firestore.FieldValue.arrayUnion(fincaId)
+            });
+            count++;
+        });
+
+        if (count > 0) {
+            await batch.commit();
+            console.log(`Updated ${count} users with fincaId authorization.`);
+        }
+    }
+}
+
+/**
+ * Helper class to handle unlimited batch writes (chunks of 500)
+ */
+class BatchHandler {
+    constructor(db) {
+        this.db = db;
+        this.batch = db.batch();
+        this.counter = 0;
+        this.totalWrites = 0;
+    }
+
+    add(ref, data) {
+        this.batch.set(ref, data, { merge: true });
+        this.counter++;
+        if (this.counter >= 400) { // Limit is 500, keep safety margin
+            return this.commit();
+        }
+        return Promise.resolve();
+    }
+
+    async commit() {
+        if (this.counter === 0) return;
+        await this.batch.commit();
+        this.totalWrites += this.counter;
+        console.log(`Batch committed: ${this.counter} writes.`);
+        this.batch = this.db.batch();
+        this.counter = 0;
+    }
+}
+
+/**
+ * TEMPORARY CLEANUP FUNCTION
+ * Deletes users that do not have 'authorizedFincas' field.
+ * Usage: https://us-central1-YOUR-PROJECT.cloudfunctions.net/cleanupLegacyUsers
+ */
+exports.cleanupLegacyUsers = functions.https.onRequest(async (req, res) => {
+    try {
+        const db = admin.firestore();
+        console.log('Starting legacy user cleanup...');
+
+        const usersSnapshot = await db.collection('users').get();
+        let deletedCount = 0;
+
+        let batch = db.batch();
+        let batchCounter = 0;
+
+        for (const doc of usersSnapshot.docs) {
+            const data = doc.data();
+            // Check if authorizedFincas is missing or empty
+            if (!data.authorizedFincas || (Array.isArray(data.authorizedFincas) && data.authorizedFincas.length === 0)) {
+                console.log(`Deleting legacy user: ${doc.id} (${data.email})`);
+                batch.delete(doc.ref);
+                batchCounter++;
+                deletedCount++;
+
+                if (batchCounter >= 400) {
+                    await batch.commit();
+                    batch = db.batch();
+                    batchCounter = 0;
+                }
+            }
+        }
+
+        if (batchCounter > 0) {
+            await batch.commit();
+        }
+
+        return res.status(200).send(`Cleanup complete. Deleted ${deletedCount} users.`);
+    } catch (error) {
+        console.error("Cleanup Error:", error);
+        return res.status(500).send(`Cleanup Failed: ${error.message}`);
+    }
+});
+
+
+

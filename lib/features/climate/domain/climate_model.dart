@@ -11,6 +11,7 @@ class ClimateDailyData {
   // Advanced Fields
   final double et0; // Reference Evapotranspiration (mm/day)
   final bool isMock; // Flag for generated data
+  final String? fincaId;
 
   ClimateDailyData({
     required this.date,
@@ -23,6 +24,7 @@ class ClimateDailyData {
     this.windSpeed = 0.0,
     this.et0 = 0.0,
     this.isMock = false,
+    this.fincaId,
   });
 
   /// Parses Meteocat API response
@@ -33,80 +35,104 @@ class ClimateDailyData {
     Map<String, dynamic> json, {
     double calculatedEt0 = 0.0,
   }) {
-    // Variables
     final variables = json['variables'] as List<dynamic>? ?? [];
 
-    double max40 = -999.0;
-    double min42 = 999.0;
+    double? max40; // Max Abs
+    double? min42; // Min Abs
 
-    // Backup (32 is mean usually, but sometimes instant)
-    double max32 = -999.0;
-    double min32 = 999.0;
-
-    double rainVal = 0.0;
-    double humidVal = 0.0;
-    double radVal = 0.0;
-    double windVal = 0.0;
-
-    bool has40 = false;
-    bool has42 = false;
+    // Aggregators for 30-min data
+    double tempMax32 = -999.0;
+    double tempMin32 = 999.0;
     bool has32 = false;
 
+    double rainSum = 0.0;
+
+    // Averages
+    double humidSum = 0.0;
+    int humidCount = 0;
+
+    double radSum = 0.0;
+
+    double windSum = 0.0;
+    int windCount = 0;
+
     for (var v in variables) {
-      final code = v['codi'];
+      final code = v['codi']; // int
       final readings = v['lectures'] as List<dynamic>?;
 
       if (readings != null && readings.isNotEmpty) {
-        // Usually we take the first value or iterate
-        // For daily data, usually just one value at 00:00 or similar
-        final val = (readings[0]['valor'] as num).toDouble();
+        for (var r in readings) {
+          final double val = (r['valor'] as num).toDouble();
 
-        // Temp Instant (32) - Backup
-        if (code == 32) {
-          if (val > max32) max32 = val;
-          if (val < min32) min32 = val;
-          has32 = true;
+          // 32: Temperature (Instant)
+          if (code == 32) {
+            if (val > tempMax32) tempMax32 = val;
+            if (val < tempMin32) tempMin32 = val;
+            has32 = true;
+          }
+
+          // 40: Max Temp (Daily Value? or list of 1?)
+          // If it's a list, usually it contains the max for the period.
+          if (code == 40) {
+            if (max40 == null || val > max40) max40 = val;
+          }
+
+          // 42: Min Temp
+          if (code == 42) {
+            if (min42 == null || val < min42) min42 = val;
+          }
+
+          // 35: Rain (Precipitation)
+          if (code == 35) {
+            rainSum += val;
+          }
+
+          // 33: Relative Humidity
+          if (code == 33) {
+            humidSum += val;
+            humidCount++;
+          }
+
+          // 36: Global Solar Irradiance (RS) - W/m2
+          // Replaces incorrect Code 34 (which was Pressure!)
+          if (code == 36) {
+            radSum += val; // Summing W/m2
+          }
+
+          // 30: Wind Speed (10m)
+          // ONLY Code 30. Code 31 is Direction (Do not add!)
+          if (code == 30) {
+            windSum += val;
+            windCount++;
+          }
         }
-        // Temp Max Abs (40)
-        if (code == 40) {
-          if (val > max40) max40 = val;
-          has40 = true;
-        }
-        // Temp Min Abs (42)
-        if (code == 42) {
-          if (val < min42) min42 = val;
-          has42 = true;
-        }
-
-        // Rain Intensity/Accumulated (35)
-        if (code == 35) rainVal = val;
-
-        // Humidity Max (33 is relative humidity)
-        if (code == 33) humidVal = val;
-
-        // Radiation (34)
-        if (code == 34) radVal = val;
-
-        // Wind (30)
-        if (code == 30) windVal = val;
       }
     }
 
-    // Resolve temps
-    double finalMax = has40 ? max40 : (has32 ? max32 : 0.0);
-    double finalMin = has42 ? min42 : (has32 ? min32 : 0.0);
+    // Final calculations
+    double finalMax = max40 ?? (has32 ? tempMax32 : 0.0);
+    double finalMin = min42 ?? (has32 ? tempMin32 : 0.0);
+    double finalHumid = humidCount > 0 ? humidSum / humidCount : 0.0;
+
+    // Radiation: Sum(W/m2) * 1800s (30min) = Joules/m2. Divide by 1e6 => MJ/m2
+    // If radSum is sum of means... (Avg W/m2 * 1800s) = Joules for that 30min slot.
+    // Summing them gives total Joules for the day.
+    double finalRad = radSum * 1800 / 1000000;
+
+    double finalWind = windCount > 0 ? windSum / windCount : 0.0;
 
     return ClimateDailyData(
       date: date,
       maxTemp: finalMax,
       minTemp: finalMin,
-      rain: rainVal,
-      rainAccumulated: 0.0, // provider handles this
-      humidity: humidVal,
-      radiation: radVal,
-      windSpeed: windVal,
+      rain: rainSum, // Accumulated sum
+      rainAccumulated: 0.0,
+      humidity: finalHumid, // Mean
+      radiation: finalRad, // Mean
+      windSpeed: finalWind, // Mean
       et0: calculatedEt0,
       isMock: false,
+      fincaId: null,
     );
   }
 
@@ -121,6 +147,7 @@ class ClimateDailyData {
       'humidity': humidity,
       'radiation': radiation,
       'windSpeed': windSpeed,
+      'fincaId': fincaId,
     };
   }
 
@@ -134,6 +161,7 @@ class ClimateDailyData {
       humidity: map['humidity']?.toDouble() ?? 0.0,
       radiation: map['radiation']?.toDouble() ?? 0.0,
       windSpeed: map['windSpeed']?.toDouble() ?? 0.0,
+      fincaId: map['fincaId'],
     );
   }
 }

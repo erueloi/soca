@@ -12,7 +12,20 @@
           "package_name": "com.molicaljeroni.soca"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "810172062958-tkkfptvgep6gos9cm4qaom1f2en3b9cl.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.molicaljeroni.soca",
+            "certificate_hash": "cd092cbb283da39224a687723bf18b6e49cee541"
+          }
+        },
+        {
+          "client_id": "810172062958-84tj9g9024a7d1gsre0ig2vl6e26j99h.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDssgK-xdDHUscQi-eWwa4IkY_RlEAcgSM"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "810172062958-84tj9g9024a7d1gsre0ig2vl6e26j99h.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "810172062958-rkfegmmjp5cupop33qsmer22j8ahm6t0.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.molicaljeroni.soca"
+              }
+            }
+          ]
         }
       }
     }

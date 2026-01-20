@@ -1,8 +1,122 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+
+    // Helper: Check if user has the specific fincaId in their authorized list
+    function isAuthorized(fincaId) {
+      return request.auth != null &&
+             fincaId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.authorizedFincas;
+    }
+
+    // Helper: Check if user's email is in the document's authorizedEmails list
+    function isEmailAuthorized() {
+      return request.auth != null &&
+             request.auth.token.email in resource.data.authorizedEmails;
+    }
+
+    // Users: Can read/write their own profile
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Settings: Finca Config
+    // Secured by Email List contained within the document itself
+    match /settings/finca_config {
+      allow read, write: if isEmailAuthorized();
+      allow create: if request.auth != null; 
+    }
+    
+    // NEW: Multi-tenant Farms Collection
+    // Each doc is a farm config. Secured by authorizedEmails.
+    match /finques/{fincaId} {
+      allow read, write: if isEmailAuthorized();
+      allow create: if request.auth != null;
+    }
+
+    // Global Config (Buckets, etc) - Legacy/Shared
+    match /settings/config {
+      allow read, write: if request.auth != null;
+    }
+
+    // Default Lock: Deny everything else unless explicitly allowed
+    // We apply specific rules for collections. 
+    // Since we want to secure EVERYTHING with fincaId, we can try a wildcard match
+    // BUT wildcards don't override specific matches? Actually they do intersect.
+    // Better to be explicit or use a recursive wildcard if structure allows.
+    
+    // Core Collections secured by fincaId
+    // Core Collections secured by fincaId
+    match /trees/{treeId} {
+      allow read, update, delete: if isAuthorized(resource.data.fincaId);
+      allow create: if isAuthorized(request.resource.data.fincaId);
+      // Nested matches are good for direct access, but collectionGroup sometimes prefers global wildcard or behaves better with it
+    }
+
+    // Explicit Collection Group matches
+    match /{path=**}/regs/{regId} {
+      allow read, update, delete: if isAuthorized(resource.data.fincaId);
+      allow create: if isAuthorized(request.resource.data.fincaId);
+    }
+    
+    match /{path=**}/evolucio/{evoId} {
+      allow read, update, delete: if isAuthorized(resource.data.fincaId);
+      allow create: if isAuthorized(request.resource.data.fincaId);
+    }
+
+    match /{path=**}/seguiment/{growthId} {
+      allow read, update, delete: if isAuthorized(resource.data.fincaId);
+      allow create: if isAuthorized(request.resource.data.fincaId);
+    }
+    
+    match /{path=**}/historic_ia/{iaId} {
+      allow read, update, delete: if isAuthorized(resource.data.fincaId);
+      allow create: if isAuthorized(request.resource.data.fincaId);
+    }
+    
+    match /tasks/{document=**} {
+      allow read, update, delete: if isAuthorized(resource.data.fincaId);
+      allow create: if isAuthorized(request.resource.data.fincaId);
+    }
+
+    match /plantes_hort/{document=**} {
+      allow read, update, delete: if isAuthorized(resource.data.fincaId);
+      allow create: if isAuthorized(request.resource.data.fincaId);
+    }
+
+    match /patrons_rotacio/{document=**} {
+      allow read, update, delete: if isAuthorized(resource.data.fincaId);
+      allow create: if isAuthorized(request.resource.data.fincaId);
+    }
+
+    match /espais_hort/{document=**} {
+      allow read, update, delete: if isAuthorized(resource.data.fincaId);
+      allow create: if isAuthorized(request.resource.data.fincaId);
+    }
+
+    match /clima_historic/{document=**} {
+      allow read, update, delete: if isAuthorized(resource.data.fincaId);
+      allow create: if isAuthorized(request.resource.data.fincaId);
+    }
+
+    match /construction_points/{document=**} {
+      allow read, update, delete: if isAuthorized(resource.data.fincaId);
+      allow create: if isAuthorized(request.resource.data.fincaId);
+    }
+
+    match /construction_plans/{document=**} {
+      allow read, update, delete: if isAuthorized(resource.data.fincaId);
+      allow create: if isAuthorized(request.resource.data.fincaId);
+    }
+    
+    // Catch-all for other settings if they have fincaId
+    match /settings/construction_floors {
+      allow read, update, delete: if isAuthorized(resource.data.fincaId);
+      allow create: if isAuthorized(request.resource.data.fincaId);
+    }
+
+    match /species/{document=**} {
+      allow read, update, delete: if isAuthorized(resource.data.fincaId);
+      allow create: if isAuthorized(request.resource.data.fincaId);
     }
   }
 }

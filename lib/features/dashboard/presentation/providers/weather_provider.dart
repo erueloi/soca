@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:soca/features/settings/presentation/providers/settings_provider.dart';
 
 import 'package:soca/features/climate/domain/climate_model.dart';
-import 'package:soca/features/climate/data/repositories/climate_repository.dart';
+import 'package:soca/features/climate/presentation/providers/climate_provider.dart';
 import 'package:soca/features/trees/presentation/providers/trees_provider.dart';
 import 'package:soca/features/trees/data/repositories/species_repository.dart';
 
