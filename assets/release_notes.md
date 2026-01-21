@@ -1,5 +1,8 @@
 ﻿# Release Notes
 
+## v1.8.3
+UI: Widgets alineats.
+Hort: Bugfix al accedir a les plantes i dissenys.
 ## v1.8.2
 Notificacions arreglades.
 Hem afinat com es mostren les finances.
@@ -91,6 +94,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

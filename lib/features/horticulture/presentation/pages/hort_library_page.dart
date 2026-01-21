@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/planta_hort.dart';
 import '../../domain/services/assistent_hort_service.dart';
 import '../../data/repositories/hort_repository.dart';
 import '../widgets/hort_plant_form.dart';
 
-class HortLibraryPage extends StatefulWidget {
+class HortLibraryPage extends ConsumerStatefulWidget {
   final String? initialSearch;
   const HortLibraryPage({super.key, this.initialSearch});
 
   @override
-  State<HortLibraryPage> createState() => _HortLibraryPageState();
+  ConsumerState<HortLibraryPage> createState() => _HortLibraryPageState();
 }
 
-class _HortLibraryPageState extends State<HortLibraryPage> {
-  final _repository = HortRepository();
+class _HortLibraryPageState extends ConsumerState<HortLibraryPage> {
+  // Removed local _repository instance
   String _searchQuery = '';
 
   @override
@@ -22,10 +23,9 @@ class _HortLibraryPageState extends State<HortLibraryPage> {
     _searchQuery = widget.initialSearch ?? '';
   }
 
-  // Sorting state can be added later if needed.
-
   void _runMagicSeed() async {
-    await _repository.initBibliotecaRegenerativa();
+    final repository = ref.read(hortRepositoryProvider);
+    await repository.initBibliotecaRegenerativa();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -53,18 +53,15 @@ class _HortLibraryPageState extends State<HortLibraryPage> {
         maxChildSize: 0.9,
         minChildSize: 0.5,
         expand: false,
-        builder: (_, scrollController) => HortPlantForm(
-          plant: plant,
-          // We might need to adjust HortPlantForm to accept a scroll controller
-          // or just wrap in a scaffold inside the sheet.
-          // Given HortPlantForm is a Scaffold, it works ok in a full-height sheet.
-        ),
+        builder: (_, scrollController) => HortPlantForm(plant: plant),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final repository = ref.watch(hortRepositoryProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Biblioteca d\'Hort'),
@@ -119,7 +116,7 @@ class _HortLibraryPageState extends State<HortLibraryPage> {
           ),
           Expanded(
             child: StreamBuilder<List<PlantaHort>>(
-              stream: _repository.getPlantsStream(),
+              stream: repository.getPlantsStream(),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
                   return Center(child: Text('Error: ${snapshot.error}'));

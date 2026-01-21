@@ -13,6 +13,8 @@ class TreeSummaryWidget extends ConsumerWidget {
     final treesAsync = ref.watch(treesStreamProvider);
 
     return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
@@ -31,12 +33,15 @@ class TreeSummaryWidget extends ConsumerWidget {
                   Icon(
                     Icons.forest,
                     color: Theme.of(context).colorScheme.primary,
-                    size: 28, // Slighly smaller for better grid fit (was 32)
+                    size: 24, // Consistent Icon Size
                   ),
                   const SizedBox(width: 8),
                   Text(
                     'Inventari', // Inventory
-                    style: Theme.of(context).textTheme.titleLarge,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
                   ),
                 ],
               ),

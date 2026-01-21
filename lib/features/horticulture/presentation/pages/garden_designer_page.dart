@@ -14,11 +14,6 @@ import '../../domain/entities/espai_hort.dart';
 import '../../domain/entities/hort_rotation_pattern.dart';
 import 'rotation_patterns_page.dart';
 
-final rotationPatternsStreamProvider =
-    StreamProvider<List<HortRotationPattern>>((ref) {
-      return ref.watch(hortRepositoryProvider).getPatternsStream();
-    });
-
 class GardenDesignerPage extends ConsumerStatefulWidget {
   final EspaiHort espai;
   const GardenDesignerPage({super.key, required this.espai});
@@ -30,14 +25,11 @@ class GardenDesignerPage extends ConsumerStatefulWidget {
 enum DesignerTool { plants, patterns, eraser }
 
 class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
-  final _repository = HortRepository();
   late EspaiHort _espai;
   String? _selectedSpeciesId;
 
   // New Coordinate System State
   List<PlacedPlant> _placedPlants = [];
-
-  late Stream<List<PlantaHort>> _plantsStream;
 
   // Dimensions
   double get _cellSize => _espai.gridCellSize;
@@ -87,7 +79,6 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
     super.initState();
     _espai = widget.espai;
     _placedPlants = List.from(widget.espai.placedPlants);
-    _plantsStream = _repository.getPlantsStream();
   }
 
   @override
@@ -1074,7 +1065,7 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
         ],
       ),
       body: StreamBuilder<List<PlantaHort>>(
-        stream: _plantsStream,
+        stream: ref.watch(hortRepositoryProvider).getPlantsStream(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());

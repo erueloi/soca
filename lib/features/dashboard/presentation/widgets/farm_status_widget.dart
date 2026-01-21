@@ -13,8 +13,8 @@ class FarmStatusWidget extends ConsumerWidget {
     final floorsAsync = ref.watch(floorPlansStreamProvider);
 
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -28,14 +28,15 @@ class FarmStatusWidget extends ConsumerWidget {
                 const SizedBox(width: 8),
                 Text(
                   'Estat de la Masia',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
+                    fontSize: 18,
                     color: Colors.indigo,
                   ),
                 ),
               ],
             ),
-            const Divider(),
+            const SizedBox(height: 16),
             const SizedBox(height: 8),
 
             pointsAsync.when(

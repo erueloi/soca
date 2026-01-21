@@ -13,18 +13,9 @@ class DashboardAgendaWidget extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tasksAsync = ref.watch(tasksStreamProvider);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Column(
         children: [
           _buildHeader(context, ref),
@@ -61,10 +52,17 @@ class DashboardAgendaWidget extends ConsumerWidget {
               ),
               child: Row(
                 children: [
+                  Icon(
+                    Icons.calendar_month,
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 8),
                   Text(
                     'Agenda',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
+                      fontSize: 18,
                       color: Colors.grey[800],
                     ),
                   ),

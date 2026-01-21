@@ -33,6 +33,8 @@ class IrrigationWidget extends ConsumerWidget {
     final treesAsync = ref.watch(treesStreamProvider);
 
     return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
@@ -51,15 +53,19 @@ class IrrigationWidget extends ConsumerWidget {
                 children: [
                   Row(
                     children: [
+                      Icon(Icons.water_drop, color: Colors.blue[600], size: 24),
+                      const SizedBox(width: 8),
                       Text(
                         'Gestió de Reg',
-                        style: Theme.of(context).textTheme.titleLarge,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       _BlinkingLed(),
                     ],
                   ),
-                  Icon(Icons.water_drop, color: Colors.blue[600], size: 28),
                 ],
               ),
               const SizedBox(height: 16),

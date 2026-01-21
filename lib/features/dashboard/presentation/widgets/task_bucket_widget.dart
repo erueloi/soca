@@ -12,6 +12,8 @@ class TaskBucketWidget extends ConsumerWidget {
     final bucketsAsync = ref.watch(bucketsStreamProvider);
 
     return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -21,11 +23,20 @@ class TaskBucketWidget extends ConsumerWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Projectes Actius',
-                  style: Theme.of(context).textTheme.titleLarge,
+                Row(
+                  children: [
+                    const Icon(Icons.list_alt, color: Colors.brown, size: 24),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Projectes Actius',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ],
                 ),
-                const Icon(Icons.list_alt, color: Colors.brown, size: 28),
+                // Optional: Add action button here if needed
               ],
             ),
             const SizedBox(height: 16),

@@ -14,7 +14,7 @@ class HortPlantForm extends ConsumerStatefulWidget {
 
 class _HortPlantFormState extends ConsumerState<HortPlantForm> {
   final _formKey = GlobalKey<FormState>();
-  final _repository = HortRepository();
+  // Removed local _repository
   bool _isLoading = false;
   bool _isAiLoading = false;
 
@@ -289,7 +289,7 @@ class _HortPlantFormState extends ConsumerState<HortPlantForm> {
         marcPlantacio: '${_distanciaCtrl.text}x${_linesCtrl.text} cm',
       );
 
-      await _repository.savePlant(newPlant);
+      await ref.read(hortRepositoryProvider).savePlant(newPlant);
 
       if (mounted) {
         Navigator.pop(context);
@@ -338,7 +338,9 @@ class _HortPlantFormState extends ConsumerState<HortPlantForm> {
                 );
 
                 if (confirm == true) {
-                  await _repository.deletePlant(widget.plant!.id);
+                  await ref
+                      .read(hortRepositoryProvider)
+                      .deletePlant(widget.plant!.id);
                   if (!context.mounted) return;
                   Navigator.pop(context);
                 }

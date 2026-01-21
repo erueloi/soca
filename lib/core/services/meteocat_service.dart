@@ -24,8 +24,8 @@ class MeteocatService {
     hours: 4,
   ); // Reduce costs (750 limit) -> Now 4h (max 6/day)
   final Duration _forecastRateLimit = const Duration(
-    hours: 6,
-  ); // Keep fresh (2000 limit) -> Now 6h (max 4/day)
+    hours: 12,
+  ); // 100 limit/month = ~3/day. 12h cache = 2/day (60/month). Safe.
 
   // Preference Keys
   static const String _keyQuotaSaver = 'meteocat_quota_saver_enabled';

@@ -3,6 +3,7 @@ import 'package:soca/core/services/meteocat_service.dart';
 import 'package:soca/features/dashboard/domain/weather_model.dart';
 import 'package:intl/intl.dart';
 import 'package:soca/features/settings/presentation/providers/settings_provider.dart';
+import 'package:soca/core/calculators/et0_calculator.dart';
 
 import 'package:soca/features/climate/domain/climate_model.dart';
 import 'package:soca/features/climate/presentation/providers/climate_provider.dart';
@@ -47,6 +48,7 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
   double windSpeed = 0.0;
 
   double et0 = 0.0;
+  double estimatedDailyRadiation = 0.0;
   List<DailyForecast> parsedForecast = [];
   double avgHumidity6h = 0.0;
   int rainProb = 0;
@@ -59,6 +61,34 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
       final stationData = list.first; // Should be the station we asked for
       if (stationData['variables'] != null) {
         final List<dynamic> vars = stationData['variables'];
+
+        // --- Radiation Integration Logic ---
+        // Find Code 36 (Global Irradiance W/m2)
+        try {
+          final radVar = vars.firstWhere(
+            (v) => v['codi'] == 36,
+            orElse: () => null,
+          );
+          if (radVar != null && radVar['lectures'] != null) {
+            final List<dynamic> readings = radVar['lectures'];
+            double accumJoules = 0.0;
+            // Assume 30 min interval (standard Meteocat XEMA) = 1800 seconds
+            // Integration: Sum(Watts * Seconds) = Joules
+            const double intervalSeconds = 1800.0;
+
+            for (var r in readings) {
+              if (r['valor'] != null) {
+                accumJoules += (r['valor'] as num).toDouble() * intervalSeconds;
+              }
+            }
+            // Convert Joules/m2 to MJ/m2
+            estimatedDailyRadiation = accumJoules / 1000000.0;
+          }
+        } catch (e) {
+          // Ignore integration error
+        }
+        // -----------------------------------
+
         for (var v in vars) {
           final id = v['codi'];
           final List<dynamic>? readings = v['lectures'];
@@ -73,7 +103,7 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
             if (id == 33) humidity = (val as num).toInt();
             if (id == 35) rain = (val as num).toDouble();
             if (id == 30) windSpeed = (val as num).toDouble();
-            if (id == 36) et0 = (val as num).toDouble(); // ET0
+            // if (id == 36) radiation ... (unused)
           } catch (e) {
             // Parser error
           }
@@ -205,6 +235,51 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
     }
   }
 
+  // ET0 Calculation (Penman-Monteith / Hargreaves)
+  try {
+    double tMaxCalc = temp;
+    double tMinCalc = temp;
+
+    // Attempt to use Forecast for TMax/TMin (Better for Hargreaves)
+    if (parsedForecast.isNotEmpty) {
+      final now = DateTime.now();
+      final first = parsedForecast.first;
+      if (first.date.year == now.year &&
+          first.date.month == now.month &&
+          first.date.day == now.day) {
+        tMaxCalc = first.maxTemp.toDouble();
+        tMinCalc = first.minTemp.toDouble();
+      }
+    }
+
+    // Safety Fallback: If TMax == TMin (Forecast missing or data error),
+    // Hargreaves will return 0 because sqrt(Tmax-Tmin) is 0.
+    // We force a minimal diurnal range estimate (e.g. 5 degrees) to get a non-zero value.
+    if (tMaxCalc == tMinCalc) {
+      tMaxCalc += 2.5;
+      tMinCalc -= 2.5;
+    }
+
+    final config = await ref.watch(farmConfigStreamProvider.future);
+
+    // Use Radiation if we found it (> 0.1 MJ/m2 to avoid zero-data issues)
+    double? radToPass = estimatedDailyRadiation > 0.1
+        ? estimatedDailyRadiation
+        : null;
+
+    et0 = ET0Calculator.calculate(
+      lat: config.latitude,
+      date: DateTime.now(),
+      tMax: tMaxCalc,
+      tMin: tMinCalc,
+      rhMean: humidity.toDouble(),
+      windSpeed: windSpeed,
+      radiation: radToPass,
+    );
+  } catch (e) {
+    // Ignore calculation errors
+  }
+
   // Alerts Logic
   final List<SafetyAlert> alerts = [];
 
@@ -224,7 +299,8 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
     alerts.add(
       SafetyAlert(
         title: 'Perill Obres',
-        message: 'Vent > 25km/h o Pluja.',
+        message:
+            'Motiu: Perillós treballar a l\'exterior.\nCriteri: Vent > 25km/h o Pluja > 0.5mm.',
         icon: 'warning',
       ),
     );
@@ -235,7 +311,8 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
     alerts.add(
       SafetyAlert(
         title: 'Risc de Gelada',
-        message: 'Min < 1ºC properes 24h.',
+        message:
+            'Motiu: Perill per a cultius sensibles.\nCriteri: Mínima < 1ºC properes 24h.',
         icon: 'ac_unit',
       ),
     );
@@ -244,7 +321,8 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
     alerts.add(
       SafetyAlert(
         title: 'Vent Fort',
-        message: 'Ratxes > 30 km/h.',
+        message:
+            'Motiu: Risc de danys estructurals o caiguda de branques.\nCriteri: Ratxes > 30 km/h.',
         icon: 'air',
       ),
     );
@@ -253,8 +331,9 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
   if (windSpeed * 3.6 < 12 && humidity < 85 && rainProb < 30) {
     alerts.add(
       SafetyAlert(
-        title: 'Tractaments OK',
-        message: 'Condicions òptimes.',
+        title: 'Aplicacions OK',
+        message:
+            'Motiu: Ideal per aplicar preparats (sense pèrdues per vent o pluja).\nCriteri: Vent < 12km/h, Hum < 85% i sense pluja.',
         icon: 'check',
       ),
     );
