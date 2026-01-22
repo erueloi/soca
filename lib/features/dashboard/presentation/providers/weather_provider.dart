@@ -41,6 +41,7 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
   final obsData = data['observation'];
   final forecastData = data['forecast'];
   final stationCode = data['station'];
+  final DateTime? lastUpdated = data['last_updated'] as DateTime?;
 
   double temp = 0.0;
   int humidity = 0;
@@ -168,7 +169,10 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
       // Take up to 3 days
       for (var i = 0; i < 3 && i < dies.length; i++) {
         final day = dies[i];
-        final dateStr = day['data']; // yyyy-MM-dd
+        String dateStr = day['data']; // yyyy-MM-dd or yyyy-MM-ddZ
+        if (dateStr.endsWith('Z')) {
+          dateStr = dateStr.substring(0, dateStr.length - 1);
+        }
         final date = DateTime.parse(dateStr);
 
         int minT = 0;
@@ -179,31 +183,55 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
         if (day['variables'] != null) {
           try {
             final vars = day['variables'];
-            if (vars['temp_min'] != null) {
-              minT = vars['temp_min']['valor'] as int;
-            }
-            if (vars['temp_max'] != null) {
-              maxT = vars['temp_max']['valor'] as int;
-            }
-            if (vars['probabilitat_precipitacio'] != null) {
-              int val = vars['probabilitat_precipitacio']['valor'] as int;
-              if (val == 1) {
-                rProb = 10;
-              }
-              if (val == 2) {
-                rProb = 30;
-              }
-              if (val == 3) {
-                rProb = 70;
-              }
-              if (val == 4) {
-                rProb = 90;
-              }
+
+            // Helper for parsing values that might be String or Num
+            double parseVal(dynamic v) {
+              if (v == null) return 0.0;
+              if (v is num) return v.toDouble();
+              if (v is String) return double.tryParse(v) ?? 0.0;
+              return 0.0;
             }
 
-            if (vars['simbol_cel'] != null) {
-              // sym = vars['simbol_cel']['valor'] ?? ''; // e.g., "sol", "nuvol"
-              sym = 'cloud'; // Placeholder
+            // Handle new keys (tmin, tmax, precipitacio, estatCel)
+            if (vars['tmin'] != null) {
+              minT = parseVal(vars['tmin']['valor']).round();
+            } else if (vars['temp_min'] != null) {
+              minT = parseVal(vars['temp_min']['valor']).round();
+            }
+
+            if (vars['tmax'] != null) {
+              maxT = parseVal(vars['tmax']['valor']).round();
+            } else if (vars['temp_max'] != null) {
+              maxT = parseVal(vars['temp_max']['valor']).round();
+            }
+
+            // Precipitacio / Probabilitat
+            if (vars['precipitacio'] != null) {
+              try {
+                // If it's probability percentage (e.g. "55.6"), map to 1-4 scale logic or just use it?
+                // Original logic mapped 1=10%, 2=30%, 3=70%, 4=90%
+                // Inspecting debug output: "unitat":"%" and "valor":"55.6".
+                // So it is actual percentage now!
+                double val = parseVal(vars['precipitacio']['valor']);
+                rProb = val.round();
+              } catch (e) {
+                /* ignore */
+              }
+            } else if (vars['probabilitat_precipitacio'] != null) {
+              int val = parseVal(
+                vars['probabilitat_precipitacio']['valor'],
+              ).toInt();
+              if (val == 1) rProb = 10;
+              if (val == 2) rProb = 30;
+              if (val == 3) rProb = 70;
+              if (val == 4) rProb = 90;
+            }
+
+            if (vars['estatCel'] != null) {
+              // sym = vars['estatCel']['valor']
+              sym = 'cloud';
+            } else if (vars['simbol_cel'] != null) {
+              sym = 'cloud';
             }
           } catch (e) {
             /* ignore */
@@ -399,21 +427,70 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
       // Ignore error calculating Kc
     }
 
-    double weeklyBalance = 0.0;
-    for (var day in history) {
-      double dailyNet = (day.et0 * farmKc) - day.rain;
-      weeklyBalance += dailyNet;
+    // RuralCat Logic Integration
+    // Try to find latest soilBalance
+    double? latestBalance;
+    double? previousBalance;
+
+    // Sort history by date desc to find latest easily
+    final sortedHistory = List<ClimateDailyData>.from(history)
+      ..sort((a, b) => b.date.compareTo(a.date));
+
+    for (var day in sortedHistory) {
+      if (day.soilBalance != null) {
+        if (latestBalance == null) {
+          latestBalance = day.soilBalance;
+        } else {
+          previousBalance = day.soilBalance;
+          break; // Found both
+        }
+      }
     }
 
-    if (weeklyBalance > 5.0) {
-      advice = "Reg Necessari (${weeklyBalance.toStringAsFixed(1)}mm dèficit)";
-    } else if (weeklyBalance < -5.0) {
-      advice = "No regar (Excés hídric)";
+    if (latestBalance != null) {
+      // Use RuralCat Model
+      final sb = latestBalance;
+      String trend = "";
+      if (previousBalance != null) {
+        if (sb < previousBalance) {
+          trend = "📉";
+        } else if (sb > previousBalance) {
+          trend = "📈";
+        } else {
+          trend = "➡️";
+        }
+      }
+
+      if (sb > -5) {
+        advice = "No regar (Terra Humida) $trend";
+      } else if (sb >= -15) {
+        advice = "Reg Opcional ($trend ${sb.toStringAsFixed(1)} mm)";
+      } else {
+        advice =
+            "Reg Recomanat (Falten ${(sb.abs() - 5).toStringAsFixed(1)} mm) $trend";
+      }
     } else {
-      advice = "Reg Opcional (Equilibrat)";
+      // Fallback to Weekly Balance (Old Logic)
+      double weeklyBalance = 0.0;
+      for (var day in history) {
+        double dailyNet = (day.et0 * farmKc) - day.rain;
+        weeklyBalance += dailyNet;
+      }
+
+      if (weeklyBalance > 5.0) {
+        advice =
+            "Reg Necessari (${weeklyBalance.toStringAsFixed(1)}mm dèficit) [Estimat]";
+      } else if (weeklyBalance < -5.0) {
+        advice = "No regar (Excés hídric) [Estimat]";
+      } else {
+        advice = "Reg Opcional (Equilibrat) [Estimat]";
+      }
     }
 
-    if (rainProb > 70 && weeklyBalance > 0) {
+    if (rainProb > 70 && (latestBalance != null ? latestBalance < -15 : true)) {
+      // Only inhibit if strictly necessary? Or always if rain is coming?
+      // Original: if weeklyBalance > 0 (Deficit).
+      // RuralCat: If < -15 (Deficit critical)
       advice = "Esperar (Prob. pluja)";
     }
   }
@@ -431,5 +508,6 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
     et0: et0,
     forecast: parsedForecast,
     alerts: alerts,
+    lastUpdated: lastUpdated,
   );
 });

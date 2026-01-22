@@ -1,5 +1,8 @@
 ﻿# Release Notes
 
+## v1.8.4
+Clima: Actualizació dels calculs del widget i de la pagina de clima.
+Settings: Reparem la pagina al guardar.
 ## v1.8.3
 UI: Widgets alineats.
 Hort: Bugfix al accedir a les plantes i dissenys.
@@ -94,6 +97,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:intl/intl.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../../../../core/services/data_recovery_service.dart';
 
 class UserProfilePage extends ConsumerStatefulWidget {
   const UserProfilePage({super.key});
@@ -17,6 +18,92 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   bool _isLoading = false;
+
+  Future<void> _showRecoveryDialog() async {
+    final incorrectIdCtrl = TextEditingController(
+      text: 'finca-1769028465203',
+    ); // Known bad ID
+    final correctIdCtrl = TextEditingController(text: 'mol-cal-jeroni');
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reparar Dades Finca'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Això canviarà la ID de la finca en totes les col·leccions. Fes-ho servir només si s\'ha corromput la ID.',
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: incorrectIdCtrl,
+              decoration: const InputDecoration(labelText: 'ID Incorrecte'),
+            ),
+            TextField(
+              controller: correctIdCtrl,
+              decoration: const InputDecoration(
+                labelText: 'ID Correcte (Original)',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel·lar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('REPARAR'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() => _isLoading = true);
+      try {
+        final user = ref.read(authRepositoryProvider).currentUser;
+        if (user == null) throw Exception('No Authorized User Found');
+
+        final service = DataRecoveryService(FirebaseFirestore.instance);
+        final results = await service.revertFincaId(
+          incorrectIdCtrl.text.trim(),
+          correctIdCtrl.text.trim(),
+          user.uid,
+        );
+
+        if (mounted) {
+          String summary = results.entries
+              .map((e) => '${e.key}: ${e.value}')
+              .join('\n');
+          showDialog(
+            context: context,
+            builder: (dialogCtx) => AlertDialog(
+              title: const Text('Resultat Reparació'),
+              content: Text('Documents actualitzats:\n$summary'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -315,6 +402,22 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                         );
                       },
                     ),
+                    const SizedBox(height: 20),
+                    const Divider(),
+                    const SizedBox(height: 20),
+                    OutlinedButton.icon(
+                      onPressed: _showRecoveryDialog,
+                      icon: const Icon(
+                        Icons.build_circle,
+                        color: Colors.orange,
+                      ),
+                      label: const Text('REPARAR DADES (FincaID incorrecte)'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.orange,
+                        side: const BorderSide(color: Colors.orange),
+                      ),
+                    ),
+                    const SizedBox(height: 40),
                   ],
                 ),
               ),

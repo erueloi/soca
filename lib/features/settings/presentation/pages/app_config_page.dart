@@ -59,7 +59,9 @@ class _AppConfigPageState extends ConsumerState<AppConfigPage> {
                     ),
                   )
                 : const Icon(Icons.save),
-            onPressed: _isSaving ? null : _saveConfig,
+            onPressed: _isSaving || (configAsync.value?.fincaId == null)
+                ? null
+                : _saveConfig,
           ),
         ],
       ),

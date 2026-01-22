@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../presentation/providers/climate_provider.dart';
 import '../../domain/climate_model.dart';
-import 'package:fl_chart/fl_chart.dart';
+import 'package:soca/features/dashboard/presentation/providers/weather_provider.dart';
+import '../../presentation/widgets/climate_analytics_widgets.dart';
+import 'package:soca/features/settings/presentation/providers/settings_provider.dart';
 
 class ClimaPage extends ConsumerWidget {
   const ClimaPage({super.key});
@@ -115,18 +117,13 @@ class ClimaPage extends ConsumerWidget {
     if (result == null || result['confirmed'] != true) return;
     overwrite = result['overwrite'] ?? false;
 
-    debugPrint(
-      'Climate Sync: Range ${picked.start} - ${picked.end}. Overwrite: $overwrite',
-    );
-
+    // --- Progress UI ---
     if (!context.mounted) return;
 
-    // --- Progress UI ---
-    // Use ValueNotifier to communicate progress to Dialog
     final progressNotifier = ValueNotifier<Map<String, int>>({
       'current': 0,
       'total': 1,
-    }); // 1 to avoid div by zero initially
+    });
 
     showDialog(
       context: context,
@@ -185,7 +182,6 @@ class ClimaPage extends ConsumerWidget {
         );
       }
     } catch (e) {
-      // Close Progress Dialog on error too
       if (context.mounted) Navigator.pop(context);
 
       if (context.mounted) {
@@ -241,6 +237,52 @@ class ClimaPage extends ConsumerWidget {
             icon: const Icon(Icons.cloud_download, color: Colors.blueGrey),
             tooltip: 'Descarregar dades manualment',
             onPressed: () => _downloadData(context, ref, selectedDate),
+          ),
+          IconButton(
+            icon: const Icon(Icons.calculate, color: Colors.blueGrey),
+            tooltip: 'Recalcular model de reg (RuralCat)',
+            onPressed: () async {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Recalculant balanç hídric... 🚜'),
+                ),
+              );
+              try {
+                // Get Config for Latitude (needed for repairing ET0)
+                final config = await ref.read(farmConfigStreamProvider.future);
+
+                await ref
+                    .read(climateRepositoryProvider)
+                    .recalculateSoilBalance(selectedDate, config.latitude);
+
+                if (selectedDate.month != DateTime.now().month) {
+                  await ref
+                      .read(climateRepositoryProvider)
+                      .recalculateSoilBalance(DateTime.now(), config.latitude);
+                }
+
+                ref.invalidate(climateComparisonProvider);
+                ref.invalidate(weatherProvider);
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Càlcul completat! ✅'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.build_circle_outlined),
@@ -300,102 +342,107 @@ class ClimaPage extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, s) => Center(child: Text('Error carregant dades: $e')),
         data: (comparison) {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                // 2. Accumulation Cards
-                Row(
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1200),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
                   children: [
-                    Expanded(
-                      child: _buildComparisonCard(
-                        context,
-                        'Pluja ${_getMonthName(selectedDate.month)}',
-                        comparison.totalRainCurrent,
-                        comparison.totalRainPrevious,
-                        comparison.diffPercentage,
-                        Colors.blue,
-                      ),
+                    // 2. Header Grid (KPIs)
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final double spacing = 16.0;
+                        // Desktop splits: 3 cards.
+                        final bool isDesktop =
+                            constraints.maxWidth >
+                            800; // > 800 for 3 nice cards
+
+                        // Use fixed height for desktop grid items to ensure equality
+                        // Decreased from 220 to 170 to 150 for compactness
+                        final double fixedHeight = 150.0;
+
+                        if (isDesktop) {
+                          final double itemWidth =
+                              (constraints.maxWidth - (spacing * 2)) / 3;
+                          return Wrap(
+                            spacing: spacing,
+                            runSpacing: spacing,
+                            children: [
+                              SizedBox(
+                                width: itemWidth,
+                                height: fixedHeight,
+                                child: _buildComparisonCard(
+                                  context,
+                                  'Pluja ${_getMonthName(selectedDate.month)}',
+                                  comparison.currentData,
+                                  comparison.totalRainPrevious,
+                                  comparison.diffPercentage,
+                                  Colors.blue,
+                                ),
+                              ),
+                              SizedBox(
+                                width: itemWidth,
+                                height: fixedHeight,
+                                child: _buildInfoCard(
+                                  context,
+                                  'Any Hidrològic',
+                                  '${hydroTotal.toStringAsFixed(1)} mm',
+                                  Colors.teal,
+                                ),
+                              ),
+                              SizedBox(
+                                width: itemWidth,
+                                height: fixedHeight,
+                                child: _buildColdHoursCard(
+                                  context,
+                                  coldHours,
+                                  isVertical: true,
+                                ),
+                              ),
+                            ],
+                          );
+                        } else {
+                          // Mobile: Vertical Stack
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildComparisonCard(
+                                context,
+                                'Pluja ${_getMonthName(selectedDate.month)}',
+                                comparison.currentData,
+                                comparison.totalRainPrevious,
+                                comparison.diffPercentage,
+                                Colors.blue,
+                              ),
+                              const SizedBox(height: 12),
+                              _buildInfoCard(
+                                context,
+                                'Any Hidrològic',
+                                '${hydroTotal.toStringAsFixed(1)} mm',
+                                Colors.teal,
+                              ),
+                              const SizedBox(height: 12),
+                              _buildColdHoursCard(
+                                context,
+                                coldHours,
+                                isVertical: false,
+                              ),
+                            ],
+                          );
+                        }
+                      },
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: _buildInfoCard(
-                        context,
-                        'Any Hidrològic',
-                        '${hydroTotal.toStringAsFixed(1)} mm',
-                        Colors.teal,
-                      ),
+                    const SizedBox(height: 24),
+
+                    // 3. Main Content (Analytics Section)
+                    ClimateAnalyticsSection(
+                      days: comparison.currentData,
+                      previousDays: comparison.previousData,
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
-
-                // 3. Cold Hours Card
-                _buildColdHoursCard(context, coldHours),
-                const SizedBox(height: 24),
-
-                // 4. Rain Chart Section
-                Card(
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Pluviòmetre Històric',
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                            ),
-                            // Legend
-                            Row(
-                              children: [
-                                Container(
-                                  width: 12,
-                                  height: 12,
-                                  color: Colors.green,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${selectedDate.year}',
-                                  style: const TextStyle(fontSize: 10),
-                                ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  width: 12,
-                                  height: 12,
-                                  color: Colors.grey.withValues(alpha: 0.3),
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${selectedDate.year - 1}',
-                                  style: const TextStyle(fontSize: 10),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Precipitació acumulada diària (mm)',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        const SizedBox(height: 24),
-                        SizedBox(
-                          height: 250,
-                          child: _buildRainChart(comparison, context),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           );
         },
@@ -405,18 +452,18 @@ class ClimaPage extends ConsumerWidget {
 
   String _getMonthName(int month) {
     const months = [
-      'Gen',
-      'Feb',
-      'Mar',
-      'Abr',
-      'Mai',
-      'Jun',
-      'Jul',
-      'Ago',
-      'Set',
-      'Oct',
-      'Nov',
-      'Des',
+      'Gener',
+      'Febrer',
+      'Març',
+      'Abril',
+      'Maig',
+      'Juny',
+      'Juliol',
+      'Agost',
+      'Setembre',
+      'Octubre',
+      'Novembre',
+      'Desembre',
     ];
     return months[month - 1];
   }
@@ -424,13 +471,21 @@ class ClimaPage extends ConsumerWidget {
   Widget _buildComparisonCard(
     BuildContext context,
     String title,
-    double current,
-    double previous,
+    List<ClimateDailyData> data,
+    double previousTotal,
     double percentDiff,
     Color color,
   ) {
-    final bool moreRain = current >= previous;
+    final double currentTotal = data.fold(0.0, (sum, e) => sum + e.rain);
+    final bool moreRain = currentTotal >= previousTotal;
     final String sign = percentDiff >= 0 ? '+' : '';
+
+    // Stats
+    final int rainyDays = data.where((d) => d.rain >= 0.1).length;
+    final double maxDaily = data.fold(
+      0.0,
+      (max, e) => e.rain > max ? e.rain : max,
+    );
 
     return Card(
       elevation: 0,
@@ -440,23 +495,29 @@ class ClimaPage extends ConsumerWidget {
       ),
       color: color.withValues(alpha: 0.05),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center, // Center vertically
           children: [
             Text(
               title,
-              style: Theme.of(context).textTheme.labelSmall,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                // Bigger Title
+                color: Colors.grey[800],
+                fontWeight: FontWeight.w600,
+              ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             Text(
-              '${current.toStringAsFixed(1)} mm',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              '${currentTotal.toStringAsFixed(1)} mm',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 color: color,
                 fontWeight: FontWeight.bold,
+                fontSize: 26, // Compact but readable
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             // Comparison Subtitle
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -467,13 +528,50 @@ class ClimaPage extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                'vs prev: ${previous.toStringAsFixed(1)} ($sign${percentDiff.toStringAsFixed(0)}%)',
+                'vs prev: ${previousTotal.toStringAsFixed(1)} mm ($sign${percentDiff.toStringAsFixed(0)}%)',
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
                   color: moreRain ? Colors.green[700] : Colors.red[700],
                 ),
               ),
+            ),
+            const SizedBox(height: 8),
+            // Extra Stats
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Column(
+                  children: [
+                    Text(
+                      'Dies Pluja',
+                      style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                    ),
+                    Text(
+                      '$rainyDays',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+                Column(
+                  children: [
+                    Text(
+                      'Màx Diari',
+                      style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                    ),
+                    Text(
+                      '${maxDaily.toStringAsFixed(1)} mm',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ],
         ),
@@ -487,229 +585,166 @@ class ClimaPage extends ConsumerWidget {
     String value,
     Color color,
   ) {
+    // Hydro Year Date Range Logic
+    final now = DateTime.now();
+    final int startYear = (now.month >= 10) ? now.year : now.year - 1;
+    final int endYear = startYear + 1;
+    final String range = "1 oct. $startYear - 30 set. $endYear";
+
+    // Health Logic
+    final startDate = DateTime(startYear, 10, 1);
+    final daysPassed = now.difference(startDate).inDays + 1;
+    final expected = 550.0 * (daysPassed / 365.0);
+
+    // Parse current value
+    double current = 0.0;
+    try {
+      final numericPart = value.split(' ').first;
+      current = double.parse(numericPart);
+    } catch (_) {}
+
+    final bool healthy = current > expected;
+    final Color displayColor = healthy ? Colors.green.shade600 : color;
+    final Color bgColor = healthy
+        ? Colors.green.shade50
+        : color.withValues(alpha: 0.05);
+
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: color.withValues(alpha: 0.3)),
+        side: BorderSide(color: displayColor.withValues(alpha: 0.3)),
       ),
-      color: color.withValues(alpha: 0.05),
+      color: bgColor,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center, // Center Vertically
           children: [
             Text(
               title,
-              style: Theme.of(context).textTheme.labelSmall,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                // Bigger Title
+                color: Colors.grey[800],
+                fontWeight: FontWeight.w600,
+              ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
+            Text(range, style: TextStyle(fontSize: 9, color: Colors.grey[600])),
+            const SizedBox(height: 4),
             Text(
               value,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: color,
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                color: displayColor,
                 fontWeight: FontWeight.bold,
+                fontSize: 26, // Consistent size
               ),
             ),
-            // Placeholder to align height with comparison card
             const SizedBox(height: 4),
-            const Text(
-              '',
-              style: TextStyle(fontSize: 10, height: 1.4),
-            ), // Empty space filler
+            if (healthy)
+              const Text(
+                'Bon ritme! 🌿',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.green,
+                  fontWeight: FontWeight.bold,
+                ),
+              )
+            else
+              const Text('', style: TextStyle(fontSize: 11, height: 1.4)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildColdHoursCard(BuildContext context, double hours) {
+  Widget _buildColdHoursCard(
+    BuildContext context,
+    double hours, {
+    bool isVertical = false,
+  }) {
+    // Config
+    final Color cardColor = const Color(0xFFE0F7FA);
+    final Color borderColor = const Color(0xFFB2EBF2);
+    final Color textColor = Colors.blueGrey;
+
     return Card(
-      color: const Color(0xFFE0F7FA), // Light Cyan/Pastel Blue
+      color: cardColor,
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFB2EBF2)),
+        side: BorderSide(color: borderColor),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          children: [
-            const Icon(Icons.ac_unit, size: 48, color: Colors.blueGrey),
-            const SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Hores de Fred (<7°C)',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                Text(
-                  'Acumulat des de Novembre',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-            const Spacer(),
-            Text(
-              hours.toStringAsFixed(0),
-              style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                color: Colors.blueGrey,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const Text(
-              ' h',
-              style: TextStyle(
-                fontSize: 20,
-                color: Colors.blueGrey,
-                height: 2.5,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRainChart(
-    ClimateMonthComparison comparison,
-    BuildContext context,
-  ) {
-    // We assume 31 days max for simplicity of the X axis, or use actual month days.
-    final daysInMonth = DateUtils.getDaysInMonth(
-      comparison.month.year,
-      comparison.month.month,
-    );
-
-    // Map data by day
-    final Map<int, double> currentMap = {
-      for (var d in comparison.currentData) d.date.day: d.rain,
-    };
-    final Map<int, double> prevMap = {
-      for (var d in comparison.previousData) d.date.day: d.rain,
-    };
-
-    List<BarChartGroupData> bars = [];
-    for (int i = 1; i <= daysInMonth; i++) {
-      final valCurrent = currentMap[i] ?? 0.0;
-      final valPrev = prevMap[i] ?? 0.0;
-
-      // Only show if there's data in at least one year OR if we want to show empty days
-      // Showing all days gives better context of time.
-
-      final isHighRain = valCurrent > 5.0;
-
-      bars.add(
-        BarChartGroupData(
-          x: i,
-          barRods: [
-            // Previous Year (Ghost)
-            BarChartRodData(
-              toY: valPrev,
-              color: Colors.grey.withValues(alpha: 0.3),
-              width: 6,
-              borderRadius: BorderRadius.circular(2),
-            ),
-            // Current Year
-            BarChartRodData(
-              toY: valCurrent,
-              color: isHighRain ? Colors.green[800] : Colors.green[400],
-              width: 8,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(2),
-              ),
-            ),
-          ],
-          showingTooltipIndicators: valCurrent > 0 || valPrev > 0
-              ? [1]
-              : [], // Tooltip on current rod
-        ),
-      );
-    }
-
-    return BarChart(
-      BarChartData(
-        barGroups: bars,
-        alignment: BarChartAlignment.center,
-        maxY: 60,
-        barTouchData: BarTouchData(
-          enabled: false,
-          touchTooltipData: BarTouchTooltipData(
-            getTooltipColor: (_) =>
-                Colors.transparent, // Fix deprecated tooltipBgColor if needed
-            tooltipPadding: EdgeInsets.zero,
-            tooltipMargin: 2,
-            getTooltipItem: (group, groupIndex, rod, rodIndex) {
-              if (rodIndex == 0) {
-                return null; // Ignore ghost rod tooltip logic here, simpler
-              }
-              final currentVal = group.barRods[1].toY;
-              final prevVal = group.barRods[0].toY;
-
-              // Only show if substantial? Or always?
-              // Space is tight.
-              return BarTooltipItem(
-                currentVal > 0 ? currentVal.toStringAsFixed(1) : '',
-                const TextStyle(
-                  color: Colors.black,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 10,
-                ),
-                children: prevVal > 0
-                    ? [
-                        TextSpan(
-                          text: '\n(${prevVal.toStringAsFixed(1)})',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 8,
-                            fontWeight: FontWeight.normal,
-                          ),
-                        ),
-                      ]
-                    : [],
-              );
-            },
-          ),
-        ),
-        titlesData: FlTitlesData(
-          show: true,
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              interval: 5,
-              getTitlesWidget: (value, meta) {
-                return Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: Text(
-                    value.toInt().toString(),
-                    style: const TextStyle(fontSize: 10, color: Colors.grey),
+        padding: const EdgeInsets.all(10.0),
+        child: isVertical
+            ? Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Hores de Fred (<7°C)',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      // Change to match other titles
+                      color: Colors.grey[800],
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                );
-              },
-              reservedSize: 30,
-            ),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              interval: 10,
-              reservedSize: 30,
-              getTitlesWidget: (val, meta) => Text(
-                '${val.toInt()} mm',
-                style: const TextStyle(fontSize: 8, color: Colors.grey),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Nov - Mar',
+                    style: TextStyle(fontSize: 9, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${hours.toStringAsFixed(0)} h',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      color: textColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 26, // Consistent size
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Icon(Icons.ac_unit, size: 20, color: Colors.blueGrey),
+                ],
+              )
+            : Row(
+                children: [
+                  const Icon(Icons.ac_unit, size: 48, color: Colors.blueGrey),
+                  const SizedBox(width: 16),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Hores de Fred (<7°C)',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Text(
+                        'Acumulat des de Novembre',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  Text(
+                    hours.toStringAsFixed(0),
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      // Reduced from DisplayMedium
+                      color: Colors.blueGrey,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Text(
+                    ' h',
+                    style: TextStyle(
+                      fontSize: 20,
+                      color: Colors.blueGrey,
+                      height: 2.5,
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ),
-          topTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          rightTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-        ),
-        gridData: const FlGridData(show: true, drawVerticalLine: false),
-        borderData: FlBorderData(show: false),
       ),
     );
   }

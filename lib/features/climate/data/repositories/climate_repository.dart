@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:soca/core/calculators/et0_calculator.dart';
 import '../../domain/climate_model.dart';
 
 class ClimateRepository {
@@ -148,5 +149,83 @@ class ClimateRepository {
       }
       await batch.commit();
     }
+  }
+
+  /// Recalculates RuralCat Soil Balance for a given month
+  /// [latitude] is required to repair ET0 if missing (legacy data)
+  Future<void> recalculateSoilBalance(DateTime month, double latitude) async {
+    final start = DateTime(month.year, month.month, 1);
+    final end = DateTime(month.year, month.month + 1, 0);
+
+    // Fetch existing data
+    List<ClimateDailyData> days = await getHistory(start, end);
+    if (days.isEmpty) return; // Nothing to calculate
+
+    // Sort by date ascending to ensure correct accumulation
+    days.sort((a, b) => a.date.compareTo(b.date));
+
+    double currentBalance = 0.0;
+    // Possible Improvement: Fetch previous month's last day balance to carry over.
+    // For now, assuming start of month = 0 or just calculating relative to start.
+
+    List<ClimateDailyData> updatedDays = [];
+
+    for (var day in days) {
+      // 0. Repair ET0 if missing (Legacy Data Fix)
+      double et0 = day.et0;
+      if (et0 == 0.0) {
+        et0 = ET0Calculator.calculate(
+          lat: latitude,
+          date: day.date,
+          tMax: day.maxTemp,
+          tMin: day.minTemp,
+          rhMean: day.humidity > 0 ? day.humidity : null,
+          windSpeed: day.windSpeed > 0 ? day.windSpeed : null,
+          radiation: day.radiation > 0 ? day.radiation : null,
+        );
+      }
+
+      // 1. Effective Rain (Pef)
+      // Check RuralCat logic:
+      // If P < 4mm -> Pef = 0
+      // If P >= 4mm -> Pef = P * 0.75
+      double pef = 0.0;
+      if (day.rain >= 4.0) {
+        pef = day.rain * 0.75;
+      }
+
+      // 2. Crop Evapotranspiration (ETc)
+      // ETc = ET0 * Kc
+      // Kc = 0.6 (Standard for finca mol-cal-jeroni trees)
+      double kc = 0.6;
+      double etc = et0 * kc;
+
+      // 3. Balance Update
+      // Balance = PrevBalance + Pef - ETc
+      // Cap at 35.0 (Runoff/Deep Drainage simulation)
+      double rawBalance = currentBalance + pef - etc;
+      currentBalance = rawBalance > 35.0 ? 35.0 : rawBalance;
+
+      // Create updated copy
+      updatedDays.add(
+        ClimateDailyData(
+          date: day.date,
+          maxTemp: day.maxTemp,
+          minTemp: day.minTemp,
+          rain: day.rain,
+          rainAccumulated: day.rainAccumulated,
+          humidity: day.humidity,
+          radiation: day.radiation,
+          windSpeed: day.windSpeed,
+          et0: et0, // Save repaired ET0
+          isMock: day.isMock,
+          fincaId: day.fincaId,
+          soilBalance: currentBalance,
+        ),
+      );
+    }
+
+    // Save updated data
+    await saveHistory(updatedDays);
   }
 }

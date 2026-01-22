@@ -9,6 +9,7 @@ class WeatherModel {
   final double et0;
   final List<DailyForecast> forecast;
   final List<SafetyAlert> alerts;
+  final DateTime? lastUpdated;
 
   WeatherModel({
     required this.temperature,
@@ -21,6 +22,7 @@ class WeatherModel {
     this.et0 = 0.0,
     this.forecast = const [],
     this.alerts = const [],
+    this.lastUpdated,
   });
 
   factory WeatherModel.empty() {

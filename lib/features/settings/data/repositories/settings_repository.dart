@@ -51,10 +51,13 @@ class SettingsRepository {
           .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
           .replaceAll(RegExp(r'^-+|-+$'), '');
 
-      // Fallback if slug is empty
-      final finalId = slug.isNotEmpty
-          ? slug
-          : 'finca-${DateTime.now().millisecondsSinceEpoch}';
+      if (slug.isEmpty) {
+        // Prevent random ID generation which causes data split
+        throw Exception(
+          'Cannot save farm config without a valid name to generate ID.',
+        );
+      }
+      final finalId = slug;
 
       configToSave = configToSave.copyWith(fincaId: finalId);
     }

@@ -12,6 +12,7 @@ class ClimateDailyData {
   final double et0; // Reference Evapotranspiration (mm/day)
   final bool isMock; // Flag for generated data
   final String? fincaId;
+  final double? soilBalance;
 
   ClimateDailyData({
     required this.date,
@@ -25,6 +26,7 @@ class ClimateDailyData {
     this.et0 = 0.0,
     this.isMock = false,
     this.fincaId,
+    this.soilBalance,
   });
 
   /// Parses Meteocat API response
@@ -147,7 +149,9 @@ class ClimateDailyData {
       'humidity': humidity,
       'radiation': radiation,
       'windSpeed': windSpeed,
+      'et0': et0,
       'fincaId': fincaId,
+      if (soilBalance != null) 'soilBalance': soilBalance,
     };
   }
 
@@ -161,7 +165,9 @@ class ClimateDailyData {
       humidity: map['humidity']?.toDouble() ?? 0.0,
       radiation: map['radiation']?.toDouble() ?? 0.0,
       windSpeed: map['windSpeed']?.toDouble() ?? 0.0,
+      et0: map['et0']?.toDouble() ?? 0.0,
       fincaId: map['fincaId'],
+      soilBalance: map['soilBalance']?.toDouble(),
     );
   }
 }

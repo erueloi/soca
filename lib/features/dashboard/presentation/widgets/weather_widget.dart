@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:soca/core/services/meteocat_service.dart';
 import 'package:soca/features/dashboard/presentation/providers/weather_provider.dart';
 import '../../../climate/presentation/pages/clima_page.dart';
 
@@ -22,7 +23,7 @@ class WeatherWidget extends ConsumerWidget {
           );
         },
         child: Padding(
-          padding: const EdgeInsets.all(12.0), // Compact padding
+          padding: const EdgeInsets.all(8.0), // Compact padding 8.0
           child: weatherAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, s) => Center(
@@ -49,9 +50,9 @@ class WeatherWidget extends ConsumerWidget {
                                 Icon(
                                   Icons.satellite_alt,
                                   color: Theme.of(context).colorScheme.primary,
-                                  size: 24,
+                                  size: 20, // Smaller icon
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(width: 6),
                                 Flexible(
                                   child: Text(
                                     weather.stationName.isNotEmpty &&
@@ -61,15 +62,17 @@ class WeatherWidget extends ConsumerWidget {
                                     style: Theme.of(context)
                                         .textTheme
                                         .titleLarge
-                                        ?.copyWith(fontSize: 18),
+                                        ?.copyWith(
+                                          fontSize: 16,
+                                        ), // Smaller text
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                const SizedBox(width: 8), // Added spacing
+                                const SizedBox(width: 4),
                                 IconButton(
                                   icon: const Icon(
                                     Icons.info_outline,
-                                    size: 18,
+                                    size: 16, // Smaller icon
                                     color: Colors.grey,
                                   ),
                                   onPressed: () => _showHelpDialog(context),
@@ -80,10 +83,62 @@ class WeatherWidget extends ConsumerWidget {
                                 IconButton(
                                   icon: const Icon(
                                     Icons.refresh,
-                                    size: 20,
+                                    size: 18, // Smaller icon
                                     color: Colors.grey,
                                   ),
                                   onPressed: () async {
+                                    // Check if data is recent (< 4 hours)
+                                    final last =
+                                        weather.lastUpdated ??
+                                        DateTime.fromMillisecondsSinceEpoch(0);
+                                    final diff = DateTime.now().difference(
+                                      last,
+                                    );
+
+                                    if (diff.inHours < 4) {
+                                      final shouldForce = await showDialog<bool>(
+                                        context: context,
+                                        builder: (context) => AlertDialog(
+                                          title: const Text('Dades Recents'),
+                                          content: Text(
+                                            'Les dades tenen menys de 4h '
+                                            '(Fa ${diff.inHours}h ${diff.inMinutes % 60}m).\n'
+                                            'Vols forçar una actualització? Això consumirà quota mensual.',
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(
+                                                context,
+                                                false,
+                                              ), // No
+                                              child: const Text('Mantenir'),
+                                            ),
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(
+                                                context,
+                                                true,
+                                              ), // Sí
+                                              child: const Text(
+                                                'Forçar',
+                                                style: TextStyle(
+                                                  color: Colors.orange,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+
+                                      if (shouldForce != true) return;
+
+                                      // Set Force Flag
+                                      ref
+                                          .read(meteocatServiceProvider)
+                                          .setForceNextUpdate(true);
+                                    }
+
+                                    if (!context.mounted) return;
+
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
                                         content: Text(
@@ -93,11 +148,9 @@ class WeatherWidget extends ConsumerWidget {
                                       ),
                                     );
                                     try {
-                                      // Trigger refresh and await result to catch errors
                                       final _ = await ref.refresh(
                                         weatherProvider.future,
                                       );
-                                      // Success is handled by UI update
                                     } catch (e) {
                                       if (context.mounted) {
                                         ScaffoldMessenger.of(
@@ -105,12 +158,9 @@ class WeatherWidget extends ConsumerWidget {
                                         ).showSnackBar(
                                           SnackBar(
                                             content: Text(
-                                              'Error actualitzant: ${e.toString().replaceAll("Exception:", "")}',
+                                              'Error: ${e.toString().replaceAll("Exception:", "")}',
                                             ),
                                             backgroundColor: Colors.orange,
-                                            duration: const Duration(
-                                              seconds: 3,
-                                            ),
                                           ),
                                         );
                                       }
@@ -126,33 +176,42 @@ class WeatherWidget extends ConsumerWidget {
                               Padding(
                                 padding: const EdgeInsets.only(top: 2),
                                 child: Wrap(
-                                  spacing: 4,
-                                  runSpacing: 4,
+                                  spacing: 2, // Tighter
+                                  runSpacing: 2, // Tighter
                                   children: weather.alerts.map((alert) {
                                     return Tooltip(
                                       message: alert.message,
                                       triggerMode: TooltipTriggerMode.tap,
                                       showDuration: const Duration(seconds: 3),
-                                      child: Chip(
-                                        visualDensity: VisualDensity.compact,
-                                        padding: EdgeInsets.zero,
-                                        labelPadding:
-                                            const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                            ),
-                                        backgroundColor: Colors.red.shade100,
-                                        avatar: Icon(
-                                          _getAlertIcon(alert.icon),
-                                          size: 14,
-                                          color: Colors.red.shade900,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
                                         ),
-                                        label: Text(
-                                          alert.title,
-                                          style: TextStyle(
-                                            fontSize: 9,
-                                            color: Colors.red.shade900,
-                                            fontWeight: FontWeight.bold,
+                                        decoration: BoxDecoration(
+                                          color: Colors.red.shade100,
+                                          borderRadius: BorderRadius.circular(
+                                            4,
                                           ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              _getAlertIcon(alert.icon),
+                                              size: 12,
+                                              color: Colors.red.shade900,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              alert.title,
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.red.shade900,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     );
@@ -162,38 +221,35 @@ class WeatherWidget extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      // Right side: Just the Weather Icon now
-                      Padding(
-                        padding: const EdgeInsets.only(left: 8.0, top: 4.0),
-                        child: Icon(
-                          _getWeatherIcon(weather.rainProbability),
-                          color: _getWeatherColor(weather.rainProbability),
-                          size: 32,
-                        ),
-                      ),
+                      // Removed Top Right Icon
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4), // Reduced spacing
                   // 2. MAIN METRICS
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Expanded(
-                        child: Center(
-                          child: Text(
+                      Column(
+                        children: [
+                          Icon(
+                            _getWeatherIcon(weather.rainProbability),
+                            color: _getWeatherColor(weather.rainProbability),
+                            size: 48, // Balanced with Text
+                          ),
+                          Text(
                             '${weather.temperature.toStringAsFixed(1)}°C',
                             style: Theme.of(context).textTheme.displayLarge
                                 ?.copyWith(
                                   fontWeight: FontWeight.bold,
                                   color: Theme.of(context).colorScheme.primary,
-                                  fontSize: 52, // BIGGER
+                                  fontSize: 42,
                                 ),
                           ),
-                        ),
+                        ],
                       ),
+                      const SizedBox(width: 16),
                       Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _buildMetricRow(
                             Icons.water_drop,
@@ -205,7 +261,7 @@ class WeatherWidget extends ConsumerWidget {
                           ),
                           _buildMetricRow(
                             Icons.air,
-                            '${weather.windSpeed.toStringAsFixed(1)} m/s',
+                            '${(weather.windSpeed * 3.6).toStringAsFixed(1)} km/h',
                           ),
                           _buildMetricRow(
                             Icons.wb_sunny_outlined,
@@ -215,10 +271,10 @@ class WeatherWidget extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4), // Reduced spacing
                   // 3. IRRIGATION ADVICE
                   Container(
-                    padding: const EdgeInsets.all(6),
+                    padding: const EdgeInsets.all(4), // Reduced padding
                     width: double.infinity,
                     decoration: BoxDecoration(
                       color: _getAdviceColor(
@@ -236,7 +292,7 @@ class WeatherWidget extends ConsumerWidget {
                           style: Theme.of(context).textTheme.labelSmall
                               ?.copyWith(
                                 fontWeight: FontWeight.bold,
-                                fontSize: 10,
+                                fontSize: 9, // Smaller
                               ),
                         ),
                         Text(
@@ -247,7 +303,7 @@ class WeatherWidget extends ConsumerWidget {
                                   weather.irrigationAdvice,
                                 ).withValues(alpha: 1.0),
                                 fontWeight: FontWeight.bold,
-                                fontSize: 12,
+                                fontSize: 11, // Smaller
                               ),
                           textAlign: TextAlign.center,
                           maxLines: 1,
@@ -258,9 +314,9 @@ class WeatherWidget extends ConsumerWidget {
                   ),
                   // Compact logic for divider
                   if (weather.forecast.isNotEmpty) ...[
-                    const Divider(height: 12),
+                    const Divider(height: 8), // Reduced height
                     Padding(
-                      padding: const EdgeInsets.only(top: 4.0),
+                      padding: const EdgeInsets.only(top: 2.0),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: weather.forecast.map((f) {
@@ -278,19 +334,19 @@ class WeatherWidget extends ConsumerWidget {
                                 ][f.date.weekday - 1],
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 10,
+                                  fontSize: 9,
                                 ),
                               ),
-                              const SizedBox(height: 2),
+                              const SizedBox(height: 0), // Removed spacing
                               Icon(
                                 _getWeatherIcon(f.rainProb),
-                                size: 16,
+                                size: 14,
                                 color: _getWeatherColor(f.rainProb),
                               ),
-                              const SizedBox(height: 2),
+                              const SizedBox(height: 0), // Removed spacing
                               Text(
                                 '${f.minTemp}° / ${f.maxTemp}°',
-                                style: const TextStyle(fontSize: 9),
+                                style: const TextStyle(fontSize: 8),
                               ),
                             ],
                           );
@@ -319,16 +375,20 @@ class WeatherWidget extends ConsumerWidget {
             children: [
               const Text('Colors de recomanació:'),
               const SizedBox(height: 8),
-              _buildHelpRow(Colors.green, 'Reg Recomanat', 'Dèficit > 5mm'),
+              _buildHelpRow(
+                Colors.green,
+                'Reg Recomanat',
+                'Reserva Crítica (< -15mm)',
+              ),
               _buildHelpRow(
                 Colors.orange,
                 'No regar / Esperar',
-                'Pluja recent, alta humitat o previsió de pluja',
+                'Terra Humida (> -5mm) o Pluja/Boira',
               ),
               _buildHelpRow(
                 Colors.grey,
                 'Reg Opcional',
-                'Balanç equilibrat (-5 a 5mm)',
+                'Estrès Moderat (-5 a -15mm)',
               ),
               const SizedBox(height: 16),
               const Text('Mètriques:'),

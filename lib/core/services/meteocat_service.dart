@@ -41,6 +41,10 @@ class MeteocatService {
     await prefs.setBool(_keyQuotaSaver, enabled);
   }
 
+  // Force Update Flag
+  bool _forceNextUpdate = false;
+  void setForceNextUpdate(bool value) => _forceNextUpdate = value;
+
   Future<Map<String, dynamic>> getWeatherData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -71,6 +75,7 @@ class MeteocatService {
           _keyCachedObs,
           () => _fetchObservations(stationCode!),
           _obsRateLimit,
+          force: _forceNextUpdate,
         );
       } catch (e) {
         // print("Meteocat Obs Error: $e");
@@ -90,6 +95,7 @@ class MeteocatService {
           _keyCachedForecast,
           () => _fetchForecast(_laFlorestaMunCode),
           _forecastRateLimit,
+          force: _forceNextUpdate,
         );
       } catch (e) {
         // print("Meteocat Forecast Error: $e");
@@ -99,10 +105,21 @@ class MeteocatService {
         }
       }
 
+      // Reset force flag
+      if (_forceNextUpdate) _forceNextUpdate = false;
+
+      // Get last updated time (from observations)
+      String? lastUpdateStr = prefs.getString(_keyLastObsUpdate);
+      DateTime? lastUpdated;
+      if (lastUpdateStr != null) {
+        lastUpdated = DateTime.parse(lastUpdateStr);
+      }
+
       return {
         'observation': observation,
         'forecast': forecast,
         'station': stationCode,
+        'last_updated': lastUpdated,
       };
     } catch (e) {
       // print('Meteocat Error: $e');
@@ -116,12 +133,13 @@ class MeteocatService {
     String timeKey,
     String dataKey,
     Future<Map<String, dynamic>> Function() fetcher,
-    Duration limit,
-  ) async {
+    Duration limit, {
+    bool force = false,
+  }) async {
     final lastUpdateStr = prefs.getString(timeKey);
     final cachedDataStr = prefs.getString(dataKey);
 
-    if (lastUpdateStr != null && cachedDataStr != null) {
+    if (!force && lastUpdateStr != null && cachedDataStr != null) {
       final lastUpdate = DateTime.parse(lastUpdateStr);
       if (DateTime.now().difference(lastUpdate) < limit) {
         // print('Returning cached data for $dataKey');
@@ -150,11 +168,12 @@ class MeteocatService {
 
       if (response.statusCode == 200) {
         final List<dynamic> stations = jsonDecode(response.body);
-        String? bestStation;
-        double minDistance = double.infinity;
 
+        // 1. Calculate Distances and Sort
         final targetLat = latOverride ?? _targetLat;
         final targetLon = lonOverride ?? _targetLon;
+
+        final List<Map<String, dynamic>> sortedStations = [];
 
         for (var s in stations) {
           final coords = s['coordenades'];
@@ -167,26 +186,66 @@ class MeteocatService {
 
           final double lat = (latVal as num).toDouble();
           final double lon = (lonVal as num).toDouble();
+          final String code = s['codi'];
 
           final dist = _calculateDistance(targetLat, targetLon, lat, lon);
+          sortedStations.add({'s': s, 'dist': dist, 'code': code});
+        }
 
-          // Filter: Must be operational? Assuming API returns active stations.
-          if (dist < minDistance) {
-            minDistance = dist;
-            bestStation = s['codi'];
+        // Sort by distance (ASC)
+        sortedStations.sort(
+          (a, b) => (a['dist'] as double).compareTo(b['dist'] as double),
+        );
+
+        // 2. Probe Top Candidates (Limit 5 to save quota/time)
+        // We look for a station that measures Temperature (Code 32 or 40)
+        int checked = 0;
+        final probeDate = DateTime.now().subtract(
+          const Duration(days: 1),
+        ); // Use yesterday to ensure data exists
+
+        for (var candidate in sortedStations) {
+          if (checked >= 5) break;
+          checked++;
+
+          final String code = candidate['code'];
+          // print("Probing Station $code (${candidate['dist'].toStringAsFixed(1)}km)...");
+
+          try {
+            final data = await _fetchDailyData(code, probeDate);
+            if (data.containsKey('data_list')) {
+              final list = data['data_list'] as List<dynamic>;
+              if (list.isNotEmpty) {
+                final stationData = list.first;
+                final vars = stationData['variables'] as List<dynamic>? ?? [];
+                // Check for Temp (32), MaxTemp (40), or MinTemp (42)
+                final hasTemp = vars.any((v) {
+                  final c = v['codi'];
+                  return c == 32 || c == 40 || c == 42;
+                });
+
+                if (hasTemp) {
+                  // print("Station $code is Valid (Has Temp). Selected.");
+                  return code;
+                }
+              }
+            }
+          } catch (e) {
+            // Ignore probe error
           }
         }
-        return bestStation;
+
+        // 3. Fallback: Return closest even if probe failed or didn't respond
+        if (sortedStations.isNotEmpty) {
+          // print("No perfect match found in top 5. Returning closest: ${sortedStations.first['code']}");
+          return sortedStations.first['code'];
+        }
+
+        return 'X1';
       } else {
-        // throw Exception('Failed to load stations: ${response.statusCode}');
-        // Fallback instead of crashing
-        // print(
-        //   'Failed to load stations: ${response.statusCode}. Using Fallback.',
-        // );
         return 'X1'; // Les Borges Blanques
       }
     } catch (e) {
-      // print('Meteocat Lookup Error: $e. Using Fallback Station X1.');
       return 'X1'; // Les Borges Blanques (Fallback)
     }
   }
