@@ -127,6 +127,7 @@ class _TasksTimelinePageState extends ConsumerState<TasksTimelinePage> {
               cost: task.totalSpent,
               isSubtask: false,
               resolution: task.resolution,
+              photoUrls: task.photoUrls,
             ),
           );
         }
@@ -142,6 +143,7 @@ class _TasksTimelinePageState extends ConsumerState<TasksTimelinePage> {
                 cost: item.cost * item.quantity,
                 isSubtask: true,
                 parentTaskTitle: task.title,
+                photoUrls: const [],
               ),
             );
           }
@@ -216,6 +218,30 @@ class _TasksTimelinePageState extends ConsumerState<TasksTimelinePage> {
           ),
           const Expanded(child: Divider(indent: 16)),
         ],
+      ),
+    );
+  }
+
+  void _showFullScreenImage(BuildContext context, String imageUrl) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            iconTheme: const IconThemeData(color: Colors.white),
+            title: const Text('Visor', style: TextStyle(color: Colors.white)),
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              panEnabled: true,
+              boundaryMargin: const EdgeInsets.all(20),
+              minScale: 0.5,
+              maxScale: 4,
+              child: Image.network(imageUrl),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -296,6 +322,38 @@ class _TasksTimelinePageState extends ConsumerState<TasksTimelinePage> {
                     ),
                   ),
                 ],
+                if (item.photoUrls.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 60,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: item.photoUrls.length,
+                      itemBuilder: (context, index) {
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: InkWell(
+                            onTap: () => _showFullScreenImage(
+                              context,
+                              item.photoUrls[index],
+                            ),
+                            child: Container(
+                              width: 60,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey.shade300),
+                                image: DecorationImage(
+                                  image: NetworkImage(item.photoUrls[index]),
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 4),
                 Row(
                   children: [
@@ -340,6 +398,7 @@ class _TimelineItem {
   final bool isSubtask;
   final String? parentTaskTitle;
   final String? resolution;
+  final List<String> photoUrls;
 
   _TimelineItem({
     required this.title,
@@ -348,5 +407,6 @@ class _TimelineItem {
     required this.isSubtask,
     this.parentTaskTitle,
     this.resolution,
+    this.photoUrls = const [],
   });
 }

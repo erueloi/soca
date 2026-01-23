@@ -17,6 +17,7 @@ import '../../../trees/presentation/widgets/tree_form_sheet.dart';
 import '../../../trees/presentation/widgets/tree_detail.dart';
 import '../../../trees/domain/entities/watering_event.dart';
 import '../../../trees/domain/entities/tree.dart';
+import '../../../trees/domain/entities/tree_extensions.dart';
 import '../../../tasks/domain/entities/task.dart';
 
 import '../../../tasks/presentation/widgets/task_edit_sheet.dart';
@@ -913,6 +914,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                       ],
                     ),
                     const SizedBox(height: 8),
+                    const SizedBox(height: 8),
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
@@ -965,6 +967,22 @@ class _MapPageState extends ConsumerState<MapPage> {
                     const Text(
                       'Reg Ràpid',
                       style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(width: 12),
+                    // Water Status
+                    Icon(
+                      Icons.water_drop,
+                      size: 16,
+                      color: tree.waterStatusColor,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      tree.waterStatusText,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: tree.waterStatusColor,
+                      ),
                     ),
                     if (species != null) ...[
                       const SizedBox(width: 8),

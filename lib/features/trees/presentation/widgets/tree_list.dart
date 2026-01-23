@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/tree.dart';
+import '../../domain/entities/tree_extensions.dart';
 import '../../domain/entities/watering_event.dart';
 import '../providers/trees_provider.dart';
 import '../widgets/tree_detail.dart';
@@ -97,26 +98,28 @@ class TreeList extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                icon: const Icon(Icons.water_drop, color: Colors.blue),
+                icon: Icon(
+                  Icons.water_drop,
+                  color: tree.waterStatusColor == Colors.grey
+                      ? Colors.blue
+                      : tree.waterStatusColor,
+                ),
                 onPressed: () => _showQuickWateringSheet(context, ref, tree),
               ),
               const SizedBox(width: 8),
+              // Health/Vitality Indicator
               Container(
                 width: 12,
                 height: 12,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: _getStatusColor(tree.status),
+                  color: _getHealthColor(tree.status),
                 ),
               ),
             ],
           ),
           onTap: () {
             ref.read(selectedTreeProvider.notifier).selectTree(tree);
-            // Check screen size to navigate or not?
-            // Actually, the page should handle the policy. But TreeList doesn't know context size easily without query.
-            // Let's modify TreeList to just be a dumb list and let the Page pass the callback?
-            // Or simpler navigation logic inside ListTile:
             if (MediaQuery.of(context).size.width <= 600) {
               Navigator.push(
                 context,
@@ -129,14 +132,14 @@ class TreeList extends ConsumerWidget {
     );
   }
 
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Viable':
-        return Colors.green;
-      case 'Malalt':
-        return Colors.orange;
-      case 'Mort':
+  Color _getHealthColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'mort':
         return Colors.black;
+      case 'malalt':
+        return Colors.orange;
+      case 'viable':
+        return Colors.green;
       default:
         return Colors.grey;
     }

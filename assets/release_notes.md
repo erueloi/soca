@@ -1,5 +1,12 @@
 ﻿# Release Notes
 
+## v1.8.5
+Reg: Alineació de colors del reg.
+Mostrar individualment per arbre el reg necessari.
+Clima: Recalcular el reg per arbre i el seu soilbalance.
+Gràfic millorat per dispositus petits.
+Mapa: Mostrar si necessiten reg.
+Arbres: Mostrar per colors si necessiten reg.
 ## v1.8.4
 Clima: Actualizació dels calculs del widget i de la pagina de clima.
 Settings: Reparem la pagina al guardar.
@@ -97,6 +104,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart' hide Task;
@@ -52,12 +51,15 @@ class TasksRepository {
     await _tasksCollection.doc(taskId).delete();
   }
 
-  Future<String?> uploadTaskImage(File imageFile, String taskId) async {
+  Future<String?> uploadTaskImage(Uint8List imageBytes, String taskId) async {
     try {
       final ref = _storage.ref().child(
         'task_images/$taskId/${DateTime.now().millisecondsSinceEpoch}.jpg',
       );
-      final uploadTask = await ref.putFile(imageFile);
+      final uploadTask = await ref.putData(
+        imageBytes,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
       final url = await uploadTask.ref.getDownloadURL();
       return url;
     } catch (e) {

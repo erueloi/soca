@@ -376,19 +376,19 @@ class WeatherWidget extends ConsumerWidget {
               const Text('Colors de recomanació:'),
               const SizedBox(height: 8),
               _buildHelpRow(
-                Colors.green,
+                Colors.red,
                 'Reg Recomanat',
                 'Reserva Crítica (< -15mm)',
               ),
               _buildHelpRow(
-                Colors.orange,
-                'No regar / Esperar',
-                'Terra Humida (> -5mm) o Pluja/Boira',
-              ),
-              _buildHelpRow(
-                Colors.grey,
+                Colors.amber,
                 'Reg Opcional',
                 'Estrès Moderat (-5 a -15mm)',
+              ),
+              _buildHelpRow(
+                Colors.green,
+                'No regar / Esperar',
+                'Terra Humida (> -5mm) o Pluja/Boira',
               ),
               const SizedBox(height: 16),
               const Text('Mètriques:'),
@@ -500,10 +500,10 @@ class WeatherWidget extends ConsumerWidget {
 
   Color _getAdviceColor(String advice) {
     if (advice.contains('No regar') || advice.contains('Esperar')) {
-      return Colors.orange;
+      return Colors.green;
     }
-    if (advice.contains('Reg recomanat')) return Colors.green;
-    return Colors.grey;
+    if (advice.contains('Reg recomanat')) return Colors.red;
+    return Colors.amber;
   }
 
   // --- Helpers for Weather Icons ---

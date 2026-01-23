@@ -176,6 +176,7 @@ class _UnifiedClimateChartState extends State<_UnifiedClimateChart> {
       enablePinching: true,
       enablePanning: true,
       enableDoubleTapZooming: true,
+      enableMouseWheelZooming: true,
       zoomMode: ZoomMode.x,
     );
     super.initState();
@@ -195,7 +196,9 @@ class _UnifiedClimateChartState extends State<_UnifiedClimateChart> {
       primaryXAxis: const NumericAxis(
         interval: 1,
         minimum: 1,
-        maximum: 31,
+        // Show only 10 days at a time to avoid compression on mobile
+        autoScrollingDelta: 10,
+        autoScrollingMode: AutoScrollingMode.end,
         decimalPlaces: 0,
         title: AxisTitle(text: 'Dia'),
         majorGridLines: MajorGridLines(width: 0),

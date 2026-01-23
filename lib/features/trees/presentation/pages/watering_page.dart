@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:linked_scroll_controller/linked_scroll_controller.dart';
 import '../../domain/entities/tree.dart';
+import '../../domain/entities/tree_extensions.dart';
 import '../../domain/entities/watering_event.dart';
 import '../providers/trees_provider.dart';
 
@@ -111,8 +113,23 @@ class _WateringPageState extends ConsumerState<WateringPage> {
           .toList();
     }
 
+    // Filter by Needs Water
+    if (filters.onlyNeedsWater) {
+      filteredTrees = filteredTrees.where((t) => t.needsWater).toList();
+    }
+
     // 2. Prepare Data Structure
     final Map<String, Map<String, List<WateringEvent>>> data = {};
+
+    // Sticky Header Scroll Controllers
+    final horizontalControllers = LinkedScrollControllerGroup();
+    final headerScroll = horizontalControllers.addAndGet();
+    final bodyScroll = horizontalControllers.addAndGet();
+
+    final double colTreeWidth = 160;
+    final double colDateWidth = 90;
+    final double colTotalWidth = 110;
+    final double colNeedsWidth = 180;
 
     // Initialize dates based on provider
     final start =
@@ -260,6 +277,31 @@ class _WateringPageState extends ConsumerState<WateringPage> {
                   ),
                 ],
               ),
+              const SizedBox(height: 8),
+              // Quick Filters Row
+              Row(
+                children: [
+                  FilterChip(
+                    label: const Text('⚠️ Necessiten Reg'),
+                    selected: filters.onlyNeedsWater,
+                    onSelected: (bool selected) {
+                      ref
+                          .read(wateringFiltersProvider.notifier)
+                          .toggleNeedsWater();
+                    },
+                    selectedColor: Colors.orange.shade100,
+                    checkmarkColor: Colors.orange.shade900,
+                    labelStyle: TextStyle(
+                      color: filters.onlyNeedsWater
+                          ? Colors.orange.shade900
+                          : Colors.grey.shade700,
+                      fontWeight: filters.onlyNeedsWater
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
               // Active Filters Chips (Breadcrumbs)
               if (filters.treeId != null ||
                   filters.species != null ||
@@ -316,199 +358,306 @@ class _WateringPageState extends ConsumerState<WateringPage> {
           ),
         ),
 
-        // Matrix
+        // 4. Custom Sticky Header Table Implementation
+        // STICKY HEADER
+        Container(
+          color: Colors.blue.shade50,
+          child: SingleChildScrollView(
+            controller: headerScroll,
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildHeaderCell('Arbre', colTreeWidth),
+                ...dates.map(
+                  (d) => _buildHeaderCell(
+                    DateFormat('EEE dd/MM', 'ca_ES').format(d),
+                    colDateWidth,
+                    alignRight: true,
+                  ),
+                ),
+                _buildHeaderCell(
+                  'Total Setmana',
+                  colTotalWidth,
+                  alignRight: true,
+                ),
+                Container(
+                  width: colNeedsWidth,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Necessitat Actual',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(width: 4),
+                      Tooltip(
+                        message:
+                            "Indicador d'estat hídric:\n"
+                            "🔴 Vermell (< -15mm): Estrès Hídric. Reserva esgotada. (URGENT)\n"
+                            "🟡 Ambre (-15 a -5mm): Reg Opcional. Humitat descendent.\n"
+                            "🟢 Verd (> -5mm): No regar. Terra saciada.\n\n"
+                            "Si surt un valor en L, és la quantitat recomanada per regar avui.",
+                        triggerMode: TooltipTriggerMode.tap,
+                        child: const Icon(
+                          Icons.info_outline,
+                          size: 16,
+                          color: Colors.orange,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const Divider(height: 1),
+
+        // SCROLLABLE BODY
         Expanded(
           child: SingleChildScrollView(
             scrollDirection: Axis.vertical,
             child: SingleChildScrollView(
+              controller: bodyScroll,
               scrollDirection: Axis.horizontal,
-              child: DataTable(
-                headingRowColor: WidgetStateProperty.all(Colors.blue.shade50),
-                dataRowMinHeight: 60,
-                dataRowMaxHeight: 80,
-                columns: [
-                  const DataColumn(
-                    label: Text(
-                      'Arbre',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  ...dates.map(
-                    (d) => DataColumn(
-                      label: Text(
-                        // EEE gives 'Mon', 'Tue' etc. 'E' gives 'M', 'T', 'W' etc.
-                        // We want 'Dl 29/12'. EEE is safest for 3 letters.
-                        // Catalan locale is not guaranteed, so we might get 'Mon', 'Tue'.
-                        // Let's rely on default 'ca_ES' if set or just accept English short names if not.
-                        // For now, EEE dd/MM.
-                        DateFormat('EEE dd/MM', 'ca_ES').format(d),
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      numeric: true,
-                    ),
-                  ),
-                  const DataColumn(
-                    label: Text(
-                      'Total Setmana',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    numeric: true,
-                  ),
-                ],
-                rows:
-                    filteredTrees.map((tree) {
-                        final treeData = data[tree.id]!;
-                        double treeTotal = 0;
-                        final cells = dates.map((d) {
-                          final key = DateFormat('yyyyMMdd').format(d);
-                          final eventsList = treeData[key] ?? [];
-                          final liters = eventsList.fold<double>(
-                            0,
-                            (sum, e) => sum + e.liters,
-                          );
-                          treeTotal += liters;
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ...filteredTrees.map((tree) {
+                    final treeData = data[tree.id]!;
+                    double treeTotal = 0;
+                    final cells = dates.map((d) {
+                      final key = DateFormat('yyyyMMdd').format(d);
+                      final eventsList = treeData[key] ?? [];
+                      final liters = eventsList.fold<double>(
+                        0,
+                        (sum, e) => sum + e.liters,
+                      );
+                      treeTotal += liters;
 
-                          return DataCell(
-                            InkWell(
-                              onTap: liters > 0
-                                  ? () => _showEditDeleteDialog(
-                                      context,
-                                      tree.id,
-                                      eventsList
-                                          .first, // Editing the first/main event for simplicity.
-                                      // Ideally show list if multiple, but simplified for now as requested "modify existing record".
-                                    )
-                                  : null,
-                              child: Container(
-                                alignment: Alignment.center,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: liters > 0
-                                      ? Colors.blue.shade100
-                                      : null,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  liters > 0 ? '${liters.toInt()}' : '-',
-                                  style: TextStyle(
-                                    color: liters > 0
-                                        ? Colors.blue.shade900
-                                        : Colors.grey.shade300,
-                                    fontWeight: liters > 0
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                  ),
-                                ),
+                      return Container(
+                        width: colDateWidth,
+                        padding: const EdgeInsets.all(4),
+                        alignment: Alignment.centerRight,
+                        child: InkWell(
+                          onTap: liters > 0
+                              ? () => _showEditDeleteDialog(
+                                  context,
+                                  tree.id,
+                                  eventsList.first,
+                                )
+                              : null,
+                          child: Container(
+                            alignment: Alignment.center,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: liters > 0 ? Colors.blue.shade100 : null,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              liters > 0 ? '${liters.toInt()}' : '-',
+                              style: TextStyle(
+                                color: liters > 0
+                                    ? Colors.blue.shade900
+                                    : Colors.grey.shade300,
+                                fontWeight: liters > 0
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
                               ),
                             ),
-                          );
-                        }).toList();
+                          ),
+                        ),
+                      );
+                    }).toList();
 
-                        return DataRow(
-                          cells: [
-                            DataCell(
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
+                    // Needs Calculation
+                    final balance = tree.soilBalance ?? 0.0;
+                    final area = tree.calculatedRegArea ?? 1.0;
+                    double litersNeeded = 0;
+                    Color statusColor = tree.waterStatusColor;
+
+                    if (balance < 0) {
+                      litersNeeded = (balance.abs() * area);
+                    }
+
+                    return Container(
+                      decoration: const BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(color: Colors.black12),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          // Tree Name Column
+                          Container(
+                            width: colTreeWidth,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            alignment: Alignment.centerLeft,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  tree.commonName,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (tree.reference != null &&
+                                    tree.reference!.isNotEmpty)
                                   Text(
-                                    tree.commonName,
-                                    style: const TextStyle(
+                                    tree.reference!,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.indigo.shade400,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                  if (tree.reference != null &&
-                                      tree.reference!.isNotEmpty)
-                                    Text(
-                                      tree.reference!,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.indigo.shade400,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  Text(
-                                    tree.species,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.grey.shade600,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            ...cells,
-                            DataCell(
-                              Text(
-                                '${treeTotal.toInt()}L',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        );
-                      }).toList()
-                      // Append Totals Row
-                      ..add(
-                        DataRow(
-                          color: WidgetStateProperty.all(Colors.blue.shade100),
-                          cells: [
-                            const DataCell(
-                              Text(
-                                'TOTAL DIARI',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  color: Colors.indigo,
-                                ),
-                              ),
-                            ),
-                            ...dates.map((d) {
-                              // Sum all trees for this day
-                              final key = DateFormat('yyyyMMdd').format(d);
-                              double dayTotal = 0;
-                              for (var t in filteredTrees) {
-                                dayTotal +=
-                                    data[t.id]?[key]?.fold<double>(
-                                      0,
-                                      (sum, e) => sum + e.liters,
-                                    ) ??
-                                    0;
-                              }
-
-                              return DataCell(
                                 Text(
-                                  '${dayTotal.toInt()}L',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    color: Colors.indigo,
+                                  tree.species,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey.shade600,
+                                    fontStyle: FontStyle.italic,
                                   ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              );
-                            }),
-                            // Grand Total
-                            DataCell(
-                              Text(
-                                '${filteredTrees.fold<double>(0, (sum, t) {
-                                  return sum + dates.fold<double>(0, (s, d) {
-                                        final key = DateFormat('yyyyMMdd').format(d);
-                                        return s + (data[t.id]?[key]?.fold<double>(0, (sum, e) => sum + e.liters) ?? 0);
-                                      });
-                                }).toInt()}L',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 16,
-                                  color: Colors.indigo,
-                                ),
+                              ],
+                            ),
+                          ),
+                          // Date Cells
+                          ...cells,
+                          // Total Column
+                          Container(
+                            width: colTotalWidth,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              '${treeTotal.toInt()}L',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                          // Needs Column
+                          Container(
+                            width: colNeedsWidth,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            alignment: Alignment.centerLeft,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 12,
+                                  height: 12,
+                                  decoration: BoxDecoration(
+                                    color: statusColor,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  litersNeeded > 0
+                                      ? '${litersNeeded.toInt()} L'
+                                      : 'OK',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: litersNeeded > 0
+                                        ? Colors.red.shade700
+                                        : Colors.green.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
+                    );
+                  }),
+                  // Totals Row
+                  Container(
+                    color: Colors.blue.shade100,
+                    child: Row(
+                      children: [
+                        _buildHeaderCell(
+                          'TOTAL DIARI',
+                          colTreeWidth,
+                          isBold: true,
+                          color: Colors.indigo,
+                        ),
+                        ...dates.map((d) {
+                          final key = DateFormat('yyyyMMdd').format(d);
+                          double dayTotal = 0;
+                          for (var t in filteredTrees) {
+                            dayTotal +=
+                                data[t.id]?[key]?.fold<double>(
+                                  0,
+                                  (sum, e) => sum + e.liters,
+                                ) ??
+                                0;
+                          }
+                          return Container(
+                            width: colDateWidth,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              '${dayTotal.toInt()}L',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                color: Colors.indigo,
+                              ),
+                            ),
+                          );
+                        }),
+                        // Grand Total
+                        Container(
+                          width: colTotalWidth,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            '${filteredTrees.fold<double>(0, (sum, t) {
+                              return sum + dates.fold<double>(0, (s, d) {
+                                    final key = DateFormat('yyyyMMdd').format(d);
+                                    return s + (data[t.id]?[key]?.fold<double>(0, (sum, e) => sum + e.liters) ?? 0);
+                                  });
+                            }).toInt()}L',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 16,
+                              color: Colors.indigo,
+                            ),
+                          ),
+                        ),
+                        // Empty Needs
+                        SizedBox(width: colNeedsWidth),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -663,6 +812,27 @@ class _WateringPageState extends ConsumerState<WateringPage> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildHeaderCell(
+    String text,
+    double width, {
+    bool alignRight = false,
+    bool isBold = true,
+    Color? color,
+  }) {
+    return Container(
+      width: width,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
+      child: Text(
+        text,
+        style: TextStyle(
+          fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+          color: color,
+        ),
       ),
     );
   }

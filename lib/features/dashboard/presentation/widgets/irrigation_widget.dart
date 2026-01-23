@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../trees/presentation/providers/trees_provider.dart';
 import '../../../trees/domain/entities/watering_event.dart';
 import '../../../trees/domain/entities/tree.dart';
+import '../../../trees/domain/entities/tree_extensions.dart';
 import '../../../trees/presentation/pages/watering_page.dart';
 
 class IrrigationWidget extends ConsumerWidget {
@@ -31,6 +32,26 @@ class IrrigationWidget extends ConsumerWidget {
 
     final wateringAsync = ref.watch(globalWateringEventsProvider);
     final treesAsync = ref.watch(treesStreamProvider);
+
+    // Calculate LED Color based on status
+    Color ledColor = Colors.grey;
+    if (treesAsync.hasValue) {
+      final trees = treesAsync.value!;
+      final critical = trees
+          .where((t) => t.waterStatusText == 'Estrès Hídric')
+          .length;
+      final optional = trees
+          .where((t) => t.waterStatusText == 'Reg Opcional')
+          .length;
+
+      if (critical > 0) {
+        ledColor = Colors.red;
+      } else if (optional > 0) {
+        ledColor = Colors.amber;
+      } else {
+        ledColor = Colors.green;
+      }
+    }
 
     return Card(
       elevation: 4,
@@ -63,7 +84,7 @@ class IrrigationWidget extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      _BlinkingLed(),
+                      _BlinkingLed(color: ledColor),
                     ],
                   ),
                 ],
@@ -121,21 +142,17 @@ class IrrigationWidget extends ConsumerWidget {
       (sum, e) => sum + (e.liters),
     );
 
-    // 2. Deficit Check (Trees not watered in last 3 days)
-    // We look at 'recentEvents' which usually contains last 7 days (default filter).
-    // We identify trees that have NO event in the last 3 days.
+    // 2. Deficit Check (RuralCat Model)
+    // We check how many trees are in "Estrès Hídric" (Critical) or "Reg Opcional"
     return treesAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, s) => const SizedBox(),
       data: (allTrees) {
-        final recentTreeIds = recentEvents
-            .where((e) => e.treeId != null)
-            .where((e) => now.difference(e.date).inDays <= 3)
-            .map((e) => e.treeId!)
-            .toSet();
-
-        final deficitCount = allTrees
-            .where((t) => !recentTreeIds.contains(t.id))
+        final criticalCount = allTrees
+            .where((t) => t.waterStatusText == 'Estrès Hídric')
+            .length;
+        final optionalCount = allTrees
+            .where((t) => t.waterStatusText == 'Reg Opcional')
             .length;
 
         return Column(
@@ -170,28 +187,61 @@ class IrrigationWidget extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 8),
-            // Deficit Warning
-            if (deficitCount > 0)
+            // Status Warning/Info
+            if (criticalCount > 0)
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
+                  color: Colors.red.shade50,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.shade200),
+                  border: Border.all(color: Colors.red.shade200),
                 ),
                 child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Icon(
                       Icons.warning_amber,
-                      color: Colors.orange,
+                      color: Colors.red,
                       size: 20,
                     ),
                     const SizedBox(width: 8),
-                    Expanded(
+                    Flexible(
                       child: Text(
-                        'Atenció: $deficitCount arbres amb possible dèficit (>3 dies)', // "Possible deficit" is safer since filter might be active
+                        'Atenció: $criticalCount arbres amb Estrès Hídric',
+                        textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: Colors.orange.shade900,
+                          color: Colors.red.shade900,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else if (optionalCount > 0)
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber.shade200),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.water_drop_outlined,
+                      color: Colors.amber.shade900,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'Info: $optionalCount arbres amb Reg Opcional',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.amber.shade900,
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
                         ),
@@ -204,6 +254,7 @@ class IrrigationWidget extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Icon(
                       Icons.check_circle,
@@ -211,9 +262,10 @@ class IrrigationWidget extends ConsumerWidget {
                       size: 20,
                     ),
                     const SizedBox(width: 8),
-                    Expanded(
+                    Flexible(
                       child: Text(
-                        'Tots els arbres regats recentment',
+                        'Tots els arbres ben hidratats',
+                        textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.green.shade700,
                           fontSize: 12,
@@ -231,6 +283,9 @@ class IrrigationWidget extends ConsumerWidget {
 }
 
 class _BlinkingLed extends StatefulWidget {
+  final Color color;
+  const _BlinkingLed({this.color = Colors.green});
+
   @override
   State<_BlinkingLed> createState() => _BlinkingLedState();
 }
@@ -262,11 +317,11 @@ class _BlinkingLedState extends State<_BlinkingLed>
         width: 10,
         height: 10,
         decoration: BoxDecoration(
-          color: Colors.green,
+          color: widget.color,
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: Colors.green.withValues(alpha: 0.6),
+              color: widget.color.withValues(alpha: 0.6),
               blurRadius: 6,
               spreadRadius: 2,
             ),

@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -66,8 +65,9 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
 
   // Image handling
   final ImagePicker _picker = ImagePicker();
-  File? _imageFile;
+  Uint8List? _imageBytes;
   bool _isUploading = false;
+  List<String> _currentPhotoUrls = [];
 
   @override
   void initState() {
@@ -84,6 +84,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
     _itemCompletedDates = initialItems.map((i) => i.completedAt).toList();
 
     _contactIds = List.from(widget.task?.contactIds ?? []);
+    _currentPhotoUrls = List.from(widget.task?.photoUrls ?? []);
     _dueDate = widget.task?.dueDate;
     _latitude = widget.task?.latitude;
     _longitude = widget.task?.longitude;
@@ -121,8 +122,9 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
 
     final XFile? pickedFile = await _picker.pickImage(source: source);
     if (pickedFile != null) {
+      final bytes = await pickedFile.readAsBytes();
       setState(() {
-        _imageFile = File(pickedFile.path);
+        _imageBytes = bytes;
       });
     }
   }
@@ -146,6 +148,30 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
               onTap: () => Navigator.pop(context, ImageSource.gallery),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showFullScreenImage(BuildContext context, String imageUrl) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            iconTheme: const IconThemeData(color: Colors.white),
+            title: const Text('Visor', style: TextStyle(color: Colors.white)),
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              panEnabled: true,
+              boundaryMargin: const EdgeInsets.all(20),
+              minScale: 0.5,
+              maxScale: 4,
+              child: Image.network(imageUrl),
+            ),
+          ),
         ),
       ),
     );
@@ -192,7 +218,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                       ),
                       const SizedBox(height: 16),
                       if (!widget.isReadOnly) _buildActionButtons(context),
-                      if (_imageFile != null) ...[
+                      if (_imageBytes != null) ...[
                         const SizedBox(height: 8),
                         Container(
                           height: 100,
@@ -200,7 +226,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                             border: Border.all(color: Colors.grey),
                             borderRadius: BorderRadius.circular(8),
                             image: DecorationImage(
-                              image: FileImage(_imageFile!),
+                              image: MemoryImage(_imageBytes!),
                               fit: BoxFit.cover,
                             ),
                           ),
@@ -215,7 +241,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                                     color: Colors.red,
                                   ),
                                   onPressed: () =>
-                                      setState(() => _imageFile = null),
+                                      setState(() => _imageBytes = null),
                                   style: IconButton.styleFrom(
                                     backgroundColor: Colors.white.withValues(
                                       alpha: 0.8,
@@ -224,6 +250,73 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                                 ),
                               ),
                             ],
+                          ),
+                        ),
+                      ],
+                      // Existing Images Gallery
+                      if (_currentPhotoUrls.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          height: 120,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: _currentPhotoUrls.length,
+                            itemBuilder: (context, index) {
+                              final url = _currentPhotoUrls[index];
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8.0),
+                                child: Stack(
+                                  children: [
+                                    InkWell(
+                                      onTap: () =>
+                                          _showFullScreenImage(context, url),
+                                      child: Container(
+                                        width: 120,
+                                        height: 120,
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.grey.shade300,
+                                          ),
+                                          image: DecorationImage(
+                                            image: NetworkImage(url),
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    if (!widget.isReadOnly)
+                                      Positioned(
+                                        top: 4,
+                                        right: 4,
+                                        child: InkWell(
+                                          onTap: () {
+                                            setState(() {
+                                              _currentPhotoUrls.removeAt(index);
+                                            });
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.all(4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withValues(
+                                                alpha: 0.8,
+                                              ),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(
+                                              Icons.delete,
+                                              size: 16,
+                                              color: Colors.red,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              );
+                            },
                           ),
                         ),
                       ],
@@ -781,17 +874,16 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
         widget.task?.id ?? DateTime.now().millisecondsSinceEpoch.toString();
 
     // Upload image if selected
-    if (_imageFile != null) {
+    if (_imageBytes != null) {
       // Use the provider to access repository
       final repo = ref.read(tasksRepositoryProvider);
-      photoUrl = await repo.uploadTaskImage(_imageFile!, taskId);
+      photoUrl = await repo.uploadTaskImage(_imageBytes!, taskId);
     }
 
     // Prepare photo URLs list
-    // Start with existing URLs if editing, or empty list
-    List<String> currentPhotoUrls = List.from(widget.task?.photoUrls ?? []);
+    List<String> finalPhotoUrls = List.from(_currentPhotoUrls);
     if (photoUrl != null) {
-      currentPhotoUrls.add(photoUrl);
+      finalPhotoUrls.add(photoUrl);
     }
 
     final newTask = Task(
@@ -817,7 +909,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
       dueDate: _dueDate,
       latitude: _latitude,
       longitude: _longitude,
-      photoUrls: currentPhotoUrls,
+      photoUrls: finalPhotoUrls,
     );
 
     widget.onSave(newTask);

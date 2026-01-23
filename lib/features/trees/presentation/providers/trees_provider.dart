@@ -29,6 +29,7 @@ class WateringFilters {
   final String? treeId;
   final String? species;
   final String? reference;
+  final bool onlyNeedsWater;
 
   const WateringFilters({
     this.startDate,
@@ -36,6 +37,7 @@ class WateringFilters {
     this.treeId,
     this.species,
     this.reference,
+    this.onlyNeedsWater = false,
   });
 
   WateringFilters copyWith({
@@ -44,6 +46,7 @@ class WateringFilters {
     Object? treeId = _sentinel,
     Object? species = _sentinel,
     Object? reference = _sentinel,
+    bool? onlyNeedsWater,
   }) {
     return WateringFilters(
       startDate: startDate == _sentinel
@@ -53,6 +56,7 @@ class WateringFilters {
       treeId: treeId == _sentinel ? this.treeId : treeId as String?,
       species: species == _sentinel ? this.species : species as String?,
       reference: reference == _sentinel ? this.reference : reference as String?,
+      onlyNeedsWater: onlyNeedsWater ?? this.onlyNeedsWater,
     );
   }
 }
@@ -72,6 +76,7 @@ class WateringFiltersNotifier extends Notifier<WateringFilters> {
       treeId: null,
       species: null,
       reference: null,
+      onlyNeedsWater: false,
     );
   }
 
@@ -81,6 +86,7 @@ class WateringFiltersNotifier extends Notifier<WateringFilters> {
     String? treeId,
     String? species,
     String? reference,
+    bool? onlyNeedsWater,
   }) {
     state = state.copyWith(
       startDate: start,
@@ -88,6 +94,7 @@ class WateringFiltersNotifier extends Notifier<WateringFilters> {
       treeId: treeId,
       species: species,
       reference: reference,
+      onlyNeedsWater: onlyNeedsWater,
     );
   }
 
@@ -99,7 +106,12 @@ class WateringFiltersNotifier extends Notifier<WateringFilters> {
       treeId: null,
       species: null,
       reference: null,
+      onlyNeedsWater: false,
     );
+  }
+
+  void toggleNeedsWater() {
+    state = state.copyWith(onlyNeedsWater: !state.onlyNeedsWater);
   }
 
   void setDates(DateTimeRange range) {

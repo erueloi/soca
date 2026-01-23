@@ -57,6 +57,11 @@ class Tree {
   final double? height; // cm
   final double? trunkDiameter; // cm
 
+  // Water Balance Fields
+  final double? soilBalance;
+  final double? calculatedRegArea;
+  final DateTime? lastBalanceUpdate;
+
   const Tree({
     required this.id,
     required this.species,
@@ -83,6 +88,9 @@ class Tree {
     this.initialAge = 0.0,
     this.height,
     this.trunkDiameter,
+    this.soilBalance,
+    this.calculatedRegArea,
+    this.lastBalanceUpdate,
   });
 
   Tree copyWith({
@@ -110,6 +118,9 @@ class Tree {
     double? initialAge,
     double? height,
     double? trunkDiameter,
+    double? soilBalance,
+    double? calculatedRegArea,
+    DateTime? lastBalanceUpdate,
   }) {
     return Tree(
       id: id,
@@ -137,6 +148,9 @@ class Tree {
       initialAge: initialAge ?? this.initialAge,
       height: height ?? this.height,
       trunkDiameter: trunkDiameter ?? this.trunkDiameter,
+      soilBalance: soilBalance ?? this.soilBalance,
+      calculatedRegArea: calculatedRegArea ?? this.calculatedRegArea,
+      lastBalanceUpdate: lastBalanceUpdate ?? this.lastBalanceUpdate,
     );
   }
 
@@ -165,6 +179,11 @@ class Tree {
       'initialAge': initialAge,
       'height': height,
       'trunkDiameter': trunkDiameter,
+      'soilBalance': soilBalance,
+      'calculatedRegArea': calculatedRegArea,
+      'lastBalanceUpdate': lastBalanceUpdate != null
+          ? Timestamp.fromDate(lastBalanceUpdate!)
+          : null,
       'timeline': timeline.map((e) => e.toMap()).toList(),
     };
   }
@@ -197,6 +216,9 @@ class Tree {
       initialAge: (map['initialAge'] as num?)?.toDouble() ?? 0.0,
       height: (map['height'] as num?)?.toDouble(),
       trunkDiameter: (map['trunkDiameter'] as num?)?.toDouble(),
+      soilBalance: (map['soilBalance'] as num?)?.toDouble(),
+      calculatedRegArea: (map['calculatedRegArea'] as num?)?.toDouble(),
+      lastBalanceUpdate: (map['lastBalanceUpdate'] as Timestamp?)?.toDate(),
       timeline: map['timeline'] != null
           ? (map['timeline'] as List<dynamic>)
                 .map((e) => TreeEvent.fromMap(e as Map<String, dynamic>))
