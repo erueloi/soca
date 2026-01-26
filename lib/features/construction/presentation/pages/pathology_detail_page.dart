@@ -11,32 +11,92 @@ import '../widgets/interactive_floor_plan.dart';
 import 'floor_plan_picker_page.dart';
 import '../../../../features/auth/data/repositories/auth_repository.dart';
 
-class PathologyDetailPage extends ConsumerStatefulWidget {
-  final ConstructionPoint point;
-  final String? floorPlanUrl;
-  final VoidCallback onEdit;
+class PathologyCarouselPage extends StatelessWidget {
+  final List<ConstructionPoint> points;
+  final int initialIndex;
 
-  const PathologyDetailPage({
+  const PathologyCarouselPage({
     super.key,
-    required this.point,
-    required this.floorPlanUrl,
-    required this.onEdit,
+    required this.points,
+    required this.initialIndex,
   });
 
   @override
-  ConsumerState<PathologyDetailPage> createState() =>
-      _PathologyDetailPageState();
+  Widget build(BuildContext context) {
+    final PageController controller = PageController(initialPage: initialIndex);
+
+    return Stack(
+      children: [
+        PageView.builder(
+          controller: controller,
+          itemCount: points.length,
+          itemBuilder: (context, index) {
+            return PathologyDetailView(point: points[index]);
+          },
+        ),
+        // Desktop Navigation Arrows
+        Positioned(
+          left: 10,
+          top: 0,
+          bottom: 0,
+          child: Center(
+            child: IconButton(
+              icon: const Icon(
+                Icons.arrow_back_ios,
+                size: 32,
+                color: Colors.black54,
+              ),
+              onPressed: () {
+                controller.previousPage(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                );
+              },
+            ),
+          ),
+        ),
+        Positioned(
+          right: 10,
+          top: 0,
+          bottom: 0,
+          child: Center(
+            child: IconButton(
+              icon: const Icon(
+                Icons.arrow_forward_ios,
+                size: 32,
+                color: Colors.black54,
+              ),
+              onPressed: () {
+                controller.nextPage(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
-class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
+class PathologyDetailView extends ConsumerStatefulWidget {
+  final ConstructionPoint point;
+
+  const PathologyDetailView({super.key, required this.point});
+
+  @override
+  ConsumerState<PathologyDetailView> createState() =>
+      _PathologyDetailViewState();
+}
+
+class _PathologyDetailViewState extends ConsumerState<PathologyDetailView> {
   late ConstructionPoint point;
   bool _isEditing = false;
-
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
   late TextEditingController _causesController;
   late TextEditingController _actionController;
-  // Status handled by _selectedStatus
   List<PathologyPhoto> _currentPhotos = [];
   int _severity = 1;
   final PageController _pageController = PageController();
@@ -84,7 +144,7 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
   String _selectedStatus = 'Pendent';
 
   @override
-  void didUpdateWidget(PathologyDetailPage oldWidget) {
+  void didUpdateWidget(PathologyDetailView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.point != widget.point) {
       setState(() {
@@ -230,7 +290,10 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
   }
 
   Future<void> _relocatePoint() async {
-    if (widget.floorPlanUrl == null) {
+    final floorPlans = ref.read(floorPlansStreamProvider).asData?.value ?? {};
+    final floorPlanUrl = floorPlans[point.floorId];
+
+    if (floorPlanUrl == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('No hi ha plànol disponible per a aquesta planta.'),
@@ -257,16 +320,11 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
         yPercent: newLocation['y']!,
       );
 
-      await _updatePoint(
-        updatedPoint.pathology,
-      ); // This only updates pathology?
-      // Wait, _updatePoint logic in this file seems to calculate "updatedPathology" and call constructionRepositoryProvider.savePoint(point.copyWith(pathology: updatedPathology)).
-      // But here I am changing coordinates, not pathology.
-      // I need to verify _updatePoint implementation or call repository directly.
-
-      // Checking _updatePoint implementation in previous context...
-      // It takes `PathologySheet?`.
-      // Let's modify _updatePoint or just call repo directly here.
+      // We should verify if _updatePoint updates the coordinates or just the pathology sheet.
+      // The implementation in this file of _updatePoint (not visible in this snippet but in context)
+      // takes a PathologySheet? and calls repo.updatePoint with point.copyWith(pathology: sheet).
+      // So _updatePoint as defined in this file (helper) is NOT sufficient for coordinates.
+      // We should call repo directly.
 
       try {
         await ref
@@ -329,6 +387,29 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
       final XFile? image = await picker.pickImage(source: source);
       if (image == null) return;
 
+      // Ask for date
+      final DateTime? pickedDate = await showDatePicker(
+        context: context,
+        initialDate: DateTime.now(),
+        firstDate: DateTime(2000),
+        lastDate: DateTime.now(),
+        helpText: 'DATA DE LA FOTO',
+        cancelText: 'NO DEFINIR',
+        confirmText: 'SELECCIONAR',
+        builder: (context, child) {
+          return Theme(
+            data: Theme.of(context).copyWith(
+              colorScheme: Theme.of(
+                context,
+              ).colorScheme.copyWith(primary: Colors.indigo),
+            ),
+            child: child!,
+          );
+        },
+      );
+
+      final dateToUse = pickedDate ?? DateTime.now();
+
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -340,7 +421,7 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
           .uploadPathologyImage(image);
 
       if (url != null) {
-        final newPhoto = PathologyPhoto(url: url, date: DateTime.now());
+        final newPhoto = PathologyPhoto(url: url, date: dateToUse);
 
         setState(() {
           _currentPhotos.add(newPhoto);
@@ -384,6 +465,10 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
     }
 
     final pathology = point.pathology;
+
+    // Fetch floor plan for mini-map
+    final floorPlansAsync = ref.watch(floorPlansStreamProvider);
+    final floorPlanUrl = floorPlansAsync.asData?.value[point.floorId];
 
     return Scaffold(
       appBar: AppBar(
@@ -896,7 +981,7 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
                           Expanded(
                             child: InteractiveFloorPlan(
                               floorId: point.floorId,
-                              imageUrl: widget.floorPlanUrl,
+                              imageUrl: floorPlanUrl,
                               points: [point],
                               isReadOnly: true,
                               onPointTap: (x, y) {},

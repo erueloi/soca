@@ -82,11 +82,14 @@ class ClimateRepository {
     // However, since we used ISO strings for IDs, we can query if we store 'date' as field too which we did.
     // Let's rely on the 'date' field in the document body.
 
-    // Normalize to start of day
-    final startStr = start.toIso8601String();
-    final endStr = end
+    // Normalize to start of day (Midnight)
+    final startDay = DateTime(start.year, start.month, start.day);
+    final endDay = DateTime(end.year, end.month, end.day);
+
+    final startStr = startDay.toIso8601String();
+    final endStr = endDay
         .add(const Duration(days: 1))
-        .toIso8601String(); // Exclusive upper bound approx
+        .toIso8601String(); // Exclusive upper bound (Next Day 00:00)
 
     if (fincaId == null) return [];
 

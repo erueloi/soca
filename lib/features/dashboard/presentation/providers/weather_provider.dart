@@ -59,6 +59,8 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
   double rain = 0.0;
   double windSpeed = 0.0;
 
+  ClimateDailyData? tempObj; // Scope for final return
+
   double et0 = 0.0;
   double estimatedDailyRadiation = 0.0;
   List<DailyForecast> parsedForecast = [];
@@ -71,6 +73,16 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
     // 1. Current Conditions (Latest)
     if (list.isNotEmpty) {
       final stationData = list.first; // Should be the station we asked for
+
+      // Parse immediately to use for calculations and return
+      try {
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        tempObj = ClimateDailyData.fromMeteocat(today, stationData);
+      } catch (e) {
+        // parsing error
+      }
+
       if (stationData['variables'] != null) {
         final List<dynamic> vars = stationData['variables'];
 
@@ -139,33 +151,58 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
       if (configAsync.fincaId != null) {
         try {
           final now = DateTime.now();
+          final today = DateTime(now.year, now.month, now.day);
           // Use fromMeteocat to get consistent Daily Aggregates (Mean Wind, Sum Rain, etc.)
-          final tempObj = ClimateDailyData.fromMeteocat(now, stationData);
+          tempObj ??= ClimateDailyData.fromMeteocat(today, stationData);
+          final tObj = tempObj; // Non-null alias for this block
 
           // Calculate ET0 for the day so far
           final dailyEt0 = ET0Calculator.calculate(
             lat: configAsync.latitude,
             date: now,
-            tMax: tempObj.maxTemp,
-            tMin: tempObj.minTemp,
-            rhMean: tempObj.humidity > 0 ? tempObj.humidity : null,
-            windSpeed: tempObj.windSpeed > 0 ? tempObj.windSpeed : null,
-            radiation: tempObj.radiation > 0 ? tempObj.radiation : null,
+            tMax: tObj.maxTemp,
+            tMin: tObj.minTemp,
+            rhMean: tObj.humidity > 0 ? tObj.humidity : null,
+            windSpeed: tObj.windSpeed > 0 ? tObj.windSpeed : null,
+            radiation: tObj.radiation > 0 ? tObj.radiation : null,
           );
 
+          // Check if we already have data for today (to preserve manual calcs like soilBalance)
+          double? preservedSoilBalance;
+          DateTime? preservedCalculatedAt;
+
+          try {
+            // Only fetch today's data (start and end = now)
+            final existingHistory = await repository.getHistory(now, now);
+            if (existingHistory.isNotEmpty) {
+              final existing = existingHistory.first;
+              // Verify it's actually the same day (just to be safe)
+              if (existing.date.year == now.year &&
+                  existing.date.month == now.month &&
+                  existing.date.day == now.day) {
+                preservedSoilBalance = existing.soilBalance;
+                preservedCalculatedAt = existing.calculatedAt;
+              }
+            }
+          } catch (_) {
+            // Ignore read errors, proceed with overwrite if must
+          }
+
           final toSave = ClimateDailyData(
-            date: tempObj.date,
-            maxTemp: tempObj.maxTemp,
-            minTemp: tempObj.minTemp,
-            rain: tempObj.rain,
-            rainAccumulated: tempObj.rainAccumulated,
-            humidity: tempObj.humidity,
-            radiation: tempObj.radiation,
-            windSpeed: tempObj.windSpeed,
+            date: tObj.date,
+            maxTemp: tObj.maxTemp,
+            minTemp: tObj.minTemp,
+            rain: tObj.rain,
+            rainAccumulated: tObj.rainAccumulated,
+            humidity: tObj.humidity,
+            radiation: tObj.radiation,
+            windSpeed: tObj.windSpeed,
             et0: dailyEt0,
             isMock: false,
             fincaId: configAsync.fincaId,
-            lastUpdated: tempObj.lastUpdated,
+            lastUpdated: tObj.lastUpdated,
+            soilBalance: preservedSoilBalance, // Preserve!
+            calculatedAt: preservedCalculatedAt, // Preserve!
           );
 
           // Fire and forget save
@@ -572,6 +609,8 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
     et0: et0,
     forecast: parsedForecast,
     alerts: alerts,
-    lastUpdated: lastUpdated,
+    lastUpdated:
+        tempObj?.lastUpdated ??
+        lastUpdated, // Use sensor time if available, else fetch time
   );
 });

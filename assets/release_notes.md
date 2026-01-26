@@ -1,5 +1,11 @@
 ﻿# Release Notes
 
+## v1.8.7
+Clima: Bug al actualitzar dades, ara unificat.
+Obres: Llistat d'obres.
+Filtres.
+Navegar per fitxe.
+Al afegir foto es pot triar la data de la foto.
 ## v1.8.6
 Mapa: Al guardar un nou arbre ara no dona error.
 Nou/Editar Arbre: Surt un analitzant amb IA.
@@ -111,6 +117,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

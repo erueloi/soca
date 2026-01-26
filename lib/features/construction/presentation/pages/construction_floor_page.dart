@@ -51,25 +51,12 @@ class _ConstructionFloorPageState extends ConsumerState<ConstructionFloorPage> {
                     _createNewPoint(widget.floorId, xPercent, yPercent);
                   },
                   onMarkerTap: (point) {
+                    final index = points.indexOf(point);
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (context) => PathologyDetailPage(
-                          point: point,
-                          floorPlanUrl: imageUrl,
-                          onEdit: () {
-                            Navigator.pop(
-                              context,
-                            ); // Close detail page (or stay and refresh?)
-                            // Better: Open modal, then refresh state?
-                            // Since detail page is stateless and just takes a point,
-                            // if we edit, the parent (FloorPage) will update the stream,
-                            // but the DetailPage has the OLD point object.
-                            // We should probably pass the ID to DetailPage and let it watch the point,
-                            // or just pop back and reopen modal.
-                            // Simple: Open modal from DetailPage logic?
-                            // Let's pop back to map and open modal for now, or open modal on top.
-                            _openPathologySheet(point);
-                          },
+                        builder: (context) => PathologyCarouselPage(
+                          points: points,
+                          initialIndex: index,
                         ),
                       ),
                     );
