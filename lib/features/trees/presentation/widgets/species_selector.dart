@@ -80,9 +80,25 @@ class _SpeciesSelectorState extends ConsumerState<SpeciesSelector> {
       text: offlineMatch?.harvestMonths.join(', ') ?? '',
     );
 
+    // Validate Leaf Type
+    final validLeaves = ['Perenne', 'Caduca'];
     String leaf = offlineMatch?.leafType ?? 'Caduca';
+    if (!validLeaves.contains(leaf)) {
+      // Try to map or default
+      if (leaf.toLowerCase().contains('perenne')) {
+        leaf = 'Perenne';
+      } else {
+        leaf = 'Caduca';
+      }
+    }
+
     bool fruit = offlineMatch?.fruit ?? true;
+
+    // Validate Sun Needs
+    final validSun = ['Alt', 'Mitjà', 'Baix'];
     String sunNeeds = offlineMatch?.sunNeeds ?? 'Alt';
+    if (!validSun.contains(sunNeeds)) sunNeeds = 'Alt';
+
     bool isLoadingAI = false;
 
     await showDialog(

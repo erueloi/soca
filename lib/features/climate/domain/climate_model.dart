@@ -13,6 +13,8 @@ class ClimateDailyData {
   final bool isMock; // Flag for generated data
   final String? fincaId;
   final double? soilBalance;
+  final DateTime? lastUpdated;
+  final DateTime? calculatedAt; // New: When soilBalance was calculated
 
   ClimateDailyData({
     required this.date,
@@ -27,6 +29,8 @@ class ClimateDailyData {
     this.isMock = false,
     this.fincaId,
     this.soilBalance,
+    this.lastUpdated,
+    this.calculatedAt,
   });
 
   /// Parses Meteocat API response
@@ -58,6 +62,9 @@ class ClimateDailyData {
     double windSum = 0.0;
     int windCount = 0;
 
+    // Track the latest reading timestamp
+    DateTime? latestReading;
+
     for (var v in variables) {
       final code = v['codi']; // int
       final readings = v['lectures'] as List<dynamic>?;
@@ -65,6 +72,16 @@ class ClimateDailyData {
       if (readings != null && readings.isNotEmpty) {
         for (var r in readings) {
           final double val = (r['valor'] as num).toDouble();
+
+          // Parse Reading Timestamp
+          if (r.containsKey('data')) {
+            try {
+              final dt = DateTime.parse(r['data']);
+              if (latestReading == null || dt.isAfter(latestReading)) {
+                latestReading = dt;
+              }
+            } catch (_) {}
+          }
 
           // 32: Temperature (Instant)
           if (code == 32) {
@@ -135,6 +152,8 @@ class ClimateDailyData {
       et0: calculatedEt0,
       isMock: false,
       fincaId: null,
+      lastUpdated:
+          latestReading ?? DateTime.now(), // Fallback to now if no data found
     );
   }
 
@@ -152,6 +171,8 @@ class ClimateDailyData {
       'et0': et0,
       'fincaId': fincaId,
       if (soilBalance != null) 'soilBalance': soilBalance,
+      if (lastUpdated != null) 'lastUpdated': lastUpdated!.toIso8601String(),
+      if (calculatedAt != null) 'calculatedAt': calculatedAt!.toIso8601String(),
     };
   }
 
@@ -168,6 +189,12 @@ class ClimateDailyData {
       et0: map['et0']?.toDouble() ?? 0.0,
       fincaId: map['fincaId'],
       soilBalance: map['soilBalance']?.toDouble(),
+      lastUpdated: map['lastUpdated'] != null
+          ? DateTime.parse(map['lastUpdated'])
+          : null,
+      calculatedAt: map['calculatedAt'] != null
+          ? DateTime.parse(map['calculatedAt'])
+          : null,
     );
   }
 }

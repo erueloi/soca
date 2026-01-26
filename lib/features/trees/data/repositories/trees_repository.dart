@@ -64,23 +64,19 @@ class TreesRepository {
         'tree_images/$treeId/${DateTime.now().millisecondsSinceEpoch}.jpg',
       );
 
-      UploadTask uploadTask;
-      if (kIsWeb) {
-        final bytes = await imageFile.readAsBytes();
-        uploadTask = ref.putData(
-          bytes,
-          SettableMetadata(contentType: 'image/jpeg'),
-        );
-      } else {
-        final file = File(imageFile.path);
-        uploadTask = ref.putFile(
-          file,
-          SettableMetadata(contentType: 'image/jpeg'),
-        );
-      }
+      final bytes = await imageFile.readAsBytes();
+      final metadata = SettableMetadata(contentType: 'image/jpeg');
 
+      final uploadTask = ref.putData(bytes, metadata);
       final snapshot = await uploadTask;
-      return await snapshot.ref.getDownloadURL();
+
+      // Add timeout to getDownloadURL
+      return await snapshot.ref.getDownloadURL().timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw Exception('Timeout getting download URL');
+        },
+      );
     } catch (e) {
       debugPrint('Error uploading tree image: $e');
       return null;

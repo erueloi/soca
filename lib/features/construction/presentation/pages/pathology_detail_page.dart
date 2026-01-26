@@ -9,6 +9,7 @@ import '../../../tasks/presentation/providers/tasks_provider.dart';
 import '../providers/construction_provider.dart';
 import '../widgets/interactive_floor_plan.dart';
 import 'floor_plan_picker_page.dart';
+import '../../../../features/auth/data/repositories/auth_repository.dart';
 
 class PathologyDetailPage extends ConsumerStatefulWidget {
   final ConstructionPoint point;
@@ -35,9 +36,11 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
   late TextEditingController _descriptionController;
   late TextEditingController _causesController;
   late TextEditingController _actionController;
-  late TextEditingController _statusController;
+  // Status handled by _selectedStatus
   List<PathologyPhoto> _currentPhotos = [];
   int _severity = 1;
+  final PageController _pageController = PageController();
+  int _currentPhotoIndex = 0;
 
   @override
   void initState() {
@@ -52,20 +55,33 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
     _descriptionController = TextEditingController(text: p?.description ?? '');
     _causesController = TextEditingController(text: p?.causes ?? '');
     _actionController = TextEditingController(text: p?.recommendedAction ?? '');
-    _statusController = TextEditingController(text: p?.currentState ?? '');
+    // Status is now handled by _selectedStatus variables or direct controller text if needed,
+    // but for Dropdown we usually use a variable.
+    // However, to keep it simple with existing controller structure, we can keep controller
+    // or switch to a local variable. Let's use a local variable for the dropdown value.
+    _selectedStatus = p?.currentState ?? 'Pendent';
+    if (!_validStatuses.contains(_selectedStatus)) {
+      _selectedStatus = 'Pendent'; // Fallback if invalid
+    }
+
     _currentPhotos = List.from(p?.photos ?? []);
-    // Sort photos by date (newest last or first? Usually evolution -> Oldest first)
+    // Sort photos by date (Newest first)
     _currentPhotos.sort((a, b) {
-      if (a.date == null) {
-        return -1;
-      }
-      if (b.date == null) {
-        return 1;
-      }
-      return a.date!.compareTo(b.date!);
+      if (a.date == null) return 1;
+      if (b.date == null) return -1;
+      return b.date!.compareTo(a.date!);
     });
     _severity = p?.severity ?? 1;
   }
+
+  // Define valid statuses
+  final List<String> _validStatuses = [
+    'Pendent',
+    'En Progrés',
+    'Finalitzat',
+    'Aturat',
+  ];
+  String _selectedStatus = 'Pendent';
 
   @override
   void didUpdateWidget(PathologyDetailPage oldWidget) {
@@ -86,7 +102,7 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
     _descriptionController.dispose();
     _causesController.dispose();
     _actionController.dispose();
-    _statusController.dispose();
+    // _statusController.dispose(); // Removed
     super.dispose();
   }
 
@@ -101,18 +117,108 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
   }
 
   Future<void> _saveChanges() async {
+    final oldPathology = point.pathology;
+    final user = ref.read(authRepositoryProvider).currentUser;
+    final userName = user?.displayName ?? user?.email ?? 'Usuari';
+
+    List<HistoryEntry> newHistory = [];
+
+    // 1. Detect Status Change
+    if (_selectedStatus != (oldPathology?.currentState ?? '')) {
+      newHistory.add(
+        HistoryEntry(
+          date: DateTime.now(),
+          action: "Canvi d'estat",
+          user: userName,
+          comment:
+              "${oldPathology?.currentState ?? 'Pendent'} -> $_selectedStatus",
+        ),
+      );
+    }
+
+    // 2. Detect Severity Change
+    if (_severity != (oldPathology?.severity ?? 1)) {
+      newHistory.add(
+        HistoryEntry(
+          date: DateTime.now(),
+          action: "Canvi gravetat",
+          user: userName,
+          comment: "${oldPathology?.severity ?? 1} -> $_severity",
+        ),
+      );
+    }
+
+    // 3. Detect Text Changes (Generic)
+    bool textChanged = false;
+    if (_titleController.text != (oldPathology?.title ?? '') ||
+        _descriptionController.text != (oldPathology?.description ?? '') ||
+        _causesController.text != (oldPathology?.causes ?? '') ||
+        _actionController.text != (oldPathology?.recommendedAction ?? '')) {
+      textChanged = true;
+    }
+
+    if (textChanged) {
+      newHistory.add(
+        HistoryEntry(
+          date: DateTime.now(),
+          action: "Actualització de dades",
+          user: userName,
+          comment: "S'han modificat els camps de text",
+        ),
+      );
+    }
+
+    if (_currentPhotos.length != (oldPathology?.photos.length ?? 0)) {
+      final diff = _currentPhotos.length - (oldPathology?.photos.length ?? 0);
+      if (diff < 0) {
+        newHistory.add(
+          HistoryEntry(
+            date: DateTime.now(),
+            action: "Fotos eliminades",
+            user: userName,
+            comment: "${diff.abs()} foto(s) eliminada(es)",
+          ),
+        );
+      } else if (diff > 0) {
+        newHistory.add(
+          HistoryEntry(
+            date: DateTime.now(),
+            action: "Fotos",
+            user: userName,
+            comment: "$diff foto(s) afegida(es)",
+          ),
+        );
+      }
+    }
+
+    final updatedHistory = <HistoryEntry>[
+      ...(oldPathology?.history ?? []),
+      ...newHistory,
+    ];
+
     final updatedPathology = point.pathology?.copyWith(
       title: _titleController.text,
       description: _descriptionController.text,
       causes: _causesController.text,
       recommendedAction: _actionController.text,
       photos: _currentPhotos,
-      currentState: _statusController.text,
+      currentState: _selectedStatus,
       severity: _severity,
+      history: updatedHistory,
     );
 
-    await _updatePoint(updatedPathology);
+    // Also update Point status if needed (ConstructionPoint has a status field too!)
+    // The model implies `status` on ConstructionPoint AND `currentState` on PathologySheet.
+    // We should sync them.
+    final updatedPoint = point.copyWith(
+      status: _selectedStatus,
+      pathology: updatedPathology,
+    );
+
+    await ref.read(constructionRepositoryProvider).updatePoint(updatedPoint);
+
     setState(() {
+      point = updatedPoint; // Update local point
       _isEditing = false;
     });
 
@@ -234,9 +340,12 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
           .uploadPathologyImage(image);
 
       if (url != null) {
+        final newPhoto = PathologyPhoto(url: url, date: DateTime.now());
+
         setState(() {
-          _currentPhotos.add(PathologyPhoto(url: url, date: DateTime.now()));
+          _currentPhotos.add(newPhoto);
         });
+
         if (mounted) {
           ScaffoldMessenger.of(context).hideCurrentSnackBar();
         }
@@ -252,31 +361,13 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
 
   void _showFullScreenImage(
     BuildContext context,
-    String imageUrl,
-    DateTime? date,
+    List<PathologyPhoto> photos,
+    int initialIndex,
   ) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => Scaffold(
-          backgroundColor: Colors.black,
-          appBar: AppBar(
-            backgroundColor: Colors.black,
-            iconTheme: const IconThemeData(color: Colors.white),
-            title: Text(
-              date != null ? _formatDate(date) : '',
-              style: const TextStyle(color: Colors.white),
-            ),
-          ),
-          body: Center(
-            child: InteractiveViewer(
-              panEnabled: true,
-              boundaryMargin: const EdgeInsets.all(20),
-              minScale: 0.5,
-              maxScale: 4,
-              child: Image.network(imageUrl),
-            ),
-          ),
-        ),
+        builder: (context) =>
+            _FullScreenGallery(photos: photos, initialIndex: initialIndex),
       ),
     );
   }
@@ -487,195 +578,279 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
                                               ),
                                       ),
                                     )
-                                  : PageView.builder(
-                                      itemCount: _currentPhotos.length,
-                                      itemBuilder: (context, index) {
-                                        final photo = _currentPhotos[index];
-                                        return Stack(
-                                          fit: StackFit.expand,
-                                          children: [
-                                            GestureDetector(
-                                              onTap: () {
-                                                if (!_isEditing) {
-                                                  _showFullScreenImage(
-                                                    context,
+                                  : Stack(
+                                      children: [
+                                        PageView.builder(
+                                          controller: _pageController,
+                                          itemCount: _currentPhotos.length,
+                                          onPageChanged: (index) {
+                                            setState(() {
+                                              _currentPhotoIndex = index;
+                                            });
+                                          },
+                                          itemBuilder: (context, index) {
+                                            final photo = _currentPhotos[index];
+                                            return Stack(
+                                              fit: StackFit.expand,
+                                              children: [
+                                                GestureDetector(
+                                                  onTap: () {
+                                                    if (!_isEditing) {
+                                                      _showFullScreenImage(
+                                                        context,
+                                                        _currentPhotos,
+                                                        index,
+                                                      );
+                                                    }
+                                                  },
+                                                  child: Image.network(
                                                     photo.url,
-                                                    photo.date,
-                                                  );
-                                                }
-                                              },
-                                              child: Image.network(
-                                                photo.url,
-                                                fit: BoxFit.cover,
-                                                loadingBuilder: (c, w, p) {
-                                                  if (p == null) return w;
-                                                  return const Center(
-                                                    child:
-                                                        CircularProgressIndicator(),
-                                                  );
-                                                },
-                                              ),
-                                            ),
-                                            // Date Overlay
-                                            Positioned(
-                                              bottom:
-                                                  30, // Above page indicator
-                                              left: 8,
-                                              child: GestureDetector(
-                                                onTap: _isEditing
-                                                    ? () async {
-                                                        final newDate =
-                                                            await showDatePicker(
-                                                              context: context,
-                                                              initialDate:
-                                                                  photo.date ??
-                                                                  DateTime.now(),
-                                                              firstDate:
-                                                                  DateTime(
-                                                                    2000,
-                                                                  ),
-                                                              lastDate:
-                                                                  DateTime.now(),
-                                                            );
-                                                        if (newDate != null) {
-                                                          setState(() {
-                                                            // Update date
-                                                            _currentPhotos[index] =
-                                                                PathologyPhoto(
-                                                                  url:
-                                                                      photo.url,
-                                                                  date: newDate,
-                                                                );
-                                                            // Re-sort
-                                                            _currentPhotos.sort(
-                                                              (a, b) {
-                                                                if (a.date ==
-                                                                    null) {
-                                                                  return -1;
-                                                                }
-                                                                if (b.date ==
-                                                                    null) {
-                                                                  return 1;
-                                                                }
-                                                                return a.date!
-                                                                    .compareTo(
-                                                                      b.date!,
-                                                                    );
-                                                              },
-                                                            );
-                                                          });
-                                                        }
-                                                      }
-                                                    : null,
-                                                child: Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 4,
-                                                      ),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.black54,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          8,
-                                                        ),
-                                                    border: _isEditing
-                                                        ? Border.all(
-                                                            color: Colors.white,
-                                                            width: 1,
-                                                          )
-                                                        : null,
-                                                  ),
-                                                  child: Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    children: [
-                                                      const Icon(
-                                                        Icons.calendar_today,
-                                                        size: 14,
-                                                        color: Colors.white,
-                                                      ),
-                                                      const SizedBox(width: 4),
-                                                      Text(
-                                                        photo.date != null
-                                                            ? _formatDate(
-                                                                photo.date!,
-                                                              )
-                                                            : 'Sense data',
-                                                        style: const TextStyle(
-                                                          color: Colors.white,
-                                                          fontSize: 12,
-                                                        ),
-                                                      ),
-                                                      if (_isEditing) ...[
-                                                        const SizedBox(
-                                                          width: 4,
-                                                        ),
-                                                        const Icon(
-                                                          Icons.edit,
-                                                          size: 12,
-                                                          color: Colors.white70,
-                                                        ),
-                                                      ],
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                            if (_isEditing)
-                                              Positioned(
-                                                top: 8,
-                                                right: 8,
-                                                child: CircleAvatar(
-                                                  backgroundColor:
-                                                      Colors.white70,
-                                                  radius: 18,
-                                                  child: IconButton(
-                                                    icon: const Icon(
-                                                      Icons.delete,
-                                                      color: Colors.red,
-                                                      size: 20,
-                                                    ),
-                                                    onPressed: () {
-                                                      setState(() {
-                                                        _currentPhotos.removeAt(
-                                                          index,
-                                                        );
-                                                      });
+                                                    fit: BoxFit.cover,
+                                                    loadingBuilder: (c, w, p) {
+                                                      if (p == null) return w;
+                                                      return const Center(
+                                                        child:
+                                                            CircularProgressIndicator(),
+                                                      );
                                                     },
-                                                    tooltip: 'Eliminar foto',
                                                   ),
                                                 ),
-                                              ),
-                                            if (_currentPhotos.length > 1)
-                                              Positioned(
-                                                bottom: 8,
-                                                right: 8,
-                                                child: Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 4,
-                                                      ),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.black54,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          12,
-                                                        ),
+                                              ],
+                                            );
+                                          },
+                                        ),
+
+                                        // Previous Arrow
+                                        if (_currentPhotos.length > 1 &&
+                                            _currentPhotoIndex > 0)
+                                          Positioned(
+                                            left: 8,
+                                            top: 0,
+                                            bottom: 0,
+                                            child: Center(
+                                              child: Container(
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black38,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: IconButton(
+                                                  icon: const Icon(
+                                                    Icons.arrow_back_ios,
+                                                    color: Colors.white,
+                                                    size: 20,
                                                   ),
-                                                  child: Text(
-                                                    '${index + 1}/${_currentPhotos.length}',
+                                                  onPressed: () {
+                                                    _pageController
+                                                        .previousPage(
+                                                          duration:
+                                                              const Duration(
+                                                                milliseconds:
+                                                                    300,
+                                                              ),
+                                                          curve:
+                                                              Curves.easeInOut,
+                                                        );
+                                                  },
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+
+                                        // Next Arrow
+                                        if (_currentPhotos.length > 1 &&
+                                            _currentPhotoIndex <
+                                                _currentPhotos.length - 1)
+                                          Positioned(
+                                            right: 8,
+                                            top: 0,
+                                            bottom: 0,
+                                            child: Center(
+                                              child: Container(
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black38,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: IconButton(
+                                                  icon: const Icon(
+                                                    Icons.arrow_forward_ios,
+                                                    color: Colors.white,
+                                                    size: 20,
+                                                  ),
+                                                  onPressed: () {
+                                                    _pageController.nextPage(
+                                                      duration: const Duration(
+                                                        milliseconds: 300,
+                                                      ),
+                                                      curve: Curves.easeInOut,
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+
+                                        // Date Overlay (from original code, just repositioning if needed)
+                                        Positioned(
+                                          bottom: 30,
+                                          left: 8,
+                                          child: GestureDetector(
+                                            onTap: _isEditing
+                                                ? () async {
+                                                    final photo =
+                                                        _currentPhotos[_currentPhotoIndex];
+                                                    final newDate =
+                                                        await showDatePicker(
+                                                          context: context,
+                                                          initialDate:
+                                                              photo.date ??
+                                                              DateTime.now(),
+                                                          firstDate: DateTime(
+                                                            2000,
+                                                          ),
+                                                          lastDate:
+                                                              DateTime.now(),
+                                                        );
+                                                    if (newDate != null) {
+                                                      setState(() {
+                                                        _currentPhotos[_currentPhotoIndex] =
+                                                            PathologyPhoto(
+                                                              url: photo.url,
+                                                              date: newDate,
+                                                            );
+                                                        // Sort descending
+                                                        _currentPhotos.sort((
+                                                          a,
+                                                          b,
+                                                        ) {
+                                                          if (a.date == null) {
+                                                            return 1;
+                                                          }
+                                                          if (b.date == null) {
+                                                            return -1;
+                                                          }
+                                                          return b.date!
+                                                              .compareTo(
+                                                                a.date!,
+                                                              );
+                                                        });
+                                                        // Reset index to finder logic? Or just stay.
+                                                        // Sort might move the photo.
+                                                      });
+                                                    }
+                                                  }
+                                                : null,
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 4,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.black54,
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                border: _isEditing
+                                                    ? Border.all(
+                                                        color: Colors.white,
+                                                        width: 1,
+                                                      )
+                                                    : null,
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(
+                                                    Icons.calendar_today,
+                                                    size: 14,
+                                                    color: Colors.white,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    _currentPhotos[_currentPhotoIndex]
+                                                                .date !=
+                                                            null
+                                                        ? _formatDate(
+                                                            _currentPhotos[_currentPhotoIndex]
+                                                                .date!,
+                                                          )
+                                                        : 'Sense data',
                                                     style: const TextStyle(
                                                       color: Colors.white,
                                                       fontSize: 12,
                                                     ),
                                                   ),
+                                                  if (_isEditing) ...[
+                                                    const SizedBox(width: 4),
+                                                    const Icon(
+                                                      Icons.edit,
+                                                      size: 12,
+                                                      color: Colors.white70,
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+
+                                        // Delete & Counter Overlays
+                                        if (_isEditing)
+                                          Positioned(
+                                            top: 8,
+                                            right: 8,
+                                            child: CircleAvatar(
+                                              backgroundColor: Colors.white70,
+                                              radius: 18,
+                                              child: IconButton(
+                                                icon: const Icon(
+                                                  Icons.delete,
+                                                  color: Colors.red,
+                                                  size: 20,
+                                                ),
+                                                onPressed: () {
+                                                  setState(() {
+                                                    _currentPhotos.removeAt(
+                                                      _currentPhotoIndex,
+                                                    );
+                                                    if (_currentPhotoIndex >=
+                                                            _currentPhotos
+                                                                .length &&
+                                                        _currentPhotoIndex >
+                                                            0) {
+                                                      _currentPhotoIndex--;
+                                                    }
+                                                  });
+                                                },
+                                                tooltip: 'Eliminar foto',
+                                              ),
+                                            ),
+                                          ),
+
+                                        if (_currentPhotos.length > 1)
+                                          Positioned(
+                                            bottom: 8,
+                                            right: 8,
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 4,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.black54,
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                              child: Text(
+                                                '${_currentPhotoIndex + 1}/${_currentPhotos.length}',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12,
                                                 ),
                                               ),
-                                          ],
-                                        );
-                                      },
+                                            ),
+                                          ),
+                                      ],
                                     ),
                             ),
                           ],
@@ -1143,18 +1318,52 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
                       child: Padding(
                         padding: const EdgeInsets.all(8.0),
                         child: _isEditing
-                            ? TextField(
-                                controller: _statusController,
+                            ? InputDecorator(
                                 decoration: const InputDecoration(
                                   border: OutlineInputBorder(),
                                   isDense: true,
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
                                 ),
-                                maxLines: null,
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    value: _selectedStatus,
+                                    isExpanded: true,
+                                    items: _validStatuses.map((String status) {
+                                      return DropdownMenuItem<String>(
+                                        value: status,
+                                        child: Text(status),
+                                      );
+                                    }).toList(),
+                                    onChanged: (String? newValue) {
+                                      if (newValue != null) {
+                                        setState(() {
+                                          _selectedStatus = newValue;
+                                        });
+                                      }
+                                    },
+                                  ),
+                                ),
                               )
-                            : Text(
-                                _statusController.text.isNotEmpty
-                                    ? _statusController.text
-                                    : 'Sense estat definit',
+                            : Container(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                child: Text(
+                                  _selectedStatus.isNotEmpty
+                                      ? _selectedStatus
+                                      : 'Sense estat definit',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: _selectedStatus == 'Finalitzat'
+                                        ? Colors.green
+                                        : (_selectedStatus == 'Aturat'
+                                              ? Colors.red
+                                              : Colors.black87),
+                                  ),
+                                ),
                               ),
                       ),
                     ),
@@ -1347,6 +1556,16 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
   }
 
   Future<void> _addSubAction(String title, String? taskId) async {
+    final user = ref.read(authRepositoryProvider).currentUser;
+    final userName = user?.displayName ?? user?.email ?? 'Usuari';
+
+    final newEntry = HistoryEntry(
+      date: DateTime.now(),
+      action: "Nova Tasca Llista",
+      user: userName,
+      comment: "Afegida: $title",
+    );
+
     // 1. Add SubAction to ConstructionPoint
     final updatedSheet = point.pathology?.copyWith(
       subActions: [
@@ -1357,6 +1576,7 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
           taskId: taskId,
         ),
       ],
+      history: [...(point.pathology?.history ?? []), newEntry],
     );
 
     // 2. Save Point
@@ -1457,8 +1677,18 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
         return a;
       }).toList();
 
+      final user = ref.read(authRepositoryProvider).currentUser;
+      final userName = user?.displayName ?? user?.email ?? 'Usuari';
+      final newEntry = HistoryEntry(
+        date: DateTime.now(),
+        action: "Edició Tasca",
+        user: userName,
+        comment: "Modificada: ${savedTask!.title}",
+      );
+
       final updatedSheet = point.pathology?.copyWith(
         subActions: updatedActions,
+        history: [...(point.pathology?.history ?? []), newEntry],
       );
       await _updatePoint(updatedSheet);
     }
@@ -1474,7 +1704,19 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
       return a;
     }).toList();
 
-    final updatedSheet = point.pathology?.copyWith(subActions: updatedActions);
+    final user = ref.read(authRepositoryProvider).currentUser;
+    final userName = user?.displayName ?? user?.email ?? 'Usuari';
+    final newEntry = HistoryEntry(
+      date: DateTime.now(),
+      action: "Estat Tasca",
+      user: userName,
+      comment: "${action.title}: ${isCompleted ? 'Completada' : 'Pendent'}",
+    );
+
+    final updatedSheet = point.pathology?.copyWith(
+      subActions: updatedActions,
+      history: [...(point.pathology?.history ?? []), newEntry],
+    );
     await _updatePoint(updatedSheet);
 
     // 2. Sync to Global Task (if linked)
@@ -1596,6 +1838,168 @@ class _PathologyDetailPageState extends ConsumerState<PathologyDetailPage> {
                   ),
                 if (trailing != null) ...[const SizedBox(height: 8), trailing],
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FullScreenGallery extends StatefulWidget {
+  final List<PathologyPhoto> photos;
+  final int initialIndex;
+
+  const _FullScreenGallery({required this.photos, required this.initialIndex});
+
+  @override
+  State<_FullScreenGallery> createState() => _FullScreenGalleryState();
+}
+
+class _FullScreenGalleryState extends State<_FullScreenGallery> {
+  late PageController _controller;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _controller = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentPhoto = widget.photos[_currentIndex];
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: Text(
+          currentPhoto.date != null ? _formatDate(currentPhoto.date!) : '',
+          style: const TextStyle(color: Colors.white),
+        ),
+      ),
+      body: Stack(
+        children: [
+          PageView.builder(
+            controller: _controller,
+            itemCount: widget.photos.length,
+            onPageChanged: (index) {
+              setState(() {
+                _currentIndex = index;
+              });
+            },
+            itemBuilder: (context, index) {
+              final photo = widget.photos[index];
+              return Center(
+                child: InteractiveViewer(
+                  panEnabled: true,
+                  boundaryMargin: const EdgeInsets.all(20),
+                  minScale: 0.5,
+                  maxScale: 4,
+                  child: Image.network(
+                    photo.url,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return const Center(
+                        child: CircularProgressIndicator(color: Colors.white),
+                      );
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+
+          // Prev Arrow
+          if (widget.photos.length > 1 && _currentIndex > 0)
+            Positioned(
+              left: 16,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.black45,
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(
+                      Icons.arrow_back_ios_new,
+                      color: Colors.white,
+                      size: 30,
+                    ),
+                    onPressed: () {
+                      _controller.previousPage(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+
+          // Next Arrow
+          if (widget.photos.length > 1 &&
+              _currentIndex < widget.photos.length - 1)
+            Positioned(
+              right: 16,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.black45,
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(
+                      Icons.arrow_forward_ios,
+                      color: Colors.white,
+                      size: 30,
+                    ),
+                    onPressed: () {
+                      _controller.nextPage(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+
+          // Counter
+          Positioned(
+            bottom: 30,
+            right: 20,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white54),
+              ),
+              child: Text(
+                '${_currentIndex + 1} / ${widget.photos.length}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
         ],

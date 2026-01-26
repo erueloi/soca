@@ -53,6 +53,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
   XFile? _imageFile; // Changed to XFile
   final ImagePicker _picker = ImagePicker();
   bool _isSaving = false;
+  bool _isAnalyzing = false;
 
   Future<void> _identifyTree() async {
     if (_imageFile == null) {
@@ -64,7 +65,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
       return;
     }
 
-    setState(() => _isSaving = true);
+    setState(() => _isAnalyzing = true);
 
     try {
       final info = await ref.read(aiServiceProvider).identifyTree(_imageFile!);
@@ -125,7 +126,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
         ).showSnackBar(SnackBar(content: Text('Error IA: $e')));
       }
     } finally {
-      if (mounted) setState(() => _isSaving = false);
+      if (mounted) setState(() => _isAnalyzing = false);
     }
   }
 
@@ -296,9 +297,13 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
     setState(() => _isSaving = true);
     final repo = ref.read(treesRepositoryProvider);
 
-    // Generate ID directly here if new
-    final id =
-        widget.tree?.id ?? DateTime.now().millisecondsSinceEpoch.toString();
+    // Generate ID directly here if new (or if passed with empty ID)
+    final String id;
+    if (widget.tree != null && widget.tree!.id.isNotEmpty) {
+      id = widget.tree!.id;
+    } else {
+      id = DateTime.now().millisecondsSinceEpoch.toString();
+    }
 
     String? photoUrl = widget.tree?.photoUrl;
     if (_imageFile != null) {
@@ -337,7 +342,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
       trunkDiameter: double.tryParse(_diameterController.text),
     );
 
-    if (widget.tree == null) {
+    if (widget.tree == null || widget.tree!.id.isEmpty) {
       await repo.addTree(tree);
     } else {
       await repo.updateTree(tree);
@@ -474,14 +479,27 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton.icon(
-                          onPressed: _isSaving ? null : _identifyTree,
-                          icon: const Icon(
-                            Icons.auto_awesome,
-                            color: Colors.purple,
-                          ),
-                          label: const Text(
-                            'IDENTIFICAR AMB IA',
-                            style: TextStyle(
+                          onPressed: (_isSaving || _isAnalyzing)
+                              ? null
+                              : _identifyTree,
+                          icon: _isAnalyzing
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.purple,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.auto_awesome,
+                                  color: Colors.purple,
+                                ),
+                          label: Text(
+                            _isAnalyzing
+                                ? 'ANALITZANT...'
+                                : 'IDENTIFICAR AMB IA',
+                            style: const TextStyle(
                               color: Colors.purple,
                               fontWeight: FontWeight.bold,
                             ),
@@ -926,7 +944,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _isSaving ? null : _save,
+                  onPressed: (_isSaving || _isAnalyzing) ? null : _save,
                   icon: _isSaving
                       ? const SizedBox(
                           width: 20,

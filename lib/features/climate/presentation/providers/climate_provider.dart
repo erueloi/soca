@@ -190,6 +190,7 @@ class ManualClimateController {
               windSpeed: tempObj.windSpeed,
               et0: et0,
               isMock: false,
+              lastUpdated: tempObj.lastUpdated,
             );
           }).toList();
 
@@ -304,4 +305,11 @@ final yesterdayRainProvider = FutureProvider<double>((ref) async {
     return history.first.rain;
   }
   return 0.0;
+});
+
+final latestCalculationTimestampProvider = FutureProvider<DateTime?>((
+  ref,
+) async {
+  final repository = ref.watch(climateRepositoryProvider);
+  return repository.getLastCalculationTimestamp();
 });

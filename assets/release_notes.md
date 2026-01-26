@@ -1,5 +1,12 @@
 ﻿# Release Notes
 
+## v1.8.6
+Mapa: Al guardar un nou arbre ara no dona error.
+Nou/Editar Arbre: Surt un analitzant amb IA.
+Clima: Mostrem les ultimes dates d'actualizació i mostrem les dades correctes tant al widget de temps com a la pantalla.
+Afegit tots els valors que tenim al gràfic.
+Obres: Actualitzat l'històric i estats de la obra.
+Navegació de les imatge.
 ## v1.8.5
 Reg: Alineació de colors del reg.
 Mostrar individualment per arbre el reg necessari.
@@ -104,6 +111,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

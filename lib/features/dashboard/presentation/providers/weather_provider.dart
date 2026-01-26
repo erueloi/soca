@@ -13,6 +13,13 @@ import 'package:soca/features/trees/data/repositories/species_repository.dart';
 final weatherProvider = FutureProvider<WeatherModel>((ref) async {
   final service = ref.watch(meteocatServiceProvider);
 
+  final configAsync = await ref.read(
+    farmConfigStreamProvider.future,
+  ); // Use read for config to be sure
+
+  // Read repository AFTER config is loaded so it has the correct FincaId
+  final repository = ref.read(climateRepositoryProvider);
+
   // Sync Station from Firestore Config if available
   // Use .future to get the value
   try {
@@ -22,8 +29,12 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
       await service.setCachedStation(config.meteocatStationCode!);
     }
   } catch (e) {
-    // Ignore config load error, fallback to cache
-    // print("WeatherProvider Config Sync Error: $e");
+    // Ignore config load error
+  }
+
+  // Ensure config is available for saving (need fincaId)
+  if (configAsync.fincaId == null) {
+    // print("WeatherProvider: No FincaID, cannot auto-save.");
   }
 
   final data = await service.getWeatherData();
@@ -95,19 +106,72 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
           final List<dynamic>? readings = v['lectures'];
           if (readings == null || readings.isEmpty) continue;
 
-          final latest = readings.last;
-          final val = latest['valor'];
-          if (val == null) continue;
+          // For Rain (35), we want the SUM of the day
+          if (id == 35) {
+            double iterSum = 0.0;
+            for (var r in readings) {
+              final val = r['valor'];
+              if (val != null) iterSum += (val as num).toDouble();
+            }
+            rain = iterSum;
+          } else {
+            // For others (Temp, Wind, Hum), we want the LATEST reading
+            // Assuming list is chronological, or we could sort by 'data' if needed.
+            // Using .last is standard for XEMA.
+            final latest = readings.last;
+            final val = latest['valor'];
+            if (val == null) continue;
 
-          try {
-            if (id == 32) temp = (val as num).toDouble();
-            if (id == 33) humidity = (val as num).toInt();
-            if (id == 35) rain = (val as num).toDouble();
-            if (id == 30) windSpeed = (val as num).toDouble();
-            // if (id == 36) radiation ... (unused)
-          } catch (e) {
-            // Parser error
+            try {
+              if (id == 32) temp = (val as num).toDouble();
+              if (id == 33) humidity = (val as num).toInt();
+              // Wind (30)
+              if (id == 30) windSpeed = (val as num).toDouble();
+            } catch (e) {
+              // Parser error
+            }
           }
+        }
+      }
+
+      // --- AUTO-SAVE LOGIC (Smart Sync) ---
+      // If we have valid data, save it to History DB so chart updates automatically.
+      if (configAsync.fincaId != null) {
+        try {
+          final now = DateTime.now();
+          // Use fromMeteocat to get consistent Daily Aggregates (Mean Wind, Sum Rain, etc.)
+          final tempObj = ClimateDailyData.fromMeteocat(now, stationData);
+
+          // Calculate ET0 for the day so far
+          final dailyEt0 = ET0Calculator.calculate(
+            lat: configAsync.latitude,
+            date: now,
+            tMax: tempObj.maxTemp,
+            tMin: tempObj.minTemp,
+            rhMean: tempObj.humidity > 0 ? tempObj.humidity : null,
+            windSpeed: tempObj.windSpeed > 0 ? tempObj.windSpeed : null,
+            radiation: tempObj.radiation > 0 ? tempObj.radiation : null,
+          );
+
+          final toSave = ClimateDailyData(
+            date: tempObj.date,
+            maxTemp: tempObj.maxTemp,
+            minTemp: tempObj.minTemp,
+            rain: tempObj.rain,
+            rainAccumulated: tempObj.rainAccumulated,
+            humidity: tempObj.humidity,
+            radiation: tempObj.radiation,
+            windSpeed: tempObj.windSpeed,
+            et0: dailyEt0,
+            isMock: false,
+            fincaId: configAsync.fincaId,
+            lastUpdated: tempObj.lastUpdated,
+          );
+
+          // Fire and forget save
+          repository.saveHistory([toSave]);
+        } catch (e) {
+          // Ignore parsing errors during auto-save
         }
       }
     }

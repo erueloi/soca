@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:soca/core/services/meteocat_service.dart';
 import 'package:soca/features/dashboard/presentation/providers/weather_provider.dart';
 import '../../../climate/presentation/pages/clima_page.dart';
@@ -221,7 +222,16 @@ class WeatherWidget extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      // Removed Top Right Icon
+                      // Top Right Timestamp
+                      if (weather.lastUpdated != null)
+                        Text(
+                          'Act: ${DateFormat('dd/MM HH:mm').format(weather.lastUpdated!)}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey.withValues(alpha: 0.6),
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 4), // Reduced spacing

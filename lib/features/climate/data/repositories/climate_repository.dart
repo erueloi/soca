@@ -23,7 +23,7 @@ class ClimateRepository {
       final map = item.toMap();
       map['fincaId'] = fincaId;
 
-      batch.set(docRef, map, SetOptions(merge: true));
+      batch.set(docRef, map);
     }
     await batch.commit();
   }
@@ -50,6 +50,7 @@ class ClimateRepository {
           et0: 3.5 + (rand / 5), // Fake ET0
           isMock: true,
           fincaId: fincaId,
+          lastUpdated: DateTime.now(),
         ),
       );
     }
@@ -123,6 +124,26 @@ class ClimateRepository {
       }
     } catch (e) {
       debugPrint('ClimateRepository: Error getting last date: $e');
+    }
+    return null;
+  }
+
+  Future<DateTime?> getLastCalculationTimestamp() async {
+    if (fincaId == null) return null;
+    try {
+      final snapshot = await _firestore
+          .collection(_collection)
+          .where('fincaId', isEqualTo: fincaId)
+          .orderBy('date', descending: true)
+          .limit(1)
+          .get();
+
+      if (snapshot.docs.isNotEmpty) {
+        final data = ClimateDailyData.fromMap(snapshot.docs.first.data());
+        return data.calculatedAt;
+      }
+    } catch (e) {
+      debugPrint('Error getting calc timestamp: $e');
     }
     return null;
   }
@@ -221,6 +242,8 @@ class ClimateRepository {
           isMock: day.isMock,
           fincaId: day.fincaId,
           soilBalance: currentBalance,
+          lastUpdated: day.lastUpdated,
+          calculatedAt: DateTime.now(), // Mark as recalculated now
         ),
       );
     }

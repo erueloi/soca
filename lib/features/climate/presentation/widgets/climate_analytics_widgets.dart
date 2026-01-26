@@ -41,18 +41,45 @@ class ClimateAnalyticsSection extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
                   children: [
-                    Icon(Icons.insights, color: Colors.blue),
-                    SizedBox(width: 8),
-                    Text(
-                      'Anàlisi',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue,
-                        fontSize: 16,
-                      ),
+                    const Icon(Icons.insights, color: Colors.blue),
+                    const SizedBox(width: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'Anàlisi',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.info_outline,
+                            color: Colors.blue,
+                            size: 20,
+                          ),
+                          tooltip: "Com es calcula?",
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => _showExplanationDialog(context),
+                        ),
+                      ],
                     ),
+                    const Spacer(),
+                    if (sortedDays.isNotEmpty)
+                      Text(
+                        _getLastUpdatedString(sortedDays.last),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.withValues(alpha: 0.8),
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -155,6 +182,111 @@ class ClimateAnalyticsSection extends StatelessWidget {
     }
 
     return "Actualment la terra conserva ${currentBalance.toStringAsFixed(1)} mm de reserva, principalment de $source. \n\nNo es preveu necessitat de reg fins d'aquí a $daysToIrrigation dies (basat en ETc mitjana de ${avgEtc.toStringAsFixed(1)} mm/dia).";
+  }
+
+  String _getLastUpdatedString(ClimateDailyData lastDay) {
+    final String dateStr = DateFormat('dd/MM', 'ca').format(lastDay.date);
+    String txt = "Dades: $dateStr";
+
+    if (lastDay.lastUpdated != null) {
+      final String timeStr = DateFormat(
+        'HH:mm',
+        'ca',
+      ).format(lastDay.lastUpdated!);
+      txt += " ($timeStr)";
+    }
+
+    if (lastDay.calculatedAt != null) {
+      final String calcStr = DateFormat(
+        'dd/MM HH:mm',
+        'ca',
+      ).format(lastDay.calculatedAt!);
+      txt += " | Recàlcul: $calcStr";
+    }
+
+    return txt;
+  }
+
+  void _showExplanationDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Com es calculen les dades? 🧮'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildInfoItem(
+                  context,
+                  'ET0 (Evapotranspiració Referència)',
+                  'És la quantitat d\'aigua que perdria una superfície verda estàndard. Es calcula científicament (Penman-Monteith) combinant:\n• Temperatura\n• Humitat\n• Vent\n• Radiació Solar',
+                  Icons.water_drop_outlined,
+                ),
+                const SizedBox(height: 16),
+                _buildInfoItem(
+                  context,
+                  'ETc (Evapotranspiració Cultiu)',
+                  'És l\'aigua que realment consumeix el teu cultiu. S\'aplica un coeficient (Kc) a la ET0.\n\nFórmula: ETc = ET0 x Kc\n(Fem servir Kc=0.6 per defecte)',
+                  Icons.local_florist_outlined,
+                ),
+                const SizedBox(height: 16),
+                _buildInfoItem(
+                  context,
+                  'Balanç Hídric (Reserva)',
+                  'Simula l\'aigua útil que queda disponible al sòl per a les arrels. Si plou, suma. Si fa calor, resta (ETc).\n\nFórmula:\nReserva Ahir + Pluja - ETc',
+                  Icons.layers_outlined,
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8.0),
+                  child: Divider(),
+                ),
+                Text(
+                  'Si el balanç és molt negatiu (< -15 mm), significa que l\'arbre ha esgotat la reserva fàcil i comença a patir estrès.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade700,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Entesos'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildInfoItem(
+    BuildContext context,
+    String title,
+    String desc,
+    IconData icon,
+  ) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: Colors.blueGrey, size: 24),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text(desc, style: const TextStyle(fontSize: 13, height: 1.3)),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -285,6 +417,38 @@ class _UnifiedClimateChartState extends State<_UnifiedClimateChart> {
           borderWidth: 3,
           markerSettings: const MarkerSettings(isVisible: false),
         ),
+        // 3. Max Temp (Red Line)
+        LineSeries<ClimateDailyData, int>(
+          name: 'T. Màx (°C)',
+          dataSource: widget.days,
+          xValueMapper: (ClimateDailyData d, _) => d.date.day,
+          yValueMapper: (ClimateDailyData d, _) => d.maxTemp,
+          color: Colors.redAccent,
+          width: 2,
+          isVisibleInLegend: true,
+        ),
+        // 4. Min Temp (Blue Line)
+        LineSeries<ClimateDailyData, int>(
+          name: 'T. Mín (°C)',
+          dataSource: widget.days,
+          xValueMapper: (ClimateDailyData d, _) => d.date.day,
+          yValueMapper: (ClimateDailyData d, _) => d.minTemp,
+          color: Colors.lightBlue,
+          width: 2,
+          isVisibleInLegend: true,
+        ),
+        // 5. Humidity (Purple, Right Axis)
+        LineSeries<ClimateDailyData, int>(
+          name: 'Humitat (%)',
+          dataSource: widget.days,
+          xValueMapper: (ClimateDailyData d, _) => d.date.day,
+          yValueMapper: (ClimateDailyData d, _) => d.humidity,
+          yAxisName: 'yAxisWind',
+          color: Colors.purpleAccent,
+          width: 1.5,
+          dashArray: <double>[2, 2],
+          isVisibleInLegend: true,
+        ),
         // 3. Wind (Line, Right Axis)
         LineSeries<ClimateDailyData, int>(
           name: 'Vent (km/h)',
@@ -322,12 +486,15 @@ class _ClimateBalanceTable extends StatelessWidget {
     // Define shared column widths for alignment
     const Map<int, TableColumnWidth> columnWidths = {
       0: FixedColumnWidth(60), // Data
-      1: FlexColumnWidth(1), // ET0
-      2: FixedColumnWidth(40), // Kc
-      3: FlexColumnWidth(1), // ETc
-      4: FlexColumnWidth(1), // Pluja
-      5: FlexColumnWidth(1), // P.Ef
-      6: FlexColumnWidth(1.2), // Balanç
+      1: FixedColumnWidth(40), // TMax
+      2: FixedColumnWidth(40), // TMin
+      3: FixedColumnWidth(40), // Hum
+      4: FixedColumnWidth(45), // Vent
+      5: FixedColumnWidth(45), // Rad
+      6: FlexColumnWidth(1), // Pluja
+      7: FlexColumnWidth(1), // ET0
+      8: FlexColumnWidth(1), // ETc
+      9: FlexColumnWidth(1.2), // Balanç
     };
 
     final rows = days.where((d) => d.soilBalance != null).toList();
@@ -340,7 +507,7 @@ class _ClimateBalanceTable extends StatelessWidget {
             constraints: BoxConstraints(minWidth: constraints.maxWidth),
             child: Center(
               child: SizedBox(
-                width: 800, // Fixed width for the table content
+                width: 1000, // Increased width further
                 height: 400, // Fixed height for scrolling
                 child: Column(
                   children: [
@@ -350,44 +517,25 @@ class _ClimateBalanceTable extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       child: Table(
                         columnWidths: columnWidths,
-                        children: const [
+                        defaultVerticalAlignment:
+                            TableCellVerticalAlignment.bottom,
+                        children: [
                           TableRow(
                             children: [
-                              Text(
-                                'Data',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                                textAlign: TextAlign.center,
+                              _buildHeader('Data', ''),
+                              _buildHeader('Max', '°C', color: Colors.red),
+                              _buildHeader('Min', '°C', color: Colors.blue),
+                              _buildHeader('Hum', '%', color: Colors.purple),
+                              _buildHeader('Vent', 'km/h', color: Colors.grey),
+                              _buildHeader(
+                                'Rad',
+                                'MJ/m²',
+                                color: Colors.orange.shade800,
                               ),
-                              Text(
-                                'ET0',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                                textAlign: TextAlign.center,
-                              ),
-                              Text(
-                                'Kc',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                                textAlign: TextAlign.center,
-                              ),
-                              Text(
-                                'ETc',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                                textAlign: TextAlign.center,
-                              ),
-                              Text(
-                                'Pluja',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                                textAlign: TextAlign.center,
-                              ),
-                              Text(
-                                'P.Ef',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                                textAlign: TextAlign.center,
-                              ),
-                              Text(
-                                'Balanç',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                                textAlign: TextAlign.center,
-                              ),
+                              _buildHeader('Pluja', 'mm'),
+                              _buildHeader('ET0', 'mm'),
+                              _buildHeader('ETc', 'mm'),
+                              _buildHeader('Balanç', 'mm'),
                             ],
                           ),
                         ],
@@ -402,7 +550,6 @@ class _ClimateBalanceTable extends StatelessWidget {
                           defaultVerticalAlignment:
                               TableCellVerticalAlignment.middle,
                           children: rows.map((d) {
-                            final pef = (d.rain >= 4.0 ? d.rain * 0.75 : 0.0);
                             final etc = d.et0 * 0.6;
                             final sb = d.soilBalance!;
 
@@ -432,6 +579,39 @@ class _ClimateBalanceTable extends StatelessWidget {
                                     textAlign: TextAlign.center,
                                   ),
                                 ),
+                                _buildCell(
+                                  d.maxTemp.toStringAsFixed(0),
+                                  Colors.red,
+                                ),
+                                _buildCell(
+                                  d.minTemp.toStringAsFixed(0),
+                                  Colors.blue,
+                                ),
+                                _buildCell(
+                                  d.humidity.toStringAsFixed(0),
+                                  Colors.purple,
+                                ),
+                                _buildCell(
+                                  (d.windSpeed * 3.6).toStringAsFixed(0),
+                                  Colors.grey.shade700,
+                                ),
+                                _buildCell(
+                                  d.radiation.toStringAsFixed(1),
+                                  Colors.orange.shade800,
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Text(
+                                    d.rain.toStringAsFixed(1),
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontWeight: d.rain > 0
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                      color: d.rain > 0 ? Colors.blue : null,
+                                    ),
+                                  ),
+                                ),
                                 Padding(
                                   padding: const EdgeInsets.all(8.0),
                                   child: Text(
@@ -439,31 +619,10 @@ class _ClimateBalanceTable extends StatelessWidget {
                                     textAlign: TextAlign.center,
                                   ),
                                 ),
-                                const Padding(
-                                  padding: EdgeInsets.all(8.0),
-                                  child: Text(
-                                    '0.6',
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
                                 Padding(
                                   padding: const EdgeInsets.all(8.0),
                                   child: Text(
                                     etc.toStringAsFixed(2),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: Text(
-                                    d.rain.toStringAsFixed(1),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: Text(
-                                    pef.toStringAsFixed(1),
                                     textAlign: TextAlign.center,
                                   ),
                                 ),
@@ -490,6 +649,43 @@ class _ClimateBalanceTable extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildHeader(String title, String unit, {Color? color}) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 11,
+            color: color,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        if (unit.isNotEmpty)
+          Text(
+            unit,
+            style: TextStyle(
+              fontSize: 9,
+              color: color?.withValues(alpha: 0.7) ?? Colors.grey,
+            ),
+            textAlign: TextAlign.center,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildCell(String value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.all(2.0),
+      child: Text(
+        value,
+        textAlign: TextAlign.center,
+        style: TextStyle(fontSize: 11, color: color.withValues(alpha: 0.8)),
+      ),
     );
   }
 }

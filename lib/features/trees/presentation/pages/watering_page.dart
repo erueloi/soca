@@ -7,6 +7,7 @@ import '../../domain/entities/tree.dart';
 import '../../domain/entities/tree_extensions.dart';
 import '../../domain/entities/watering_event.dart';
 import '../providers/trees_provider.dart';
+import 'package:soca/features/climate/presentation/providers/climate_provider.dart';
 
 class WateringPage extends ConsumerStatefulWidget {
   final String? initialTreeId;
@@ -387,27 +388,60 @@ class _WateringPageState extends ConsumerState<WateringPage> {
                     vertical: 12,
                   ),
                   alignment: Alignment.centerLeft,
-                  child: Row(
+                  child: Column(
                     mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text(
-                        'Necessitat Actual',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Necessitat Actual',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(width: 4),
+                          Tooltip(
+                            message:
+                                "Indicador d'estat hídric:\n"
+                                "🔴 Vermell (< -15mm): Estrès Hídric. Reserva esgotada. (URGENT)\n"
+                                "🟡 Ambre (-15 a -5mm): Reg Opcional. Humitat descendent.\n"
+                                "🟢 Verd (> -5mm): No regar. Terra saciada.\n\n"
+                                "Si surt un valor en L, és la quantitat recomanada per regar avui.",
+                            triggerMode: TooltipTriggerMode.tap,
+                            child: const Icon(
+                              Icons.info_outline,
+                              size: 16,
+                              color: Colors.orange,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 4),
-                      Tooltip(
-                        message:
-                            "Indicador d'estat hídric:\n"
-                            "🔴 Vermell (< -15mm): Estrès Hídric. Reserva esgotada. (URGENT)\n"
-                            "🟡 Ambre (-15 a -5mm): Reg Opcional. Humitat descendent.\n"
-                            "🟢 Verd (> -5mm): No regar. Terra saciada.\n\n"
-                            "Si surt un valor en L, és la quantitat recomanada per regar avui.",
-                        triggerMode: TooltipTriggerMode.tap,
-                        child: const Icon(
-                          Icons.info_outline,
-                          size: 16,
-                          color: Colors.orange,
-                        ),
+                      Consumer(
+                        builder: (context, ref, child) {
+                          final asyncVal = ref.watch(
+                            latestCalculationTimestampProvider,
+                          );
+                          return asyncVal.when(
+                            data: (date) {
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  date != null
+                                      ? 'Recàlcul: ${DateFormat('dd/MM HH:mm').format(date)}'
+                                      : 'Recàlcul: (Pendent)',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey.shade600,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              );
+                            },
+                            loading: () => const SizedBox.shrink(),
+                            error: (_, _) => const SizedBox.shrink(),
+                          );
+                        },
                       ),
                     ],
                   ),

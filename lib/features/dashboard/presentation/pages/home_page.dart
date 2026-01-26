@@ -144,10 +144,6 @@ class _HomePageState extends ConsumerState<HomePage> {
           });
         }
       }
-    } else {
-      // First time sync? Or empty. Save default to cloud.
-      // We only do this if we are sure we want to overwrite/init cloud.
-      // Let's just keep local default and maybe save it if user edits.
     }
   }
 
