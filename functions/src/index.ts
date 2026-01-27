@@ -1,10 +1,11 @@
-const functions = require("firebase-functions");
-const admin = require("firebase-admin");
-const vision = require("@google-cloud/vision");
+// @ts-nocheck
+import * as functions from "firebase-functions/v1";
+import * as admin from "firebase-admin";
+import { ImageAnnotatorClient } from "@google-cloud/vision";
 
 admin.initializeApp();
 
-const client = new vision.ImageAnnotatorClient();
+const client = new ImageAnnotatorClient();
 
 /**
  * Cloud Function to process whiteboard images.
@@ -160,7 +161,7 @@ function groupWordsIntoLines(words) {
     return lines;
 }
 
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 exports.identifyTree = functions.https.onCall(async (data, context) => {
     const imageBase64 = data.image;
@@ -171,7 +172,7 @@ exports.identifyTree = functions.https.onCall(async (data, context) => {
     }
 
     // Initialize Gemini
-    const apiKey = process.env.GEMINI_API_KEY || functions.config().gemini.key;
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_KEY;
     if (!apiKey) {
         throw new functions.https.HttpsError("failed-precondition", "Gemini API Key not configured.");
     }
@@ -253,7 +254,7 @@ exports.analyzeTree = functions.https.onCall(async (data, context) => {
         }
     }
 
-    const apiKey = process.env.GEMINI_API_KEY || functions.config().gemini.key;
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_KEY;
     if (!apiKey) {
         throw new functions.https.HttpsError("failed-precondition", "Gemini API Key not configured. Run: firebase functions:config:set gemini.key=\"YOUR_KEY\"");
     }
@@ -332,7 +333,7 @@ exports.getBotanicalDataFromText = functions.https.onCall(async (data, context) 
         throw new functions.https.HttpsError("invalid-argument", "The function must be called with a valid speciesName.");
     }
 
-    const apiKey = process.env.GEMINI_API_KEY || functions.config().gemini.key;
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_KEY;
     if (!apiKey) {
         throw new functions.https.HttpsError("failed-precondition", "Gemini API Key not configured.");
     }
@@ -388,7 +389,7 @@ exports.getHorticulturalData = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError("invalid-argument", "The function must be called with a valid speciesName.");
     }
 
-    const apiKey = process.env.GEMINI_API_KEY || functions.config().gemini.key;
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_KEY;
     if (!apiKey) {
         throw new functions.https.HttpsError("failed-precondition", "Gemini API Key not configured.");
     }
@@ -880,5 +881,7 @@ exports.cleanupLegacyUsers = functions.https.onRequest(async (req, res) => {
     }
 });
 
-
-
+// Import new TS Modules
+import * as waterManagement from './water_management';
+exports.manageWaterCycle = waterManagement.manageWaterCycle;
+exports.manageWaterCycleAudit = waterManagement.manageWaterCycleAudit;

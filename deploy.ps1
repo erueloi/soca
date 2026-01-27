@@ -99,14 +99,26 @@ try {
     # Generate version.json
     $versionJson = @{
         version = $Version
-        apkUrl = "https://soca-aacac.web.app/soca.apk"
+        apkUrl  = "https://soca-aacac.web.app/soca.apk"
     } | ConvertTo-Json
     
     Set-Content -Path "build/web/version.json" -Value $versionJson -Encoding UTF8
     Write-Success "Generated version.json"
 
-    # --- Step 7: Deploy to Firebase ---
-    Write-Step "Step 7: Deploying to Firebase Hosting & Functions"
+    # --- Step 7: Build Cloud Functions (TypeScript) ---
+    Write-Step "Step 7: Building Cloud Functions"
+    Push-Location functions
+    try {
+        cmd /c "npm run build"
+        if ($LASTEXITCODE -ne 0) { throw "Functions build failed" }
+    }
+    finally {
+        Pop-Location
+    }
+    Write-Success "Functions Built."
+
+    # --- Step 8: Deploy to Firebase ---
+    Write-Step "Step 8: Deploying to Firebase Hosting & Functions"
     
     # Deploy functions first (or together)
     # Using --only functions,hosting
@@ -115,8 +127,9 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Firebase deploy failed" }
     Write-Success "Deployed Functions and Hosting"
 
-    # --- Step 8: Git & Tagging ---
-    Write-Step "Step 8: Git & Tagging"
+
+    # --- Step 9: Git & Tagging ---
+    Write-Step "Step 9: Git & Tagging"
     $tagName = "v$Version"
     
     # Check for uncommitted changes (like pubspec or release_notes)
@@ -143,8 +156,8 @@ try {
         Write-Host "Tag $tagName already exists." -ForegroundColor Yellow
     }
 
-    # --- Step 9: Push to Remote ---
-    Write-Step "Step 9: Pushing to Remote"
+    # --- Step 10: Pushing to Remote ---
+    Write-Step "Step 10: Pushing to Remote"
     # Pushing current branch and tags
     git push origin HEAD
     if ($LASTEXITCODE -ne 0) { Write-ErrorMsg "git push failed (maybe no upstream?)" }

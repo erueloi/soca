@@ -1,0 +1,27 @@
+# Compiled JavaScript files
+lib/
+lib.js
+lib.js.map
+
+# TypeScript v1 declaration files
+*.d.ts
+
+# Node modules
+node_modules/
+
+# Logs
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+
+# Mac
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Local Env Files (Secrets)
+.env
+.env.local
+.env.*.local

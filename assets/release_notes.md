@@ -1,5 +1,9 @@
 ﻿# Release Notes
 
+## v1.8.9
+Clima: Actualizació tècnica.
+Dades del clima s'actualitzen automaticament i es recalcules 3 cops al dia.
+Hem actualitzat les functions amb el nou sdk de firebase.
 ## v1.8.8
 Clima: Bugfix amb la cache i les dades que es mostraven del clima.
 ## v1.8.7
@@ -119,6 +123,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 
