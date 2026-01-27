@@ -262,4 +262,35 @@ class ConstructionRepository {
       return null;
     }
   }
+
+  // --- Helpers ---
+
+  Future<ConstructionPoint?> findPointByTaskId(String taskId) async {
+    if (fincaId == null) return null;
+
+    try {
+      // Since we can't easily query inside 'subActions' array of maps for a specific field
+      // without a dedicated 'taskIds' array, we fetch all points for the finca and filter.
+      // Assuming number of points is reasonable (< 500).
+      final snapshot = await _pointsCollection
+          .where('fincaId', isEqualTo: fincaId)
+          // Optimization: If possible, we could limit to 'En Progrés' or similar if closed tasks shouldn't be linked
+          .get();
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final subActions = data['pathology']?['subActions'] as List<dynamic>?;
+
+        if (subActions != null) {
+          final hasTask = subActions.any((s) => s['taskId'] == taskId);
+          if (hasTask) {
+            return ConstructionPoint.fromMap(data, doc.id);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error finding point by taskId: $e');
+    }
+    return null;
+  }
 }

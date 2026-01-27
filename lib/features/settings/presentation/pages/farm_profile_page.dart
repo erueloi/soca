@@ -11,6 +11,7 @@ import 'app_config_page.dart';
 
 import '../../../trees/data/repositories/species_repository.dart';
 import '../../../trees/presentation/providers/trees_provider.dart'; // Ensure treesRepositoryProvider is here
+import 'zone_map_editor_page.dart';
 
 class FarmProfilePage extends ConsumerStatefulWidget {
   const FarmProfilePage({super.key});
@@ -29,6 +30,7 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
   final MapController _mapController = MapController();
 
   List<FarmZone> _zones = [];
+  List<PermacultureZone> _permacultureZones = [];
   String? _stationCode; // Hoist state
   bool _dailyNotificationsEnabled = true;
   String _dailyNotificationTime = '20:30';
@@ -68,6 +70,10 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
       _zones = List.from(config.zones);
     }
 
+    if (_permacultureZones.isEmpty && config.permacultureZones.isNotEmpty) {
+      _permacultureZones = List.from(config.permacultureZones);
+    }
+
     _stationCode ??= config.meteocatStationCode;
 
     _dailyNotificationsEnabled = config.dailyNotificationsEnabled;
@@ -105,6 +111,46 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
 
   void _deleteZone(FarmZone zone) {
     setState(() => _zones.removeWhere((z) => z.id == zone.id));
+  }
+
+  void _addPermacultureZone() async {
+    final newZone = await Navigator.push<PermacultureZone>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ZoneMapEditorPage(
+          initialCenter: _mapCenter ?? const LatLng(41.5126, 0.9186),
+          initialZoom: _mapController.camera.zoom,
+        ),
+      ),
+    );
+    if (newZone != null) {
+      setState(() => _permacultureZones.add(newZone));
+    }
+  }
+
+  void _editPermacultureZone(PermacultureZone zone) async {
+    final updatedZone = await Navigator.push<PermacultureZone>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ZoneMapEditorPage(
+          zone: zone,
+          initialCenter: _mapCenter ?? const LatLng(41.5126, 0.9186),
+          initialZoom: _mapController.camera.zoom,
+        ),
+      ),
+    );
+    if (updatedZone != null) {
+      setState(() {
+        final index = _permacultureZones.indexWhere((z) => z.id == zone.id);
+        if (index != -1) {
+          _permacultureZones[index] = updatedZone;
+        }
+      });
+    }
+  }
+
+  void _deletePermacultureZone(PermacultureZone zone) {
+    setState(() => _permacultureZones.removeWhere((z) => z.id == zone.id));
   }
 
   Future<void> _pickTime(bool isMorning) async {
@@ -161,6 +207,8 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
         dailyNotificationTime: _dailyNotificationTime,
         morningNotificationsEnabled: _morningNotificationsEnabled,
         morningNotificationTime: _morningNotificationTime,
+        zones: _zones, // Ensuring updated zones are passed
+        permacultureZones: _permacultureZones,
       );
 
       await ref.read(settingsRepositoryProvider).saveFarmConfig(newConfig);
@@ -432,6 +480,77 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
                                       color: Colors.red,
                                     ),
                                     onPressed: () => _deleteZone(zone),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
+
+                      const SizedBox(height: 32),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Zonificació Permacultura (PDC)',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.add_location_alt,
+                              color: Colors.teal,
+                            ),
+                            onPressed: _addPermacultureZone,
+                          ),
+                        ],
+                      ),
+                      if (_permacultureZones.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: Text(
+                            'No hi ha zones PDC definides.',
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        )
+                      else
+                        ..._permacultureZones.map((zone) {
+                          final color = Color(
+                            int.parse(zone.colorHex, radix: 16),
+                          );
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              leading: CircleAvatar(backgroundColor: color),
+                              title: Text(zone.name),
+                              subtitle: Text(
+                                zone.descriptionPdc,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.edit_location_alt,
+                                      color: Colors.blue,
+                                    ),
+                                    onPressed: () =>
+                                        _editPermacultureZone(zone),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.delete,
+                                      color: Colors.red,
+                                    ),
+                                    onPressed: () =>
+                                        _deletePermacultureZone(zone),
                                   ),
                                 ],
                               ),

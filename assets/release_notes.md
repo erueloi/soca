@@ -1,5 +1,9 @@
 ﻿# Release Notes
 
+## v1.8.10
+Arbres: Nova pàgina estadistiques.
+Nou widget de poda, collita, plantació.
+Finca: Zonificació (versió beta).
 ## v1.8.9
 Clima: Actualizació tècnica.
 Dades del clima s'actualitzen automaticament i es recalcules 3 cops al dia.
@@ -123,6 +127,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

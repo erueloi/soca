@@ -10,6 +10,9 @@ import '../../../map/presentation/widgets/location_picker_sheet.dart';
 import '../providers/tasks_provider.dart';
 import '../../../settings/domain/entities/farm_config.dart';
 import '../../../settings/presentation/providers/settings_provider.dart';
+import '../../../construction/presentation/providers/construction_provider.dart';
+import '../../../construction/data/models/construction_point.dart';
+import '../../../construction/presentation/pages/pathology_detail_page.dart';
 
 class TaskEditSheet extends ConsumerStatefulWidget {
   final Task? task;
@@ -69,6 +72,9 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
   bool _isUploading = false;
   List<String> _currentPhotoUrls = [];
 
+  // Linked Construction
+  ConstructionPoint? _linkedConstruction;
+
   @override
   void initState() {
     super.initState();
@@ -88,6 +94,24 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
     _dueDate = widget.task?.dueDate;
     _latitude = widget.task?.latitude;
     _longitude = widget.task?.longitude;
+
+    if (widget.task != null) {
+      // Defer execution to allow provider reading
+      Future.delayed(Duration.zero, _checkLinkedConstruction);
+    }
+  }
+
+  Future<void> _checkLinkedConstruction() async {
+    try {
+      final point = await ref
+          .read(constructionRepositoryProvider)
+          .findPointByTaskId(widget.task!.id);
+      if (mounted) {
+        setState(() => _linkedConstruction = point);
+      }
+    } catch (e) {
+      debugPrint('Error checking linked construction: $e');
+    }
   }
 
   @override
@@ -218,6 +242,42 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                       ),
                       const SizedBox(height: 16),
                       if (!widget.isReadOnly) _buildActionButtons(context),
+                      if (_linkedConstruction != null) ...[
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => PathologyDetailView(
+                                    point: _linkedConstruction!,
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(
+                              Icons.handyman,
+                              color: Colors.orange,
+                            ),
+                            label: Text(
+                              'Veure Obra Vinculada: ${_linkedConstruction!.pathology?.title ?? "Sense títol"}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange.shade50,
+                              foregroundColor: Colors.orange.shade900,
+                              elevation: 0,
+                              side: BorderSide(color: Colors.orange.shade200),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                      ],
                       if (_imageBytes != null) ...[
                         const SizedBox(height: 8),
                         Container(

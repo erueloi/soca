@@ -1,4 +1,5 @@
-// import 'package:flutter/material.dart'; // Unused, but ExpenseCategory uses colors/icons? Actually ExpenseCategory only stores hex string and code point int. But in `FarmConfig` I added `ExpenseCategory` class which might have relied on it?
+// import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 // Wait, `ExpenseCategory` in `farm_config.dart` uses `const FarmConfig`. `FarmConfig` uses `Color`? No, it uses Strings and doubles.
 // Ah, `FarmConfig.empty` uses `Colors.blue` which is from material.
 // Let's check `FarmConfig.empty` implementation again.
@@ -27,6 +28,7 @@ class FarmConfig {
   final List<String> taskPhases; // Custom phases/labels
   final List<ExpenseCategory> expenseCategories; // Custom expense categories
   final List<Bucket> buckets; // Task buckets (columns)
+  final List<PermacultureZone> permacultureZones; // [NEW] PDC Zones
 
   final String? fincaId;
   final List<String> authorizedEmails;
@@ -49,6 +51,7 @@ class FarmConfig {
     this.taskPhases = const [],
     this.expenseCategories = const [],
     this.buckets = const [],
+    this.permacultureZones = const [],
     this.fincaId,
     this.authorizedEmails = const [],
   });
@@ -97,6 +100,7 @@ class FarmConfig {
         ), // Icons.more_horiz
       ],
       buckets: [],
+      permacultureZones: [],
       fincaId: null,
       authorizedEmails: [],
     );
@@ -121,6 +125,7 @@ class FarmConfig {
       'taskPhases': taskPhases,
       'expenseCategories': expenseCategories.map((e) => e.toMap()).toList(),
       'buckets': buckets.map((b) => b.toMap()).toList(),
+      'permacultureZones': permacultureZones.map((z) => z.toMap()).toList(),
       'fincaId': fincaId,
       'authorizedEmails': authorizedEmails,
     };
@@ -190,6 +195,11 @@ class FarmConfig {
               ?.map((e) => Bucket.fromMap(e))
               .toList() ??
           [],
+      permacultureZones:
+          (map['permacultureZones'] as List<dynamic>?)
+              ?.map((z) => PermacultureZone.fromMap(z))
+              .toList() ??
+          [],
       fincaId: map['fincaId'],
       authorizedEmails:
           (map['authorizedEmails'] as List<dynamic>?)
@@ -217,6 +227,7 @@ class FarmConfig {
     List<String>? taskPhases,
     List<ExpenseCategory>? expenseCategories,
     List<Bucket>? buckets,
+    List<PermacultureZone>? permacultureZones,
     String? fincaId,
     List<String>? authorizedEmails,
   }) {
@@ -242,8 +253,49 @@ class FarmConfig {
       taskPhases: taskPhases ?? this.taskPhases,
       expenseCategories: expenseCategories ?? this.expenseCategories,
       buckets: buckets ?? this.buckets,
+      permacultureZones: permacultureZones ?? this.permacultureZones,
       fincaId: fincaId ?? this.fincaId,
       authorizedEmails: authorizedEmails ?? this.authorizedEmails,
+    );
+  }
+}
+
+class PermacultureZone {
+  final String id;
+  final String name; // e.g. "Zona 1"
+  final String colorHex;
+  final String descriptionPdc;
+  final List<GeoPoint> polygon;
+
+  const PermacultureZone({
+    required this.id,
+    required this.name,
+    required this.colorHex,
+    required this.descriptionPdc,
+    required this.polygon,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'colorHex': colorHex,
+      'descriptionPdc': descriptionPdc,
+      'polygon': polygon, // Firestore handles List<GeoPoint>
+    };
+  }
+
+  factory PermacultureZone.fromMap(Map<String, dynamic> map) {
+    return PermacultureZone(
+      id: map['id'] ?? '',
+      name: map['name'] ?? '',
+      colorHex: map['colorHex'] ?? 'FF4CAF50', // Default Green
+      descriptionPdc: map['descriptionPdc'] ?? '',
+      polygon:
+          (map['polygon'] as List<dynamic>?)
+              ?.map((e) => e as GeoPoint)
+              .toList() ??
+          [],
     );
   }
 }

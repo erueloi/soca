@@ -72,8 +72,10 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
   @override
   void initState() {
     super.initState();
-    _searchQuery = widget.initialSearchQuery ?? '';
-    _searchController = TextEditingController(text: _searchQuery);
+    _searchQuery = (widget.initialSearchQuery ?? '').toLowerCase();
+    _searchController = TextEditingController(
+      text: widget.initialSearchQuery ?? '',
+    );
   }
 
   @override
@@ -825,15 +827,6 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
     }
   }
 
-  String _getFrostIcon(String sensitivity) {
-    final s = sensitivity.toLowerCase();
-    if (s.contains('alta')) return '❄️❄️❄️';
-    if (s.contains('mitjana')) return '❄️❄️';
-    if (s.contains('baixa')) return '❄️';
-    if (s.contains('baixa')) return '❄️';
-    return sensitivity;
-  }
-
   void _showLegendDialog() {
     showDialog(
       context: context,
@@ -1155,17 +1148,35 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                       case 5:
                         cmp = a.kc.compareTo(b.kc);
                         break;
-                      case 11:
+                      case 9:
                         cmp = a.adultHeight.compareTo(b.adultHeight);
                         break;
-                      case 12:
+                      case 10:
                         cmp = a.adultDiameter.compareTo(b.adultDiameter);
                         break;
-                      case 13:
+                      case 11:
                         const map = {'Lent': 1, 'Mig': 2, 'Ràpid': 3};
                         final va = map[a.growthRate] ?? 0;
                         final vb = map[b.growthRate] ?? 0;
                         cmp = va.compareTo(vb);
+                        break;
+                      case 12:
+                        final ma = a.harvestMonths.isEmpty
+                            ? 99
+                            : a.harvestMonths.first;
+                        final mb = b.harvestMonths.isEmpty
+                            ? 99
+                            : b.harvestMonths.first;
+                        cmp = ma.compareTo(mb);
+                        break;
+                      case 13:
+                        final ma = a.pruningMonths.isEmpty
+                            ? 99
+                            : a.pruningMonths.first;
+                        final mb = b.pruningMonths.isEmpty
+                            ? 99
+                            : b.pruningMonths.first;
+                        cmp = ma.compareTo(mb);
                         break;
                       case 14:
                         final ma = a.plantingMonths.isEmpty
@@ -1260,32 +1271,6 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                         ),
                         DataColumn(
                           label: Tooltip(
-                            message: 'Mesos de Poda',
-                            child: Container(
-                              alignment: Alignment.centerLeft,
-                              child: Icon(
-                                Icons.cut,
-                                size: 18,
-                                color: Colors.black54,
-                              ),
-                            ),
-                          ),
-                        ),
-                        DataColumn(
-                          label: Tooltip(
-                            message: 'Mesos de Collita',
-                            child: Container(
-                              alignment: Alignment.centerLeft,
-                              child: Icon(
-                                Icons.shopping_basket,
-                                size: 18,
-                                color: Colors.black54,
-                              ),
-                            ),
-                          ),
-                        ),
-                        DataColumn(
-                          label: Tooltip(
                             message: 'Fruit Comestible/Aprofitable',
                             child: Container(
                               alignment: Alignment.centerLeft,
@@ -1342,6 +1327,46 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                           onSort: (idx, asc) =>
                               _sort<String>((d) => d.growthRate, idx, asc),
                         ), // Growth
+                        DataColumn(
+                          label: Tooltip(
+                            message: 'Mesos de Collita',
+                            child: Container(
+                              alignment: Alignment.centerLeft,
+                              child: Icon(
+                                Icons.shopping_basket,
+                                size: 18,
+                                color: Colors.black54,
+                              ),
+                            ),
+                          ),
+                          onSort: (idx, asc) => _sort<num>(
+                            (d) => d.harvestMonths.isEmpty
+                                ? 99
+                                : d.harvestMonths.first,
+                            idx,
+                            asc,
+                          ),
+                        ),
+                        DataColumn(
+                          label: Tooltip(
+                            message: 'Mesos de Poda',
+                            child: Container(
+                              alignment: Alignment.centerLeft,
+                              child: Icon(
+                                Icons.cut,
+                                size: 18,
+                                color: Colors.black54,
+                              ),
+                            ),
+                          ),
+                          onSort: (idx, asc) => _sort<num>(
+                            (d) => d.pruningMonths.isEmpty
+                                ? 99
+                                : d.pruningMonths.first,
+                            idx,
+                            asc,
+                          ),
+                        ),
                         DataColumn(
                           label: Tooltip(
                             message: 'Mesos Plantació',
@@ -1476,25 +1501,42 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                             ),
                             DataCell(Text(s.kc.toString())),
                             DataCell(Text(_getSunIcon(s.sunNeeds))),
-                            DataCell(Text(_getFrostIcon(s.frostSensitivity))),
                             DataCell(
-                              SizedBox(
-                                width: 100,
-                                child: Text(
-                                  _formatMonths(s.pruningMonths),
-                                  style: const TextStyle(fontSize: 12),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                            DataCell(
-                              SizedBox(
-                                width: 100,
-                                child: Text(
-                                  _formatMonths(s.harvestMonths),
-                                  style: const TextStyle(fontSize: 12),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                              Builder(
+                                builder: (context) {
+                                  final frostSensitivityLower = s
+                                      .frostSensitivity
+                                      .toLowerCase();
+                                  int count = 0;
+                                  if (frostSensitivityLower.contains('alta')) {
+                                    count = 3;
+                                  } else if (frostSensitivityLower.contains(
+                                    'mitjana',
+                                  )) {
+                                    count = 2;
+                                  } else if (frostSensitivityLower.contains(
+                                    'baixa',
+                                  )) {
+                                    count = 1;
+                                  }
+
+                                  if (count > 0) {
+                                    return Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: List.generate(
+                                        3,
+                                        (index) => Icon(
+                                          Icons.ac_unit,
+                                          size: 14,
+                                          color: index < count
+                                              ? Colors.lightBlue
+                                              : Colors.grey.shade200,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  return Text(s.frostSensitivity); // Fallback
+                                },
                               ),
                             ),
                             DataCell(
@@ -1507,6 +1549,26 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                             DataCell(Text('${s.adultHeight}m')),
                             DataCell(Text('${s.adultDiameter}m')),
                             DataCell(Text(s.growthRate)),
+                            DataCell(
+                              SizedBox(
+                                width: 100,
+                                child: Text(
+                                  _formatMonths(s.harvestMonths),
+                                  style: const TextStyle(fontSize: 12),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              SizedBox(
+                                width: 100,
+                                child: Text(
+                                  _formatMonths(s.pruningMonths),
+                                  style: const TextStyle(fontSize: 12),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
                             DataCell(
                               SizedBox(
                                 width: 100,

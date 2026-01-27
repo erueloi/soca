@@ -233,6 +233,32 @@ class _MapPageState extends ConsumerState<MapPage> {
                       ],
                     ),
 
+                  // Permaculture Zones Layer
+                  if (layers[MapLayer.permacultureZones] == true)
+                    PolygonLayer(
+                      polygons: config.permacultureZones.map((zone) {
+                        final color = Color(
+                          int.parse(zone.colorHex, radix: 16),
+                        );
+                        return Polygon(
+                          points: zone.polygon
+                              .map((p) => LatLng(p.latitude, p.longitude))
+                              .toList(),
+                          color: color.withValues(alpha: 0.3),
+                          borderStrokeWidth: 2,
+                          borderColor: color,
+                          label: zone.name,
+                          labelStyle: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            shadows: [
+                              Shadow(blurRadius: 2, color: Colors.black),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+
                   // Task Markers Layer
                   if (layers[MapLayer.tasks] == true)
                     Consumer(

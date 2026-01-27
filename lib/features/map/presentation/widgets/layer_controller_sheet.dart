@@ -100,6 +100,14 @@ class LayerControllerSheet extends ConsumerWidget {
                   notifier.toggleLayer(MapLayer.irrigationZones),
             ),
             SwitchListTile(
+              title: const Text('Zones Permacultura (PDC)'),
+              subtitle: const Text('Mostra les zones de disseny'),
+              secondary: const Icon(Icons.terrain, color: Colors.teal),
+              value: layers[MapLayer.permacultureZones] ?? false,
+              onChanged: (val) =>
+                  notifier.toggleLayer(MapLayer.permacultureZones),
+            ),
+            SwitchListTile(
               title: const Text('Salut dels Arbres'),
               subtitle: const Text(
                 'Codifica els arbres per color segons salut',

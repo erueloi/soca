@@ -69,71 +69,160 @@ class TreeSummaryWidget extends ConsumerWidget {
       return const Center(child: Text('0 Arbres'));
     }
 
+    // 1. Calculations
     int viable = 0;
     int malalt = 0;
     int mort = 0;
 
+    double totalHeight = 0;
+    int heightCount = 0;
+
+    int fruiters = 0;
+
     for (var tree in trees) {
+      // Status
       final status = tree.status.toLowerCase();
-      if (status == 'viable') {
+      if (status.contains('viable')) {
         viable++;
-      } else if (status == 'mort') {
+      } else if (status.contains('mort')) {
         mort++;
-      } else {
-        // Assume anything else is "Malalt" or "Mitjà" for the chart, simplified
+      } else if (status.contains('malalt')) {
         malalt++;
+      }
+
+      // Height
+      if (tree.height != null && tree.height! > 0) {
+        totalHeight += tree.height!;
+        heightCount++;
+      }
+
+      // Function
+      if (tree.ecologicalFunction == 'Fruit') {
+        fruiters++;
       }
     }
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    final total = trees.length;
+    double avgHeight = heightCount > 0 ? totalHeight / heightCount : 0.0;
+    // Heuristic: If avgHeight > 4, assume it's cm (e.g. 265 cm) -> convert to m
+    // Trees > 4m are possible, but 265m is impossible.
+    if (avgHeight > 10) {
+      avgHeight = avgHeight / 100;
+    }
+
+    final viabilityPct = total > 0
+        ? (viable / total * 100).toStringAsFixed(0)
+        : '0';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // BIG NUMBER
-        Column(
+        // BIG TITLE
+        Text(
+          '$total Arbres',
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: Colors.green.shade800,
+          ),
+        ),
+        Text(
+          'Inventari General',
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 16),
+
+        Row(
           children: [
-            Text(
-              '${trees.length}',
-              style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.primary,
+            // METRICS COLUMN
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildMetricRow(
+                    context,
+                    Icons.check_circle_outline,
+                    Colors.green,
+                    '$viabilityPct% Viables ($viable)',
+                  ),
+                  const SizedBox(height: 12), // Visual Air
+                  _buildMetricRow(
+                    context,
+                    Icons.height,
+                    Colors.blue,
+                    'Alçada Mitjana: ${avgHeight.toStringAsFixed(2)} m',
+                  ),
+                  const SizedBox(height: 12), // Visual Air
+                  _buildMetricRow(
+                    context,
+                    Icons.eco,
+                    Colors.purple,
+                    '$fruiters Fruiters',
+                  ),
+                ],
               ),
             ),
-            const Text('Arbres Total'),
+
+            // CHART - Reduced Size
+            SizedBox(
+              height: 75,
+              width: 75,
+              child: PieChart(
+                PieChartData(
+                  sectionsSpace: 2,
+                  centerSpaceRadius: 10,
+                  startDegreeOffset: -90,
+                  sections: [
+                    if (viable > 0)
+                      PieChartSectionData(
+                        color: Colors.green,
+                        value: viable.toDouble(),
+                        radius: 14,
+                        showTitle: false,
+                      ),
+                    if (malalt > 0)
+                      PieChartSectionData(
+                        color: Colors.orange,
+                        value: malalt.toDouble(),
+                        radius: 14,
+                        showTitle: false,
+                      ),
+                    if (mort > 0)
+                      PieChartSectionData(
+                        color: Colors.red,
+                        value: mort.toDouble(),
+                        radius: 14,
+                        showTitle: false,
+                      ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
-        const SizedBox(width: 16),
-        // CHART
-        SizedBox(
-          height: 80,
-          width: 80,
-          child: PieChart(
-            PieChartData(
-              sectionsSpace: 2,
-              centerSpaceRadius: 15, // Donut style
-              sections: [
-                if (viable > 0)
-                  PieChartSectionData(
-                    color: Colors.green,
-                    value: viable.toDouble(),
-                    radius: 12,
-                    showTitle: false,
-                  ),
-                if (malalt > 0)
-                  PieChartSectionData(
-                    color: Colors.orange,
-                    value: malalt.toDouble(),
-                    radius: 12,
-                    showTitle: false,
-                  ),
-                if (mort > 0)
-                  PieChartSectionData(
-                    color: Colors.red,
-                    value: mort.toDouble(),
-                    radius: 12,
-                    showTitle: false,
-                  ),
-              ],
-            ),
+      ],
+    );
+  }
+
+  Widget _buildMetricRow(
+    BuildContext context,
+    IconData icon,
+    Color color,
+    String text,
+  ) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center, // Align center
+      children: [
+        Icon(icon, size: 20, color: color), // Slightly larger icon
+        const SizedBox(width: 12), // More padding lateral
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],

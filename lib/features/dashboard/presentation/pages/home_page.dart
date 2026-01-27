@@ -29,6 +29,7 @@ import '../widgets/tree_summary_widget.dart';
 import '../widgets/weather_widget.dart';
 import '../widgets/dashboard_agenda_widget.dart';
 import '../widgets/farm_status_widget.dart';
+import '../widgets/farmers_calendar_widget.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -107,6 +108,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     'buckets',
     'agenda',
     'farm_status',
+    'farmers_calendar',
   ];
 
   final Map<String, String> _widgetNames = {
@@ -116,6 +118,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     'buckets': 'Tasques per Partida',
     'agenda': 'Agenda',
     'farm_status': 'Estat Masia',
+    'farmers_calendar': 'Calendari del Pagès',
   };
 
   Future<void> _loadOrder(FarmConfig config) async {
@@ -203,6 +206,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     'buckets',
     'agenda',
     'farm_status',
+    'farmers_calendar',
   ];
 
   Widget _getWidgetByKey(String key) {
@@ -219,6 +223,8 @@ class _HomePageState extends ConsumerState<HomePage> {
         return const DashboardAgendaWidget();
       case 'farm_status':
         return const FarmStatusWidget();
+      case 'farmers_calendar':
+        return const FarmersCalendarWidget();
       default:
         return const SizedBox.shrink();
     }

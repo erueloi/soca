@@ -7,6 +7,8 @@ import '../widgets/tree_detail.dart';
 import '../widgets/tree_form_sheet.dart';
 import 'species_library_page.dart';
 
+import 'inventory_stats_page.dart';
+
 class TreesPage extends ConsumerStatefulWidget {
   const TreesPage({super.key});
 
@@ -44,6 +46,25 @@ class _TreesPageState extends ConsumerState<TreesPage> {
       appBar: AppBar(
         title: const Text('Arbres de la Soca'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.bar_chart),
+            tooltip: 'Estadístiques',
+            onPressed: () {
+              final trees = treesAsync.asData?.value ?? [];
+              if (trees.isNotEmpty) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => InventoryStatsPage(trees: trees),
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Carregant dades...')),
+                );
+              }
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.local_florist),
             tooltip: 'Biblioteca d\'Espècies',
