@@ -1,5 +1,7 @@
 ﻿# Release Notes
 
+## v1.8.8
+Clima: Bugfix amb la cache i les dades que es mostraven del clima.
 ## v1.8.7
 Clima: Bug al actualitzar dades, ara unificat.
 Obres: Llistat d'obres.
@@ -117,6 +119,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

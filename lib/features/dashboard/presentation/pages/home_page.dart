@@ -574,14 +574,15 @@ class _HomePageState extends ConsumerState<HomePage> {
                       SliverPadding(
                         padding: const EdgeInsets.all(16.0),
                         sliver: SliverGrid(
-                          gridDelegate:
-                              const SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent:
-                                    350.0, // Targets ~3 cols on landscape tablet (1024px)
-                                mainAxisSpacing: 16.0,
-                                crossAxisSpacing: 16.0,
-                                childAspectRatio: 1.1,
-                              ),
+                          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent:
+                                350.0, // Targets ~3 cols on landscape tablet (1024px)
+                            mainAxisSpacing: 16.0,
+                            crossAxisSpacing: 16.0,
+                            childAspectRatio: isWideScreen
+                                ? 1.1
+                                : 0.85, // Taller cards on mobile
+                          ),
                           delegate: SliverChildBuilderDelegate((
                             context,
                             index,

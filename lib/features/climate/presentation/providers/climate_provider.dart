@@ -207,6 +207,30 @@ class ManualClimateController {
       }
     }
 
+    // 4. Auto-Recalculate Soil Balance for affected months
+    if (downloaded > 0) {
+      try {
+        final config = await _ref.read(farmConfigStreamProvider.future);
+        final affectedMonths = <DateTime>{};
+
+        // Add start and end dates (covering the range)
+        // Just iterating unique YYYY-MM from start to end
+        DateTime loop = DateTime(start.year, start.month, 1);
+        final endMonth = DateTime(end.year, end.month, 1);
+
+        while (!loop.isAfter(endMonth)) {
+          affectedMonths.add(loop);
+          loop = DateTime(loop.year, loop.month + 1, 1);
+        }
+
+        for (var month in affectedMonths) {
+          await repository.recalculateSoilBalance(month, config.latitude);
+        }
+      } catch (e) {
+        // debugPrint("Error auto-recalculating: $e");
+      }
+    }
+
     // 4. Invalidate Providers to refresh UI
     _ref.invalidate(climateComparisonProvider);
     _ref.invalidate(climateHistoryProvider);

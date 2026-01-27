@@ -103,8 +103,9 @@ class WeatherWidget extends ConsumerWidget {
                                           title: const Text('Dades Recents'),
                                           content: Text(
                                             'Les dades tenen menys de 4h '
-                                            '(Fa ${diff.inHours}h ${diff.inMinutes % 60}m).\n'
-                                            'Vols forçar una actualització? Això consumirà quota mensual.',
+                                            '(Fa ${diff.inHours}h ${diff.inMinutes % 60}m).\n\n'
+                                            'Vols forçar una actualització? Això consumirà quota mensual.\n\n'
+                                            '⚠️ Nota: Hauràs de recalcular manualment a la pàgina de Clima per actualitzar el balanç.',
                                           ),
                                           actions: [
                                             TextButton(
@@ -428,7 +429,7 @@ class WeatherWidget extends ConsumerWidget {
               _buildMetricHelp(Icons.air, 'Velocitat del vent'),
               _buildMetricHelp(
                 Icons.wb_sunny_outlined,
-                'ET0: Evapotranspiració (Aigua que perd el sòl)',
+                'ET0: Evapotranspiració (Estimació acumulada al final del dia)',
               ),
             ],
           ),

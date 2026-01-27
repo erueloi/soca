@@ -146,67 +146,108 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
         }
       }
 
-      // --- AUTO-SAVE LOGIC (Smart Sync) ---
+      // --- AUTO-SAVE & DATA MERGE LOGIC ---
       // If we have valid data, save it to History DB so chart updates automatically.
+      // AND checks if DB has newer data to display instead of stale cache.
       if (configAsync.fincaId != null) {
         try {
           final now = DateTime.now();
           final today = DateTime(now.year, now.month, now.day);
           // Use fromMeteocat to get consistent Daily Aggregates (Mean Wind, Sum Rain, etc.)
           tempObj ??= ClimateDailyData.fromMeteocat(today, stationData);
-          final tObj = tempObj; // Non-null alias for this block
+          var tObj = tempObj; // Non-null alias
 
-          // Calculate ET0 for the day so far
-          final dailyEt0 = ET0Calculator.calculate(
-            lat: configAsync.latitude,
-            date: now,
-            tMax: tObj.maxTemp,
-            tMin: tObj.minTemp,
-            rhMean: tObj.humidity > 0 ? tObj.humidity : null,
-            windSpeed: tObj.windSpeed > 0 ? tObj.windSpeed : null,
-            radiation: tObj.radiation > 0 ? tObj.radiation : null,
-          );
-
-          // Check if we already have data for today (to preserve manual calcs like soilBalance)
+          bool shouldSave = true;
           double? preservedSoilBalance;
           DateTime? preservedCalculatedAt;
 
           try {
-            // Only fetch today's data (start and end = now)
+            // Check existing DB data
             final existingHistory = await repository.getHistory(now, now);
             if (existingHistory.isNotEmpty) {
               final existing = existingHistory.first;
-              // Verify it's actually the same day (just to be safe)
               if (existing.date.year == now.year &&
                   existing.date.month == now.month &&
                   existing.date.day == now.day) {
-                preservedSoilBalance = existing.soilBalance;
-                preservedCalculatedAt = existing.calculatedAt;
+                // CRITICAL CHECK: If DB is newer than Service (Cache), use DB data and DO NOT overwrite.
+                if (existing.lastUpdated != null &&
+                    tObj.lastUpdated != null &&
+                    existing.lastUpdated!.isAfter(tObj.lastUpdated!)) {
+                  // print("WeatherProvider: DB (${existing.lastUpdated}) is newer than Source (${tObj.lastUpdated}). Using DB data.");
+                  shouldSave = false;
+
+                  // SWAP SOURCE TO DB
+                  tempObj = existing;
+                  tObj = existing;
+
+                  // Update local vars for the View Model validation
+                  // ideally we should use the existing.maxTemp etc.
+                  // But the view uses 'temp', 'humidity', 'rain', 'windSpeed' vars.
+                  // Let's update them to match the "Best Data".
+                  // Note: 'temp' in widget is usually current temp. 'maxTemp' is high.
+                  // Only 'rain', 'windSpeed', 'humidity' are stored in DailyData.
+                  // 'temp' (Current) is NOT in DailyData (only min/max).
+                  // So we keep 'temp' from service (Current Obs) but update aggregates?
+                  // No, if the daily data (rain) in DB is 0.1 and Service says 0, we must show 0.1.
+
+                  // Let's trust the DB for aggregates:
+                  rain = existing.rain;
+                  windSpeed = existing.windSpeed;
+                  humidity = existing.humidity
+                      .toInt(); // This is avg or max? DailyData stores mean/max depending on usage.
+                  // Actually DailyData humidity is mean?
+                  // Let's check ClimateDailyData definition. Usually it stores what we gave it.
+
+                  // For ET0 and Advice, we rely on 'tObj' which is now 'existing'.
+                } else {
+                  // Service is newer (or same).
+                  preservedSoilBalance = existing.soilBalance;
+                  preservedCalculatedAt = existing.calculatedAt;
+                }
               }
             }
           } catch (_) {
-            // Ignore read errors, proceed with overwrite if must
+            // Ignore read errors
           }
 
-          final toSave = ClimateDailyData(
-            date: tObj.date,
-            maxTemp: tObj.maxTemp,
-            minTemp: tObj.minTemp,
-            rain: tObj.rain,
-            rainAccumulated: tObj.rainAccumulated,
-            humidity: tObj.humidity,
-            radiation: tObj.radiation,
-            windSpeed: tObj.windSpeed,
-            et0: dailyEt0,
-            isMock: false,
-            fincaId: configAsync.fincaId,
-            lastUpdated: tObj.lastUpdated,
-            soilBalance: preservedSoilBalance, // Preserve!
-            calculatedAt: preservedCalculatedAt, // Preserve!
-          );
+          if (shouldSave) {
+            // Calculate ET0 for the day so far
+            final dailyEt0 = ET0Calculator.calculate(
+              lat: configAsync.latitude,
+              date: now,
+              tMax: tObj.maxTemp,
+              tMin: tObj.minTemp,
+              rhMean: tObj.humidity > 0 ? tObj.humidity : null,
+              windSpeed: tObj.windSpeed > 0 ? tObj.windSpeed : null,
+              radiation: tObj.radiation > 0 ? tObj.radiation : null,
+            );
 
-          // Fire and forget save
-          repository.saveHistory([toSave]);
+            final toSave = ClimateDailyData(
+              date: tObj.date,
+              maxTemp: tObj.maxTemp,
+              minTemp: tObj.minTemp,
+              rain: tObj.rain,
+              rainAccumulated: tObj.rainAccumulated,
+              humidity: tObj.humidity,
+              radiation: tObj.radiation,
+              windSpeed: tObj.windSpeed,
+              et0: dailyEt0,
+              isMock: false,
+              fincaId: configAsync.fincaId,
+              lastUpdated: tObj.lastUpdated,
+              soilBalance: preservedSoilBalance,
+              calculatedAt: preservedCalculatedAt,
+            );
+
+            // Fire and forget save
+            repository.saveHistory([toSave]);
+
+            // Update local ET0 var for display
+            et0 = dailyEt0;
+          } else {
+            // If we didn't save (used DB), use the DB's ET0
+            et0 = tObj.et0;
+          }
         } catch (e) {
           // Ignore parsing errors during auto-save
         }

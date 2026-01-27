@@ -289,6 +289,10 @@ class ClimaPage extends ConsumerWidget {
             },
           );
 
+      // Invalidate Providers to refresh UI
+      ref.invalidate(climateComparisonProvider);
+      ref.invalidate(climateHistoryProvider);
+
       // Close Dialog
       if (context.mounted) Navigator.pop(context);
 

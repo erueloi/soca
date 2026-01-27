@@ -387,6 +387,8 @@ class _PathologyDetailViewState extends ConsumerState<PathologyDetailView> {
       final XFile? image = await picker.pickImage(source: source);
       if (image == null) return;
 
+      if (!mounted) return;
+
       // Ask for date
       final DateTime? pickedDate = await showDatePicker(
         context: context,

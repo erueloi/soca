@@ -42,12 +42,14 @@ class ClimateAnalyticsSection extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    const Icon(Icons.insights, color: Colors.blue),
-                    const SizedBox(width: 8),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        const Icon(Icons.insights, color: Colors.blue),
+                        const SizedBox(width: 8),
                         const Text(
                           'Anàlisi',
                           style: TextStyle(
@@ -70,14 +72,31 @@ class ClimateAnalyticsSection extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const Spacer(),
                     if (sortedDays.isNotEmpty)
-                      Text(
-                        _getLastUpdatedString(sortedDays.last),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.withValues(alpha: 0.8),
-                          fontStyle: FontStyle.italic,
+                      Flexible(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              _getDateString(sortedDays.last),
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.withValues(alpha: 0.8),
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                            if (sortedDays.last.calculatedAt != null)
+                              Text(
+                                _getRecalculatedString(sortedDays.last),
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.withValues(alpha: 0.8),
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                   ],
@@ -184,7 +203,7 @@ class ClimateAnalyticsSection extends StatelessWidget {
     return "Actualment la terra conserva ${currentBalance.toStringAsFixed(1)} mm de reserva, principalment de $source. \n\nNo es preveu necessitat de reg fins d'aquí a $daysToIrrigation dies (basat en ETc mitjana de ${avgEtc.toStringAsFixed(1)} mm/dia).";
   }
 
-  String _getLastUpdatedString(ClimateDailyData lastDay) {
+  String _getDateString(ClimateDailyData lastDay) {
     final String dateStr = DateFormat('dd/MM', 'ca').format(lastDay.date);
     String txt = "Dades: $dateStr";
 
@@ -195,16 +214,18 @@ class ClimateAnalyticsSection extends StatelessWidget {
       ).format(lastDay.lastUpdated!);
       txt += " ($timeStr)";
     }
+    return txt;
+  }
 
+  String _getRecalculatedString(ClimateDailyData lastDay) {
     if (lastDay.calculatedAt != null) {
       final String calcStr = DateFormat(
         'dd/MM HH:mm',
         'ca',
       ).format(lastDay.calculatedAt!);
-      txt += " | Recàlcul: $calcStr";
+      return "Recàlcul: $calcStr";
     }
-
-    return txt;
+    return "";
   }
 
   void _showExplanationDialog(BuildContext context) {
@@ -497,7 +518,7 @@ class _ClimateBalanceTable extends StatelessWidget {
       9: FlexColumnWidth(1.2), // Balanç
     };
 
-    final rows = days.where((d) => d.soilBalance != null).toList();
+    final rows = days; // Show all days, even if balance is null
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -551,10 +572,12 @@ class _ClimateBalanceTable extends StatelessWidget {
                               TableCellVerticalAlignment.middle,
                           children: rows.map((d) {
                             final etc = d.et0 * 0.6;
-                            final sb = d.soilBalance!;
+                            final sb = d.soilBalance;
 
                             Color? balanceColor;
-                            if (sb > -5) {
+                            if (sb == null) {
+                              balanceColor = Colors.transparent;
+                            } else if (sb > -5) {
                               balanceColor = Colors.green.shade50; // Wet
                             } else if (sb < -15) {
                               balanceColor = Colors.red.shade50; // Critical
@@ -629,9 +652,10 @@ class _ClimateBalanceTable extends StatelessWidget {
                                 Padding(
                                   padding: const EdgeInsets.all(8.0),
                                   child: Text(
-                                    sb.toStringAsFixed(1),
-                                    style: const TextStyle(
+                                    sb?.toStringAsFixed(1) ?? '-',
+                                    style: TextStyle(
                                       fontWeight: FontWeight.bold,
+                                      color: sb == null ? Colors.grey : null,
                                     ),
                                     textAlign: TextAlign.center,
                                   ),
