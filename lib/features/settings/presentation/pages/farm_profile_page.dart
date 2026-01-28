@@ -321,7 +321,10 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
           data: (config) {
             // Initialize controllers only once with data
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              _updateControllers(config);
+              if (!_initialDataLoaded) {
+                _updateControllers(config);
+                if (mounted) setState(() {});
+              }
             });
 
             return TabBarView(

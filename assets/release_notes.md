@@ -1,5 +1,8 @@
 ﻿# Release Notes
 
+## v1.8.11
+Clima: Bugfix amb les funcions que actualitzen les dades durant el dia i les dates.
+Configuració Finca: Carreguem bé les zones.
 ## v1.8.10
 Arbres: Nova pàgina estadistiques.
 Nou widget de poda, collita, plantació.
@@ -127,6 +130,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

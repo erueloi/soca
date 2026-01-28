@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class ClimateDailyData {
   final DateTime date;
   final double maxTemp;
@@ -160,7 +162,7 @@ class ClimateDailyData {
   // Serialization
   Map<String, dynamic> toMap() {
     return {
-      'date': date.toIso8601String(),
+      'date': date.toIso8601String().split('T').first, // Store as YYYY-MM-DD
       'maxTemp': maxTemp,
       'minTemp': minTemp,
       'rain': rain,
@@ -171,14 +173,15 @@ class ClimateDailyData {
       'et0': et0,
       'fincaId': fincaId,
       if (soilBalance != null) 'soilBalance': soilBalance,
-      if (lastUpdated != null) 'lastUpdated': lastUpdated!.toIso8601String(),
-      if (calculatedAt != null) 'calculatedAt': calculatedAt!.toIso8601String(),
+      if (lastUpdated != null) 'lastUpdated': Timestamp.fromDate(lastUpdated!),
+      if (calculatedAt != null)
+        'calculatedAt': Timestamp.fromDate(calculatedAt!),
     };
   }
 
   factory ClimateDailyData.fromMap(Map<String, dynamic> map) {
     return ClimateDailyData(
-      date: DateTime.parse(map['date']),
+      date: _parseDateTime(map['date']) ?? DateTime.now(),
       maxTemp: map['maxTemp']?.toDouble() ?? 0.0,
       minTemp: map['minTemp']?.toDouble() ?? 0.0,
       rain: map['rain']?.toDouble() ?? 0.0,
@@ -189,13 +192,16 @@ class ClimateDailyData {
       et0: map['et0']?.toDouble() ?? 0.0,
       fincaId: map['fincaId'],
       soilBalance: map['soilBalance']?.toDouble(),
-      lastUpdated: map['lastUpdated'] != null
-          ? DateTime.parse(map['lastUpdated'])
-          : null,
-      calculatedAt: map['calculatedAt'] != null
-          ? DateTime.parse(map['calculatedAt'])
-          : null,
+      lastUpdated: _parseDateTime(map['lastUpdated']),
+      calculatedAt: _parseDateTime(map['calculatedAt']),
     );
+  }
+
+  static DateTime? _parseDateTime(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value);
+    return null;
   }
 }
 
@@ -212,9 +218,9 @@ class ClimateMonthComparison {
 
   // Helpers
   double get totalRainCurrent =>
-      currentData.fold(0.0, (sum, d) => sum + d.rain);
+      currentData.fold(0.0, (total, d) => total + d.rain);
   double get totalRainPrevious =>
-      previousData.fold(0.0, (sum, d) => sum + d.rain);
+      previousData.fold(0.0, (total, d) => total + d.rain);
 
   double get diffPercentage {
     if (totalRainPrevious == 0) return totalRainCurrent > 0 ? 100.0 : 0.0;

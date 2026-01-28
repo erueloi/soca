@@ -86,10 +86,15 @@ class ClimateRepository {
     final startDay = DateTime(start.year, start.month, start.day);
     final endDay = DateTime(end.year, end.month, end.day);
 
-    final startStr = startDay.toIso8601String();
+    final startStr = startDay.toIso8601String().split('T').first;
+    // For end date, we want inclusive, but string comparison is lexicographical.
+    // If we want "2026-01-28", query "matches" 2026-01-28.
+    // Actually, simply using < next_day works best for string range.
     final endStr = endDay
         .add(const Duration(days: 1))
-        .toIso8601String(); // Exclusive upper bound (Next Day 00:00)
+        .toIso8601String()
+        .split('T')
+        .first;
 
     if (fincaId == null) return [];
 
@@ -123,7 +128,9 @@ class ClimateRepository {
           .get();
 
       if (snapshot.docs.isNotEmpty) {
-        return DateTime.parse(snapshot.docs.first.data()['date']);
+        final val = snapshot.docs.first.data()['date'];
+        if (val is Timestamp) return val.toDate();
+        if (val is String) return DateTime.tryParse(val);
       }
     } catch (e) {
       debugPrint('ClimateRepository: Error getting last date: $e');

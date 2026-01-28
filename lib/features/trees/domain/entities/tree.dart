@@ -17,7 +17,7 @@ class TreeEvent {
 
   factory TreeEvent.fromMap(Map<String, dynamic> map) {
     return TreeEvent(
-      date: (map['date'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      date: _parseDate(map['date']) ?? DateTime.now(),
       photoUrl: map['photoUrl'],
       note: map['note'] ?? '',
     );
@@ -196,8 +196,7 @@ class Tree {
       photoUrl: map['photoUrl'],
       latitude: (map['latitude'] as num?)?.toDouble() ?? 0.0,
       longitude: (map['longitude'] as num?)?.toDouble() ?? 0.0,
-      plantingDate:
-          (map['plantingDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      plantingDate: _parseDate(map['plantingDate']) ?? DateTime.now(),
       status: map['status'] ?? 'Viable',
       notes: map['notes'] ?? '',
       fincaId: map['fincaId'],
@@ -218,7 +217,7 @@ class Tree {
       trunkDiameter: (map['trunkDiameter'] as num?)?.toDouble(),
       soilBalance: (map['soilBalance'] as num?)?.toDouble(),
       calculatedRegArea: (map['calculatedRegArea'] as num?)?.toDouble(),
-      lastBalanceUpdate: (map['lastBalanceUpdate'] as Timestamp?)?.toDate(),
+      lastBalanceUpdate: _parseDateTime(map['lastBalanceUpdate']),
       timeline: map['timeline'] != null
           ? (map['timeline'] as List<dynamic>)
                 .map((e) => TreeEvent.fromMap(e as Map<String, dynamic>))
@@ -226,4 +225,13 @@ class Tree {
           : [],
     );
   }
+
+  static DateTime? _parseDateTime(dynamic value) => _parseDate(value);
+}
+
+DateTime? _parseDate(dynamic value) {
+  if (value == null) return null;
+  if (value is Timestamp) return value.toDate();
+  if (value is String) return DateTime.tryParse(value);
+  return null;
 }

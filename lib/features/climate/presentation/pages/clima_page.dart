@@ -8,14 +8,18 @@ import 'package:soca/features/settings/presentation/providers/settings_provider.
 import 'package:soca/features/trees/presentation/providers/trees_provider.dart';
 import 'package:soca/features/trees/data/repositories/species_repository.dart';
 
-class ClimaPage extends ConsumerWidget {
+import 'package:soca/test_integration.dart'; // Temporary
+import 'package:soca/features/dashboard/presentation/providers/weather_provider.dart';
+
+class ClimaPage extends ConsumerStatefulWidget {
   const ClimaPage({super.key});
 
-  Future<void> _downloadData(
-    BuildContext context,
-    WidgetRef ref,
-    DateTime initialDate,
-  ) async {
+  @override
+  ConsumerState<ClimaPage> createState() => _ClimaPageState();
+}
+
+class _ClimaPageState extends ConsumerState<ClimaPage> {
+  Future<void> _downloadData(BuildContext context, DateTime initialDate) async {
     final DateTime now = DateTime.now();
     final DateTime firstDate = DateTime(2000);
 
@@ -196,7 +200,6 @@ class ClimaPage extends ConsumerWidget {
 
   Future<void> _recalculateData(
     BuildContext context,
-    WidgetRef ref,
     DateTime selectedDate,
   ) async {
     final progressNotifier = ValueNotifier<Map<String, dynamic>>({
@@ -292,6 +295,7 @@ class ClimaPage extends ConsumerWidget {
       // Invalidate Providers to refresh UI
       ref.invalidate(climateComparisonProvider);
       ref.invalidate(climateHistoryProvider);
+      ref.invalidate(weatherProvider); // Refresh Widget
 
       // Close Dialog
       if (context.mounted) Navigator.pop(context);
@@ -319,7 +323,7 @@ class ClimaPage extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     // 1. Watch Data
     final comparisonAsync = ref.watch(climateComparisonProvider);
     final selectedDate = ref.watch(selectedMonthProvider);
@@ -358,7 +362,7 @@ class ClimaPage extends ConsumerWidget {
             ),
           ],
         ),
-        actions: _buildActions(context, ref, selectedDate),
+        actions: _buildActions(context, selectedDate),
       ),
       body: comparisonAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -472,11 +476,7 @@ class ClimaPage extends ConsumerWidget {
     );
   }
 
-  List<Widget> _buildActions(
-    BuildContext context,
-    WidgetRef ref,
-    DateTime selectedDate,
-  ) {
+  List<Widget> _buildActions(BuildContext context, DateTime selectedDate) {
     final isCompact = MediaQuery.of(context).size.width < 600;
 
     if (isCompact) {
@@ -485,9 +485,9 @@ class ClimaPage extends ConsumerWidget {
           icon: const Icon(Icons.more_vert),
           onSelected: (value) async {
             if (value == 'download') {
-              _downloadData(context, ref, selectedDate);
+              _downloadData(context, selectedDate);
             } else if (value == 'recalc') {
-              _recalculateData(context, ref, selectedDate);
+              _recalculateData(context, selectedDate);
             } else if (value == 'mock') {
               final picked = await showDateRangePicker(
                 context: context,
@@ -561,14 +561,24 @@ class ClimaPage extends ConsumerWidget {
     } else {
       return [
         IconButton(
+          icon: const Icon(Icons.science),
+          tooltip: 'Test Integration',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const TestPage()),
+            );
+          },
+        ),
+        IconButton(
           icon: const Icon(Icons.cloud_download, color: Colors.blueGrey),
           tooltip: 'Descarregar dades manualment',
-          onPressed: () => _downloadData(context, ref, selectedDate),
+          onPressed: () => _downloadData(context, selectedDate),
         ),
         IconButton(
           icon: const Icon(Icons.calculate, color: Colors.blueGrey),
           tooltip: 'Recalcular model de reg (RuralCat)',
-          onPressed: () => _recalculateData(context, ref, selectedDate),
+          onPressed: () => _recalculateData(context, selectedDate),
         ),
         PopupMenuButton<String>(
           icon: const Icon(Icons.build_circle_outlined),

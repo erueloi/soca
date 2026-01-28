@@ -226,7 +226,7 @@ class WeatherWidget extends ConsumerWidget {
                       // Top Right Timestamp
                       if (weather.lastUpdated != null)
                         Text(
-                          'Act: ${DateFormat('dd/MM HH:mm').format(weather.lastUpdated!)}',
+                          'Act: ${DateFormat('dd/MM HH:mm').format(weather.lastUpdated!.toLocal())}',
                           style: TextStyle(
                             fontSize: 10,
                             color: Colors.grey.withValues(alpha: 0.6),
