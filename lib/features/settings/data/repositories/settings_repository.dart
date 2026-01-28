@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import '../../domain/entities/farm_config.dart';
 
@@ -67,9 +68,28 @@ class SettingsRepository {
     data['lastUpdatedAt'] = FieldValue.serverTimestamp();
 
     // Save to 'finques' collection
+    // Save to 'finques' collection
     await _firestore
         .collection('finques')
         .doc(docId)
         .set(data, SetOptions(merge: true));
+  }
+
+  Future<String?> uploadCoverPhoto(Uint8List bytes, String fincaId) async {
+    try {
+      final storageRef = FirebaseStorage.instance.ref().child(
+        'finques/$fincaId/cover_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      );
+
+      final uploadTask = await storageRef.putData(
+        bytes,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+      final url = await uploadTask.ref.getDownloadURL();
+      return url;
+    } catch (e) {
+      debugPrint('SettingsRepo: Error uploading cover photo: $e');
+      return null;
+    }
   }
 }

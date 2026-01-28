@@ -585,27 +585,47 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
 
   Widget _buildPhaseSelector(FarmConfig config) {
     final phases = config.taskPhases;
-    // Ensure current phase is in list or add it temporarily if not found (edge case)
+    // Map TaskPhases to DropdownItems
     final items = [
       const DropdownMenuItem(value: '', child: Text('Cap')),
-      ...phases.map((p) => DropdownMenuItem(value: p, child: Text(p))),
+      ...phases.map(
+        (p) => DropdownMenuItem(
+          value: p.name,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                IconData(p.iconCode, fontFamily: 'MaterialIcons'),
+                color: Color(int.parse(p.colorHex, radix: 16)),
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(p.name),
+            ],
+          ),
+        ),
+      ),
     ];
 
-    // If _phase has a value but it's not in the list, we might want to still show it or reset it.
-    // DropdownButtonFormField throws if value is not in items.
-    // So we check:
-    final bool valueExists = _phase.isEmpty || phases.contains(_phase);
-    final String? effectiveValue = valueExists
-        ? (_phase.isEmpty ? null : _phase)
-        : null;
+    // Check validity of current _phase
+    // Now comparing phase name string against phase objects
+    final bool valueExists =
+        _phase.isEmpty || phases.any((p) => p.name == _phase);
 
-    // If value doesn't exist (e.g. was deleted from config), we default to null (Cap).
-    // Or we could add a temporary item for the missing value. For now, reset to null is safer.
+    // If configured phase was deleted, we might want to show it as text only?
+    // Or just let it fall to null if invalid?
+    // Let's preserve it as a "Unknown" item if it exists but not in config
+    List<DropdownMenuItem<String>> effectiveItems = List.from(items);
+    if (!valueExists && _phase.isNotEmpty) {
+      effectiveItems.add(
+        DropdownMenuItem(value: _phase, child: Text('$_phase (Arxivat)')),
+      );
+    }
 
     return DropdownButtonFormField<String>(
-      initialValue: effectiveValue,
+      initialValue: _phase,
       decoration: const InputDecoration(labelText: 'Fase / Etiqueta'),
-      items: items,
+      items: effectiveItems,
       onChanged: widget.isReadOnly
           ? null
           : (val) => setState(() => _phase = val ?? ''),

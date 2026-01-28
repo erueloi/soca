@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import '../../domain/entities/farm_config.dart';
 import '../providers/settings_provider.dart';
+import '../../../tasks/presentation/providers/tasks_provider.dart';
 
 class AppConfigPage extends ConsumerStatefulWidget {
   const AppConfigPage({super.key});
@@ -13,8 +14,7 @@ class AppConfigPage extends ConsumerStatefulWidget {
 
 class _AppConfigPageState extends ConsumerState<AppConfigPage> {
   // Phases
-  late List<String> _phases;
-  final TextEditingController _phaseController = TextEditingController();
+  late List<TaskPhase> _phases;
 
   // Authorized Emails
   late List<String> _authorizedEmails;
@@ -203,52 +203,233 @@ class _AppConfigPageState extends ConsumerState<AppConfigPage> {
   Widget _buildPhasesList() {
     return Column(
       children: [
-        ..._phases.asMap().entries.map((entry) {
-          final index = entry.key;
-          final phase = entry.value;
-          return ListTile(
-            key: ValueKey('phase_$index'),
-            dense: true,
-            title: Text(phase),
-            trailing: IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () => setState(() => _phases.removeAt(index)),
+        if (_phases.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(8.0),
+            child: Text(
+              'No hi ha fases definides.',
+              style: TextStyle(color: Colors.grey),
             ),
-          );
-        }),
-        const SizedBox(height: 8),
-        Row(
+          ),
+        ReorderableListView(
+          shrinkWrap: true,
+          buildDefaultDragHandles: false,
+          physics: const NeverScrollableScrollPhysics(),
+          onReorder: (oldIndex, newIndex) {
+            setState(() {
+              if (oldIndex < newIndex) {
+                newIndex -= 1;
+              }
+              final item = _phases.removeAt(oldIndex);
+              _phases.insert(newIndex, item);
+            });
+          },
           children: [
-            Expanded(
-              child: TextField(
-                controller: _phaseController,
-                decoration: const InputDecoration(
-                  labelText: 'Nova Fase',
-                  border: OutlineInputBorder(),
-                  isDense: true,
+            for (int i = 0; i < _phases.length; i++)
+              ListTile(
+                key: ValueKey('phase_${_phases[i].name}'),
+                dense: true,
+                leading: CircleAvatar(
+                  backgroundColor: Color(
+                    int.parse(_phases[i].colorHex, radix: 16),
+                  ),
+                  radius: 16,
+                  child: Icon(
+                    IconData(_phases[i].iconCode, fontFamily: 'MaterialIcons'),
+                    color: Colors.white,
+                    size: 16,
+                  ),
                 ),
-                onSubmitted: (_) => _addPhase(),
+                title: Text(_phases[i].name),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.edit),
+                      onPressed: () => _editPhase(i),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      onPressed: () => _deletePhase(i),
+                    ),
+                    ReorderableDragStartListener(
+                      index: i,
+                      child: const Padding(
+                        padding: EdgeInsets.only(left: 8.0),
+                        child: Icon(Icons.drag_handle, color: Colors.grey),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-              icon: const Icon(Icons.add_circle, size: 32),
-              color: Colors.green,
-              onPressed: _addPhase,
-            ),
           ],
+        ),
+        const SizedBox(height: 8),
+        ElevatedButton.icon(
+          onPressed: _addNewPhase,
+          icon: const Icon(Icons.add),
+          label: const Text('Afegir Nova Fase'),
         ),
       ],
     );
   }
 
-  void _addPhase() {
-    if (_phaseController.text.trim().isNotEmpty) {
-      setState(() {
-        _phases.add(_phaseController.text.trim());
-        _phaseController.clear();
-      });
+  void _addNewPhase() {
+    _showPhaseDialog();
+  }
+
+  void _editPhase(int index) {
+    _showPhaseDialog(index: index, existing: _phases[index]);
+  }
+
+  Future<void> _deletePhase(int index) async {
+    final phaseName = _phases[index].name;
+    final repo = ref.read(tasksRepositoryProvider);
+    // Integrity Check
+    try {
+      final tasks = await repo.getTasksByPhase(phaseName);
+      if (tasks.isNotEmpty) {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('⚠️ Fase en ús'),
+            content: Text(
+              'Aquesta fase s\'està utilitzant en ${tasks.length} tasques.\n'
+              'Si l\'esborres, aquestes tasques mantindran el nom "$phaseName" però perdran la icona i configuració.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel·lar'),
+              ),
+              TextButton(
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  setState(() => _phases.removeAt(index));
+                },
+                child: const Text('Esborrar igualment'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+    } catch (e) {
+      // If we can't check, just warn generically
+      debugPrint('Error checking tasks usage: $e');
     }
+
+    setState(() => _phases.removeAt(index));
+  }
+
+  Future<void> _showPhaseDialog({int? index, TaskPhase? existing}) async {
+    final nameCtrl = TextEditingController(text: existing?.name ?? '');
+    Color currentColor = existing != null
+        ? Color(int.parse(existing.colorHex, radix: 16))
+        : Colors.blue;
+    int currentIconCode = existing?.iconCode ?? Icons.label.codePoint;
+
+    final bool isEditing = existing != null;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            title: Text(isEditing ? 'Editar Fase' : 'Nova Fase'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Nom',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Text('Color: '),
+                      GestureDetector(
+                        onTap: () {
+                          showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Triar Color'),
+                              content: SingleChildScrollView(
+                                child: BlockPicker(
+                                  pickerColor: currentColor,
+                                  onColorChanged: (color) {
+                                    setStateDialog(() => currentColor = color);
+                                    Navigator.pop(context);
+                                  },
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                        child: CircleAvatar(backgroundColor: currentColor),
+                      ),
+                      const Spacer(),
+                      const Text('Icona: '),
+                      IconButton(
+                        icon: Icon(
+                          IconData(
+                            currentIconCode,
+                            fontFamily: 'MaterialIcons',
+                          ),
+                        ),
+                        onPressed: () async {
+                          final icon = await _showIconPicker(context);
+                          if (icon != null) {
+                            setStateDialog(
+                              () => currentIconCode = icon.codePoint,
+                            );
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel·lar'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (nameCtrl.text.isEmpty) return;
+
+                  final newPhase = TaskPhase(
+                    name: nameCtrl.text.trim(),
+                    colorHex: currentColor
+                        .toARGB32()
+                        .toRadixString(16)
+                        .padLeft(8, '0')
+                        .toUpperCase(),
+                    iconCode: currentIconCode,
+                  );
+
+                  if (isEditing) {
+                    setState(() => _phases[index!] = newPhase);
+                  } else {
+                    setState(() => _phases.add(newPhase));
+                  }
+                  Navigator.pop(context);
+                },
+                child: const Text('Guardar'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   // --- CATEGORIES ---
@@ -256,38 +437,64 @@ class _AppConfigPageState extends ConsumerState<AppConfigPage> {
   Widget _buildCategoriesList() {
     return Column(
       children: [
-        ..._categories.asMap().entries.map((entry) {
-          final index = entry.key;
-          final cat = entry.value;
-          return Card(
-            margin: const EdgeInsets.only(bottom: 8),
-            child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Color(int.parse(cat.colorHex, radix: 16)),
-                child: Icon(
-                  IconData(cat.iconCode, fontFamily: 'MaterialIcons'),
-                  color: Colors.white,
-                  size: 20,
+        ReorderableListView(
+          shrinkWrap: true,
+          buildDefaultDragHandles: false, // Prevent duplicate handles
+          physics: const NeverScrollableScrollPhysics(),
+          onReorder: (oldIndex, newIndex) {
+            setState(() {
+              if (oldIndex < newIndex) {
+                newIndex -= 1;
+              }
+              final item = _categories.removeAt(oldIndex);
+              _categories.insert(newIndex, item);
+            });
+          },
+          children: [
+            for (int i = 0; i < _categories.length; i++)
+              Card(
+                key: ValueKey(_categories[i].id),
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Color(
+                      int.parse(_categories[i].colorHex, radix: 16),
+                    ),
+                    child: Icon(
+                      IconData(
+                        _categories[i].iconCode,
+                        fontFamily: 'MaterialIcons',
+                      ),
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(_categories[i].name),
+                  subtitle: Text('ID: ${_categories[i].id}'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit),
+                        onPressed: () => _editCategory(i),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _deleteCategory(i),
+                      ),
+                      ReorderableDragStartListener(
+                        index: i,
+                        child: const Padding(
+                          padding: EdgeInsets.only(left: 8.0),
+                          child: Icon(Icons.drag_handle, color: Colors.grey),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              title: Text(cat.name),
-              subtitle: Text('ID: ${cat.id}'),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.edit),
-                    onPressed: () => _editCategory(index),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    onPressed: () => _deleteCategory(index),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }),
+          ],
+        ),
         const SizedBox(height: 8),
         ElevatedButton.icon(
           onPressed: _addNewCategory,
@@ -306,10 +513,7 @@ class _AppConfigPageState extends ConsumerState<AppConfigPage> {
     _showCategoryDialog(index: index, existing: _categories[index]);
   }
 
-  void _deleteCategory(int index) {
-    // Prevent deleting 'material' as it relies on it?
-    // Ideally we would check usage, but for now just warn or allow.
-    // Let's protect 'material' just in case as it's a fallback.
+  Future<void> _deleteCategory(int index) async {
     if (_categories[index].id == 'material') {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -319,13 +523,50 @@ class _AppConfigPageState extends ConsumerState<AppConfigPage> {
       return;
     }
 
+    final categoryId = _categories[index].id;
+    final repo = ref.read(tasksRepositoryProvider);
+    // Integrity Check
+    try {
+      final taskCount = await repo.countTasksByCategory(categoryId);
+      if (taskCount > 0) {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('⚠️ Categoria en ús'),
+            content: Text(
+              'Aquesta categoria s\'utilitza en $taskCount tasques.\n'
+              'Si l\'esborres, aquestes despeses poden quedar sense categoria.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel·lar'),
+              ),
+              TextButton(
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  setState(() => _categories.removeAt(index));
+                },
+                child: const Text('Esborrar igualment'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+    } catch (e) {
+      // If verification fails, allow standard delete with warning
+    }
+
+    if (!mounted) return;
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Eliminar Categoria?'),
-        content: const Text(
-          'Si elimines aquesta categoria, les tasques existents es podrien veure afectades (es mostraran com a desconegudes o material).',
-        ),
+        content: const Text('Segur que vols eliminar aquesta categoria?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -503,6 +744,11 @@ class _AppConfigPageState extends ConsumerState<AppConfigPage> {
       Icons.electric_bolt,
       Icons.format_paint,
       Icons.brush,
+      Icons.shopping_cart,
+      Icons.calendar_today,
+      Icons.warning,
+      Icons.flag,
+      Icons.label,
     ];
 
     return await showDialog<IconData>(

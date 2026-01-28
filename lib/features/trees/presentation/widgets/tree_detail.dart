@@ -23,6 +23,8 @@ import '../pages/species_library_page.dart';
 import '../pages/tree_growth_timeline_page.dart';
 import 'growth_entry_form_sheet.dart';
 import '../../domain/entities/growth_entry.dart';
+import '../../../settings/presentation/providers/settings_provider.dart';
+import '../../../settings/domain/entities/farm_config.dart';
 
 class TreeDetail extends ConsumerStatefulWidget {
   final Tree tree;
@@ -60,6 +62,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
   bool _isVeteran = false; // Added state
   String? _vigor;
   String? _selectedSpeciesId; // Added for Species Library Link
+  String? _selectedZoneId; // [NEW] PDC Zone
 
   late Tree _displayTree;
 
@@ -106,6 +109,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     _isVeteran = widget.tree.isVeteran; // Init
     _vigor = widget.tree.vigor;
     _selectedSpeciesId = widget.tree.speciesId; // Init from tree
+    _selectedZoneId = widget.tree.zoneId; // [NEW] Init from tree
   }
 
   @override
@@ -179,6 +183,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
       vigor: _vigor,
       isVeteran: _isVeteran, // Save state
       speciesId: _selectedSpeciesId, // Included in update
+      zoneId: _selectedZoneId, // [NEW] Save zone
       reference: newRef.isEmpty ? null : newRef,
     );
 
@@ -1102,6 +1107,99 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
             ],
           ),
         ),
+
+        // [NEW] Zone PDC Section (Promoted above buttons)
+        Consumer(
+          builder: (context, ref, child) {
+            final configAsync = ref.watch(farmConfigStreamProvider);
+            return configAsync.when(
+              data: (config) {
+                if (config.permacultureZones.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+
+                if (_isEditing) {
+                  return Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: DropdownButtonFormField<String?>(
+                      key: ValueKey('zone_$_selectedZoneId'),
+                      decoration: const InputDecoration(
+                        labelText: 'Zona PDC',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.grid_view, color: Colors.blue),
+                      ),
+                      initialValue: _selectedZoneId,
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('Cap (Sense zona)'),
+                        ),
+                        ...config.permacultureZones.map((zone) {
+                          return DropdownMenuItem<String?>(
+                            value: zone.id,
+                            child: Text(zone.name),
+                          );
+                        }),
+                      ],
+                      onChanged: (v) => setState(() => _selectedZoneId = v),
+                    ),
+                  );
+                } else {
+                  // View mode
+                  final zone = config.permacultureZones
+                      .cast<PermacultureZone?>()
+                      .firstWhere(
+                        (z) => z?.id == _selectedZoneId,
+                        orElse: () => null,
+                      );
+
+                  final hasZone = zone != null;
+                  final color = hasZone
+                      ? Color(int.parse(zone.colorHex))
+                      : Colors.grey.shade400;
+
+                  return Padding(
+                    padding: const EdgeInsets.only(
+                      top: 16.0,
+                      left: 16.0,
+                      right: 16.0,
+                    ),
+                    child: Card(
+                      elevation: 0,
+                      color: color.withOpacity(0.1),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: color.withOpacity(0.5)),
+                      ),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: color,
+                          radius: 12,
+                          child: Icon(
+                            hasZone ? Icons.grid_view : Icons.grid_off,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                        ),
+                        title: Text(
+                          hasZone ? zone.name : 'Sense zona PDC',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: color,
+                          ),
+                        ),
+                        subtitle: const Text('Zona de Permacultura PDC'),
+                      ),
+                    ),
+                  );
+                }
+              },
+              loading: () => const SizedBox.shrink(),
+              error: (e, s) => const SizedBox.shrink(),
+            );
+          },
+        ),
+
         if (!_isEditing)
           Padding(
             padding: const EdgeInsets.all(16.0),
@@ -1144,6 +1242,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
               ),
             ),
           ),
+        const SizedBox(height: 24),
       ],
     );
   }

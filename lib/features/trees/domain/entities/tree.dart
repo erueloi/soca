@@ -46,6 +46,7 @@ class Tree {
   final String? vigor; // Alt, Mitjà, Baix
   final double? kc; // Crop Coefficient (coeficient_kc)
   final String? speciesId; // Link to Species Library
+  final String? zoneId; // Link to FarmZone (Bancal)
   final String? reference; // e.g. OLI-001
   final List<TreeEvent> timeline;
 
@@ -82,6 +83,7 @@ class Tree {
     this.vigor,
     this.kc,
     this.speciesId,
+    this.zoneId,
     this.reference,
     this.timeline = const [],
     this.isVeteran = false,
@@ -112,6 +114,7 @@ class Tree {
     String? vigor,
     double? kc,
     String? speciesId,
+    String? zoneId,
     String? reference,
     List<TreeEvent>? timeline,
     bool? isVeteran,
@@ -142,6 +145,7 @@ class Tree {
       vigor: vigor ?? this.vigor,
       kc: kc ?? this.kc,
       speciesId: speciesId ?? this.speciesId,
+      zoneId: zoneId ?? this.zoneId,
       reference: reference ?? this.reference,
       timeline: timeline ?? this.timeline,
       isVeteran: isVeteran ?? this.isVeteran,
@@ -174,6 +178,7 @@ class Tree {
       'vigor': vigor,
       'coeficient_kc': kc,
       'speciesId': speciesId,
+      'zoneId': zoneId,
       'reference': reference,
       'isVeteran': isVeteran,
       'initialAge': initialAge,
@@ -210,6 +215,7 @@ class Tree {
       kc: (map['coeficient_kc'] as num?)
           ?.toDouble(), // Mapped from coeficient_kc
       speciesId: map['speciesId'],
+      zoneId: map['zoneId'],
       reference: map['reference'],
       isVeteran: map['isVeteran'] ?? false,
       initialAge: (map['initialAge'] as num?)?.toDouble() ?? 0.0,

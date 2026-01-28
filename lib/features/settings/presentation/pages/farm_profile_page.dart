@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:soca/features/settings/domain/entities/farm_config.dart';
 import '../../../../core/services/meteocat_service.dart';
@@ -40,6 +42,12 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
   bool _isSaving = false;
   bool _initialDataLoaded = false;
 
+  // Cover Photo
+  final ImagePicker _picker = ImagePicker();
+  String? _coverPhotoUrl;
+  Uint8List? _coverImageBytes;
+  // bool _isUploadingCover = false; // Removed as it was unused
+
   @override
   void initState() {
     super.initState();
@@ -63,6 +71,7 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
     _nameController.text = config.name;
     _cifController.text = config.cif;
     _addressController.text = config.address;
+    _coverPhotoUrl = config.coverPhotoUrl;
 
     _mapCenter ??= LatLng(config.latitude, config.longitude);
 
@@ -82,6 +91,31 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
     _morningNotificationTime = config.morningNotificationTime;
 
     _initialDataLoaded = true;
+  }
+
+  // --- Cover Photo Methods ---
+
+  Future<void> _pickCoverImage() async {
+    final XFile? image = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1920, // Reasonable limit
+      maxHeight: 1080,
+      imageQuality: 85,
+    );
+
+    if (image != null) {
+      final bytes = await image.readAsBytes();
+      setState(() {
+        _coverImageBytes = bytes;
+      });
+    }
+  }
+
+  void _removeCoverImage() {
+    setState(() {
+      _coverImageBytes = null;
+      _coverPhotoUrl = null;
+    });
   }
 
   void _addZone() async {
@@ -195,6 +229,21 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
 
     setState(() => _isSaving = true);
     try {
+      final repo = ref.read(settingsRepositoryProvider);
+
+      // Upload Cover Photo if changed
+      String? finalCoverUrl = _coverPhotoUrl;
+      if (_coverImageBytes != null) {
+        finalCoverUrl = await repo.uploadCoverPhoto(
+          _coverImageBytes!,
+          currentConfig.fincaId ?? 'temp',
+        );
+      } else if (_coverPhotoUrl == null &&
+          currentConfig.coverPhotoUrl != null) {
+        // User removed photo (handled by _removeCoverImage setting _coverPhotoUrl = null)
+        // If it was null here and previously not null, finalCoverUrl remains null.
+      }
+
       final newConfig = currentConfig.copyWith(
         name: _nameController.text,
         cif: _cifController.text,
@@ -209,11 +258,14 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
         morningNotificationTime: _morningNotificationTime,
         zones: _zones, // Ensuring updated zones are passed
         permacultureZones: _permacultureZones,
+        coverPhotoUrl: finalCoverUrl, // [NEW]
       );
 
-      await ref.read(settingsRepositoryProvider).saveFarmConfig(newConfig);
+      await repo.saveFarmConfig(newConfig);
 
       if (mounted) {
+        // Clear bytes after save to indicate synced state
+        setState(() => _coverImageBytes = null);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Configuració de la Finca guardada! 💾'),
@@ -335,6 +387,96 @@ class _FarmProfilePageState extends ConsumerState<FarmProfilePage> {
                   child: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
+                      // Cover Photo Widget
+                      GestureDetector(
+                        onTap: _isSaving
+                            ? null
+                            : _pickCoverImage, // Changed to pick directly on tap if empty
+                        child: Container(
+                          height:
+                              200, // Aspect Ratio 16:9 approx or fixed height
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(12),
+                            image: _coverImageBytes != null
+                                ? DecorationImage(
+                                    image: MemoryImage(_coverImageBytes!),
+                                    fit: BoxFit.cover,
+                                  )
+                                : (_coverPhotoUrl != null
+                                      ? DecorationImage(
+                                          image: NetworkImage(_coverPhotoUrl!),
+                                          fit: BoxFit.cover,
+                                        )
+                                      : null),
+                          ),
+                          alignment: Alignment.center,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              if (_coverImageBytes == null &&
+                                  _coverPhotoUrl == null)
+                                Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.add_a_photo,
+                                      size: 40,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Afegir Foto de Portada',
+                                      style: TextStyle(
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              // Edit Overlay (Always visible or on hover?)
+                              // Visible via button
+                              Positioned(
+                                bottom: 8,
+                                right: 8,
+                                child: Row(
+                                  children: [
+                                    if (_coverImageBytes != null ||
+                                        _coverPhotoUrl != null)
+                                      Container(
+                                        decoration: const BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.white,
+                                        ),
+                                        child: IconButton(
+                                          icon: const Icon(
+                                            Icons.delete,
+                                            color: Colors.red,
+                                          ),
+                                          onPressed: _removeCoverImage,
+                                          tooltip: 'Eliminar Foto',
+                                        ),
+                                      ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      decoration: const BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Colors.white,
+                                      ),
+                                      child: IconButton(
+                                        icon: const Icon(Icons.edit),
+                                        onPressed: _pickCoverImage,
+                                        tooltip: 'Canviar Foto',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
                       const Text(
                         'Dades Generals',
                         style: TextStyle(

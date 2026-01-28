@@ -25,13 +25,14 @@ class FarmConfig {
   final bool morningNotificationsEnabled; // Morning
   final String morningNotificationTime; // Morning (e.g. "08:00")
   final List<String> dashboardOrder; // Order of dashboard widgets
-  final List<String> taskPhases; // Custom phases/labels
+  final List<TaskPhase> taskPhases; // Custom phases/labels
   final List<ExpenseCategory> expenseCategories; // Custom expense categories
   final List<Bucket> buckets; // Task buckets (columns)
   final List<PermacultureZone> permacultureZones; // [NEW] PDC Zones
 
   final String? fincaId;
   final List<String> authorizedEmails;
+  final String? coverPhotoUrl; // [NEW] Cover photo for reports
 
   const FarmConfig({
     required this.name,
@@ -54,6 +55,7 @@ class FarmConfig {
     this.permacultureZones = const [],
     this.fincaId,
     this.authorizedEmails = const [],
+    this.coverPhotoUrl, // [NEW]
   });
 
   factory FarmConfig.empty() {
@@ -72,7 +74,28 @@ class FarmConfig {
       morningNotificationsEnabled: true,
       morningNotificationTime: '08:00',
       dashboardOrder: [],
-      taskPhases: ['Urgent', 'Compra', 'Manteniment', 'Planificació'],
+      taskPhases: [
+        TaskPhase(
+          name: 'Urgent',
+          colorHex: 'FFF44336',
+          iconCode: 0xe6a5,
+        ), // warning
+        TaskPhase(
+          name: 'Compra',
+          colorHex: 'FF2196F3',
+          iconCode: 0xe59c,
+        ), // shopping_cart
+        TaskPhase(
+          name: 'Manteniment',
+          colorHex: 'FFFF9800',
+          iconCode: 0xe182,
+        ), // build
+        TaskPhase(
+          name: 'Planificació',
+          colorHex: 'FF9C27B0',
+          iconCode: 0xe0e7,
+        ), // calendar_today
+      ],
       expenseCategories: [
         ExpenseCategory(
           id: 'material',
@@ -103,6 +126,7 @@ class FarmConfig {
       permacultureZones: [],
       fincaId: null,
       authorizedEmails: [],
+      coverPhotoUrl: null,
     );
   }
 
@@ -122,12 +146,13 @@ class FarmConfig {
       'morningNotificationsEnabled': morningNotificationsEnabled,
       'morningNotificationTime': morningNotificationTime,
       'dashboardOrder': dashboardOrder,
-      'taskPhases': taskPhases,
+      'taskPhases': taskPhases.map((e) => e.toMap()).toList(),
       'expenseCategories': expenseCategories.map((e) => e.toMap()).toList(),
       'buckets': buckets.map((b) => b.toMap()).toList(),
       'permacultureZones': permacultureZones.map((z) => z.toMap()).toList(),
       'fincaId': fincaId,
       'authorizedEmails': authorizedEmails,
+      'coverPhotoUrl': coverPhotoUrl,
     };
   }
 
@@ -156,10 +181,34 @@ class FarmConfig {
               .toList() ??
           [],
       taskPhases:
-          (map['taskPhases'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          ['Urgent', 'Compra', 'Manteniment', 'Planificació'],
+          (map['taskPhases'] as List<dynamic>?)?.map((e) {
+            if (e is String) {
+              return TaskPhase.fromLegacyString(e);
+            }
+            return TaskPhase.fromMap(e);
+          }).toList() ??
+          [
+            TaskPhase(
+              name: 'Urgent',
+              colorHex: 'FFF44336',
+              iconCode: 0xe6a5,
+            ), // warning
+            TaskPhase(
+              name: 'Compra',
+              colorHex: 'FF2196F3',
+              iconCode: 0xe59c,
+            ), // shopping_cart
+            TaskPhase(
+              name: 'Manteniment',
+              colorHex: 'FFFF9800',
+              iconCode: 0xe182,
+            ), // build
+            TaskPhase(
+              name: 'Planificació',
+              colorHex: 'FF9C27B0',
+              iconCode: 0xe0e7,
+            ), // calendar_today
+          ],
       expenseCategories:
           (map['expenseCategories'] as List<dynamic>?)
               ?.map((e) => ExpenseCategory.fromMap(e))
@@ -206,6 +255,7 @@ class FarmConfig {
               ?.map((e) => e.toString())
               .toList() ??
           [],
+      coverPhotoUrl: map['coverPhotoUrl'],
     );
   }
 
@@ -224,12 +274,13 @@ class FarmConfig {
     bool? morningNotificationsEnabled,
     String? morningNotificationTime,
     List<String>? dashboardOrder,
-    List<String>? taskPhases,
+    List<TaskPhase>? taskPhases,
     List<ExpenseCategory>? expenseCategories,
     List<Bucket>? buckets,
     List<PermacultureZone>? permacultureZones,
     String? fincaId,
     List<String>? authorizedEmails,
+    String? coverPhotoUrl,
   }) {
     return FarmConfig(
       name: name ?? this.name,
@@ -256,6 +307,7 @@ class FarmConfig {
       permacultureZones: permacultureZones ?? this.permacultureZones,
       fincaId: fincaId ?? this.fincaId,
       authorizedEmails: authorizedEmails ?? this.authorizedEmails,
+      coverPhotoUrl: coverPhotoUrl ?? this.coverPhotoUrl,
     );
   }
 }
@@ -367,5 +419,55 @@ class ExpenseCategory {
       colorHex: map['colorHex'] ?? 'FF9E9E9E',
       iconCode: map['iconCode'] ?? 0xe3e3,
     );
+  }
+}
+
+class TaskPhase {
+  final String name;
+  final String colorHex;
+  final int iconCode; // Using int for IconData codePoint
+
+  const TaskPhase({
+    required this.name,
+    required this.colorHex,
+    required this.iconCode,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {'name': name, 'colorHex': colorHex, 'iconCode': iconCode};
+  }
+
+  factory TaskPhase.fromMap(Map<String, dynamic> map) {
+    return TaskPhase(
+      name: map['name'] ?? '',
+      colorHex: map['colorHex'] ?? 'FF9E9E9E',
+      iconCode: map['iconCode'] ?? 0xe88e, // Default: label
+    );
+  }
+
+  // Smart migration for existing strings
+  factory TaskPhase.fromLegacyString(String name) {
+    String color = 'FF9E9E9E'; // Grey
+    int icon = 0xe88e; // label
+
+    final lower = name.toLowerCase();
+    if (lower.contains('urgent')) {
+      color = 'FFF44336'; // Red
+      icon = 0xe6a5; // warning (priority_high)
+    } else if (lower.contains('compra') || lower.contains('buying')) {
+      color = 'FF2196F3'; // Blue
+      icon = 0xe59c; // shopping_cart
+    } else if (lower.contains('manteniment') || lower.contains('reparació')) {
+      color = 'FFFF9800'; // Orange
+      icon = 0xe182; // build
+    } else if (lower.contains('planificació') || lower.contains('admin')) {
+      color = 'FF9C27B0'; // Purple
+      icon = 0xe0e7; // calendar_today
+    } else if (lower.contains('feina') || lower.contains('treball')) {
+      color = 'FF795548'; // Brown
+      icon = 0xe934; // work ?? e8f9=work
+    }
+
+    return TaskPhase(name: name, colorHex: color, iconCode: icon);
   }
 }

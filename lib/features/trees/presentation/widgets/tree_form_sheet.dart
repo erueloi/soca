@@ -40,6 +40,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
   String? _plantingFormat;
   String? _vigor;
   String? _selectedSpeciesId; // For Species Library Link
+  String? _selectedZoneId;
 
   bool _isVeteran = false;
   late TextEditingController _initialAgeController;
@@ -173,6 +174,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
     _latitude = widget.tree?.latitude;
     _longitude = widget.tree?.longitude;
     _selectedSpeciesId = widget.tree?.speciesId;
+    _selectedZoneId = widget.tree?.zoneId;
     _isVeteran = widget.tree?.isVeteran ?? false;
 
     if (widget.tree == null) {
@@ -331,8 +333,8 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
           ? null
           : _maintenanceTipsController.text,
       vigor: _vigor,
-
       speciesId: _selectedSpeciesId,
+      zoneId: _selectedZoneId,
       reference: _referenceController.text.isEmpty
           ? null
           : _referenceController.text,
@@ -661,40 +663,48 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                         final configAsync = ref.watch(farmConfigStreamProvider);
                         return configAsync.when(
                           data: (config) {
-                            if (config.zones.isEmpty) {
+                            if (config.permacultureZones.isEmpty) {
                               return const SizedBox.shrink();
                             }
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                DropdownButtonFormField<String>(
+                                DropdownButtonFormField<String?>(
+                                  key: ValueKey('zone_$_selectedZoneId'),
                                   decoration: const InputDecoration(
-                                    labelText: 'Zona',
+                                    labelText: 'Zona PDC',
                                     border: OutlineInputBorder(),
                                   ),
-                                  items: config.zones.map((zone) {
-                                    Color color;
-                                    try {
-                                      color = Color(int.parse(zone.colorHex));
-                                    } catch (_) {
-                                      color = Colors.grey;
-                                    }
-                                    return DropdownMenuItem(
-                                      value: zone.name,
-                                      child: Row(
-                                        children: [
-                                          CircleAvatar(
-                                            backgroundColor: color,
-                                            radius: 8,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(zone.name),
-                                        ],
-                                      ),
-                                    );
-                                  }).toList(),
+                                  initialValue: _selectedZoneId,
+                                  items: [
+                                    const DropdownMenuItem<String?>(
+                                      value: null,
+                                      child: Text('Cap (Sense zona)'),
+                                    ),
+                                    ...config.permacultureZones.map((zone) {
+                                      Color color;
+                                      try {
+                                        color = Color(int.parse(zone.colorHex));
+                                      } catch (_) {
+                                        color = Colors.grey;
+                                      }
+                                      return DropdownMenuItem<String?>(
+                                        value: zone.id,
+                                        child: Row(
+                                          children: [
+                                            CircleAvatar(
+                                              backgroundColor: color,
+                                              radius: 8,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(zone.name),
+                                          ],
+                                        ),
+                                      );
+                                    }),
+                                  ],
                                   onChanged: (v) {
-                                    // TODO: Implement zone assignment logic
+                                    setState(() => _selectedZoneId = v);
                                   },
                                 ),
                                 const SizedBox(height: 16),

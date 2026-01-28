@@ -1,5 +1,9 @@
 ﻿# Release Notes
 
+## v1.8.12
+Configuració Finca: Podem posar foto de portada.
+Es poden moure les fases i categories i tenen icones.
+Arbres: Podem asignar a les zones registrades a la finca.
 ## v1.8.11
 Clima: Bugfix amb les funcions que actualitzen les dades durant el dia i les dates.
 Configuració Finca: Carreguem bé les zones.
@@ -130,6 +134,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

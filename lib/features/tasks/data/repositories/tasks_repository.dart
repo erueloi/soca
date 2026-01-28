@@ -165,4 +165,39 @@ class TasksRepository {
     // but typically we want to do both atomically or sequentially.
     // For now, the caller will handle saving the new bucket list.
   }
+
+  // Integrity Check Methods
+  Future<List<Task>> getTasksByPhase(String phaseName) async {
+    if (fincaId == null) return [];
+    final snapshot = await _tasksCollection
+        .where('fincaId', isEqualTo: fincaId)
+        .where('phase', isEqualTo: phaseName)
+        .get();
+
+    return snapshot.docs
+        .map((doc) => Task.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+        .toList();
+  }
+
+  Future<int> countTasksByCategory(String categoryId) async {
+    if (fincaId == null) return 0;
+
+    // Since 'items' is a list of objects, we can't easily query Firestore directly
+    // unless we denormalized categories. We'll fetch all tasks and filter.
+    // Given the expected scale, this is acceptable for an admin action like deletion.
+    final snapshot = await _tasksCollection
+        .where('fincaId', isEqualTo: fincaId)
+        .get();
+
+    int count = 0;
+    for (var doc in snapshot.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final items = (data['items'] as List<dynamic>?) ?? [];
+      // Check if any item uses this category
+      if (items.any((item) => item['category'] == categoryId)) {
+        count++;
+      }
+    }
+    return count;
+  }
 }
