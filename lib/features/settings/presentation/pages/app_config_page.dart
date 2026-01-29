@@ -23,6 +23,10 @@ class _AppConfigPageState extends ConsumerState<AppConfigPage> {
   // Categories
   late List<ExpenseCategory> _categories;
 
+  // Resource Config
+  late List<ResourceCategoryConfig> _resourceCategories;
+  late List<ResourceTypeConfig> _resourceTypes;
+
   bool _isInit = false;
   bool _isSaving = false;
 
@@ -34,6 +38,8 @@ class _AppConfigPageState extends ConsumerState<AppConfigPage> {
       if (config != null) {
         _phases = List.from(config.taskPhases);
         _categories = List.from(config.expenseCategories);
+        _resourceCategories = List.from(config.resourceCategories);
+        _resourceTypes = List.from(config.resourceTypes);
         _authorizedEmails = List.from(config.authorizedEmails);
         _isInit = true;
       }
@@ -73,6 +79,8 @@ class _AppConfigPageState extends ConsumerState<AppConfigPage> {
             // In case didChangeDependencies didn't catch it or for first build
             _phases = List.from(config.taskPhases);
             _categories = List.from(config.expenseCategories);
+            _resourceCategories = List.from(config.resourceCategories);
+            _resourceTypes = List.from(config.resourceTypes);
             _authorizedEmails = List.from(config.authorizedEmails);
             _isInit = true;
           }
@@ -105,6 +113,20 @@ class _AppConfigPageState extends ConsumerState<AppConfigPage> {
               ),
               const SizedBox(height: 8),
               _buildCategoriesList(),
+              const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 16),
+              _buildSectionTitle('Categories de Recurssos'),
+              const Text('Classificació dels recursos del directori.'),
+              const SizedBox(height: 8),
+              _buildResourceCategoriesList(),
+              const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 16),
+              _buildSectionTitle('Tipus de Recurs'),
+              const Text('Tipus definits per als recursos (enllaç, pdf, etc).'),
+              const SizedBox(height: 8),
+              _buildResourceTypesList(),
             ],
           );
         },
@@ -749,6 +771,19 @@ class _AppConfigPageState extends ConsumerState<AppConfigPage> {
       Icons.warning,
       Icons.flag,
       Icons.label,
+      // More icons for resources
+      Icons.link,
+      Icons.picture_as_pdf,
+      Icons.video_file,
+      Icons.audio_file,
+      Icons.image,
+      Icons.article,
+      Icons.web,
+      Icons.book,
+      Icons.school,
+      Icons.map,
+      Icons.grid_view,
+      Icons.folder_open,
     ];
 
     return await showDialog<IconData>(
@@ -771,6 +806,432 @@ class _AppConfigPageState extends ConsumerState<AppConfigPage> {
     );
   }
 
+  // --- RESOURCE CATEGORIES ---
+
+  Widget _buildResourceCategoriesList() {
+    return Column(
+      children: [
+        ReorderableListView(
+          shrinkWrap: true,
+          buildDefaultDragHandles: false,
+          physics: const NeverScrollableScrollPhysics(),
+          onReorder: (oldIndex, newIndex) {
+            setState(() {
+              if (oldIndex < newIndex) newIndex -= 1;
+              final item = _resourceCategories.removeAt(oldIndex);
+              _resourceCategories.insert(newIndex, item);
+            });
+          },
+          children: [
+            for (int i = 0; i < _resourceCategories.length; i++)
+              Card(
+                key: ValueKey(_resourceCategories[i].id),
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Color(
+                      int.parse(_resourceCategories[i].colorHex, radix: 16),
+                    ),
+                    child: Icon(
+                      IconData(
+                        _resourceCategories[i].iconCode,
+                        fontFamily: 'MaterialIcons',
+                      ),
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(_resourceCategories[i].name),
+                  subtitle: Text('ID: ${_resourceCategories[i].id}'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit),
+                        onPressed: () => _editResourceCategory(i),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _deleteResourceCategory(i),
+                      ),
+                      ReorderableDragStartListener(
+                        index: i,
+                        child: const Padding(
+                          padding: EdgeInsets.only(left: 8.0),
+                          child: Icon(Icons.drag_handle, color: Colors.grey),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ElevatedButton.icon(
+          onPressed: _addNewResourceCategory,
+          icon: const Icon(Icons.add),
+          label: const Text('Afegir Nova Categoria de Recurs'),
+        ),
+      ],
+    );
+  }
+
+  void _addNewResourceCategory() {
+    _showResourceCategoryDialog();
+  }
+
+  void _editResourceCategory(int index) {
+    _showResourceCategoryDialog(
+      index: index,
+      existing: _resourceCategories[index],
+    );
+  }
+
+  void _deleteResourceCategory(int index) {
+    setState(() => _resourceCategories.removeAt(index));
+  }
+
+  Future<void> _showResourceCategoryDialog({
+    int? index,
+    ResourceCategoryConfig? existing,
+  }) async {
+    final nameCtrl = TextEditingController(text: existing?.name ?? '');
+    final idCtrl = TextEditingController(text: existing?.id ?? '');
+    Color currentColor = existing != null
+        ? Color(int.parse(existing.colorHex, radix: 16))
+        : Colors.blue;
+    int currentIconCode = existing?.iconCode ?? Icons.folder.codePoint;
+    final bool isEditing = existing != null;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            title: Text(
+              isEditing
+                  ? 'Editar Categoria de Recurs'
+                  : 'Nova Categoria de Recurs',
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Nom',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: idCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'ID (únic)',
+                      border: OutlineInputBorder(),
+                    ),
+                    enabled: !isEditing,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Text('Color: '),
+                      GestureDetector(
+                        onTap: () {
+                          showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Triar Color'),
+                              content: SingleChildScrollView(
+                                child: BlockPicker(
+                                  pickerColor: currentColor,
+                                  onColorChanged: (color) {
+                                    setStateDialog(() => currentColor = color);
+                                    Navigator.pop(context);
+                                  },
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                        child: CircleAvatar(backgroundColor: currentColor),
+                      ),
+                      const Spacer(),
+                      const Text('Icona: '),
+                      IconButton(
+                        icon: Icon(
+                          IconData(
+                            currentIconCode,
+                            fontFamily: 'MaterialIcons',
+                          ),
+                        ),
+                        onPressed: () async {
+                          final icon = await _showIconPicker(context);
+                          if (icon != null) {
+                            setStateDialog(
+                              () => currentIconCode = icon.codePoint,
+                            );
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel·lar'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (nameCtrl.text.isEmpty || idCtrl.text.isEmpty) return;
+                  final newConfig = ResourceCategoryConfig(
+                    id: idCtrl.text.trim(),
+                    name: nameCtrl.text.trim(),
+                    colorHex: currentColor
+                        .toARGB32()
+                        .toRadixString(16)
+                        .padLeft(8, '0')
+                        .toUpperCase(),
+                    iconCode: currentIconCode,
+                  );
+                  if (isEditing) {
+                    setState(() => _resourceCategories[index!] = newConfig);
+                  } else {
+                    if (_resourceCategories.any((c) => c.id == newConfig.id)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('ID ja existent')),
+                      );
+                      return;
+                    }
+                    setState(() => _resourceCategories.add(newConfig));
+                  }
+                  Navigator.pop(context);
+                },
+                child: const Text('Guardar'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // --- RESOURCE TYPES ---
+
+  Widget _buildResourceTypesList() {
+    return Column(
+      children: [
+        ReorderableListView(
+          shrinkWrap: true,
+          buildDefaultDragHandles: false,
+          physics: const NeverScrollableScrollPhysics(),
+          onReorder: (oldIndex, newIndex) {
+            setState(() {
+              if (oldIndex < newIndex) newIndex -= 1;
+              final item = _resourceTypes.removeAt(oldIndex);
+              _resourceTypes.insert(newIndex, item);
+            });
+          },
+          children: [
+            for (int i = 0; i < _resourceTypes.length; i++)
+              Card(
+                key: ValueKey(_resourceTypes[i].id),
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Color(
+                      int.parse(_resourceTypes[i].colorHex, radix: 16),
+                    ),
+                    child: Icon(
+                      IconData(
+                        _resourceTypes[i].iconCode,
+                        fontFamily: 'MaterialIcons',
+                      ),
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(_resourceTypes[i].name),
+                  subtitle: Text('ID: ${_resourceTypes[i].id}'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit),
+                        onPressed: () => _editResourceType(i),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _deleteResourceType(i),
+                      ),
+                      ReorderableDragStartListener(
+                        index: i,
+                        child: const Padding(
+                          padding: EdgeInsets.only(left: 8.0),
+                          child: Icon(Icons.drag_handle, color: Colors.grey),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ElevatedButton.icon(
+          onPressed: _addNewResourceType,
+          icon: const Icon(Icons.add),
+          label: const Text('Afegir Nou Tipus de Recurs'),
+        ),
+      ],
+    );
+  }
+
+  void _addNewResourceType() {
+    _showResourceTypeDialog();
+  }
+
+  void _editResourceType(int index) {
+    _showResourceTypeDialog(index: index, existing: _resourceTypes[index]);
+  }
+
+  void _deleteResourceType(int index) {
+    setState(() => _resourceTypes.removeAt(index));
+  }
+
+  Future<void> _showResourceTypeDialog({
+    int? index,
+    ResourceTypeConfig? existing,
+  }) async {
+    final nameCtrl = TextEditingController(text: existing?.name ?? '');
+    final idCtrl = TextEditingController(text: existing?.id ?? '');
+    Color currentColor = existing != null
+        ? Color(int.parse(existing.colorHex, radix: 16))
+        : Colors.blue;
+    int currentIconCode =
+        existing?.iconCode ?? Icons.insert_drive_file.codePoint;
+    final bool isEditing = existing != null;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            title: Text(
+              isEditing ? 'Editar Tipus de Recurs' : 'Nou Tipus de Recurs',
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Nom',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: idCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'ID (únic)',
+                      border: OutlineInputBorder(),
+                    ),
+                    enabled: !isEditing,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Text('Color: '),
+                      GestureDetector(
+                        onTap: () {
+                          showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Triar Color'),
+                              content: SingleChildScrollView(
+                                child: BlockPicker(
+                                  pickerColor: currentColor,
+                                  onColorChanged: (color) {
+                                    setStateDialog(() => currentColor = color);
+                                    Navigator.pop(context);
+                                  },
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                        child: CircleAvatar(backgroundColor: currentColor),
+                      ),
+                      const Spacer(),
+                      const Text('Icona: '),
+                      IconButton(
+                        icon: Icon(
+                          IconData(
+                            currentIconCode,
+                            fontFamily: 'MaterialIcons',
+                          ),
+                        ),
+                        onPressed: () async {
+                          final icon = await _showIconPicker(context);
+                          if (icon != null) {
+                            setStateDialog(
+                              () => currentIconCode = icon.codePoint,
+                            );
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel·lar'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (nameCtrl.text.isEmpty || idCtrl.text.isEmpty) return;
+                  final newConfig = ResourceTypeConfig(
+                    id: idCtrl.text.trim(),
+                    name: nameCtrl.text.trim(),
+                    colorHex: currentColor
+                        .toARGB32()
+                        .toRadixString(16)
+                        .padLeft(8, '0')
+                        .toUpperCase(),
+                    iconCode: currentIconCode,
+                  );
+                  if (isEditing) {
+                    setState(() => _resourceTypes[index!] = newConfig);
+                  } else {
+                    if (_resourceTypes.any((c) => c.id == newConfig.id)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('ID ja existent')),
+                      );
+                      return;
+                    }
+                    setState(() => _resourceTypes.add(newConfig));
+                  }
+                  Navigator.pop(context);
+                },
+                child: const Text('Guardar'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _saveConfig() async {
     setState(() => _isSaving = true);
     try {
@@ -783,6 +1244,8 @@ class _AppConfigPageState extends ConsumerState<AppConfigPage> {
         final newConfig = currentConfig.copyWith(
           taskPhases: _phases,
           expenseCategories: _categories,
+          resourceCategories: _resourceCategories,
+          resourceTypes: _resourceTypes,
           authorizedEmails: _authorizedEmails,
         );
         await repo.saveFarmConfig(newConfig);

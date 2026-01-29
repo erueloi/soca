@@ -83,7 +83,7 @@ class LayerControllerSheet extends ConsumerWidget {
             const Divider(),
             SwitchListTile(
               title: const Text('Tasques'),
-              subtitle: const Text('Mostra marcadors de tasques pendents'),
+              subtitle: const Text('Mostra marcadors de tasques'),
               secondary: const Icon(
                 Icons.check_circle_outline,
                 color: Colors.orange,
@@ -91,6 +91,22 @@ class LayerControllerSheet extends ConsumerWidget {
               value: layers[MapLayer.tasks] ?? true,
               onChanged: (val) => notifier.toggleLayer(MapLayer.tasks),
             ),
+            // Sub-option for pending only (indented visually)
+            if (layers[MapLayer.tasks] ?? true)
+              Padding(
+                padding: const EdgeInsets.only(left: 32.0),
+                child: SwitchListTile(
+                  title: const Text('Només Pendents'),
+                  subtitle: const Text('Amaga les tasques completades'),
+                  secondary: const Icon(
+                    Icons.pending_actions,
+                    color: Colors.amber,
+                  ),
+                  value: layers[MapLayer.pendingTasksOnly] ?? true,
+                  onChanged: (val) =>
+                      notifier.toggleLayer(MapLayer.pendingTasksOnly),
+                ),
+              ),
             SwitchListTile(
               title: const Text('Zones de Reg'),
               subtitle: const Text('Mostra les àrees de reg (A/B)'),

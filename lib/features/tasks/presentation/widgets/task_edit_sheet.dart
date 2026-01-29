@@ -4,7 +4,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/task.dart';
 import '../../domain/entities/task_item.dart';
-import '../../../contacts/data/contacts_data.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../map/presentation/widgets/location_picker_sheet.dart';
 import '../providers/tasks_provider.dart';
@@ -13,6 +12,8 @@ import '../../../settings/presentation/providers/settings_provider.dart';
 import '../../../construction/presentation/providers/construction_provider.dart';
 import '../../../construction/data/models/construction_point.dart';
 import '../../../construction/presentation/pages/pathology_detail_page.dart';
+import '../../../directory/presentation/providers/directory_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class TaskEditSheet extends ConsumerStatefulWidget {
   final Task? task;
@@ -61,7 +62,9 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
   late List<_ItemController> _itemControllers;
   late List<bool> _itemDoneStates;
   late List<DateTime?> _itemCompletedDates;
+
   late List<String> _contactIds;
+  late List<String> _linkedResourceIds;
   DateTime? _dueDate;
   double? _latitude;
   double? _longitude;
@@ -90,10 +93,9 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
     _itemCompletedDates = initialItems.map((i) => i.completedAt).toList();
 
     _contactIds = List.from(widget.task?.contactIds ?? []);
+    _linkedResourceIds = List.from(widget.task?.linkedResourceIds ?? []);
     _currentPhotoUrls = List.from(widget.task?.photoUrls ?? []);
     _dueDate = widget.task?.dueDate;
-    _latitude = widget.task?.latitude;
-    _longitude = widget.task?.longitude;
 
     if (widget.task != null) {
       // Defer execution to allow provider reading
@@ -174,6 +176,125 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _showResourcePicker() async {
+    final availableResources = await ref.read(resourcesStreamProvider.future);
+    final config = await ref.read(farmConfigStreamProvider.future);
+
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        String searchQuery = '';
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            final filteredResources = availableResources.where((r) {
+              final query = searchQuery.toLowerCase();
+              final typeName = config.resourceTypes
+                  .firstWhere(
+                    (t) => t.id == r.typeId,
+                    orElse: () => ResourceTypeConfig(
+                      id: 'other',
+                      name: 'Altre',
+                      colorHex: '',
+                      iconCode: 0,
+                    ),
+                  )
+                  .name;
+              return r.title.toLowerCase().contains(query) ||
+                  typeName.toLowerCase().contains(query);
+            }).toList();
+
+            return AlertDialog(
+              title: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Vincular Recursos'),
+                  const SizedBox(height: 8),
+                  TextField(
+                    decoration: const InputDecoration(
+                      hintText: 'Cercar per títol o tipus...',
+                      prefixIcon: Icon(Icons.search),
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (val) {
+                      setStateDialog(() {
+                        searchQuery = val;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: filteredResources.isEmpty
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: Text('No s\'han trobat resultats'),
+                        ),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: filteredResources.length,
+                        itemBuilder: (ctx, i) {
+                          final resource = filteredResources[i];
+                          final isSelected = _linkedResourceIds.contains(
+                            resource.id,
+                          );
+                          final typeConfig = config.resourceTypes.firstWhere(
+                            (t) => t.id == resource.typeId,
+                            orElse: () => ResourceTypeConfig(
+                              id: 'other',
+                              name: 'Altre',
+                              colorHex: 'FF9E9E9E',
+                              iconCode: 0xe24d,
+                            ),
+                          );
+
+                          return CheckboxListTile(
+                            secondary: Icon(
+                              IconData(
+                                typeConfig.iconCode,
+                                fontFamily: 'MaterialIcons',
+                              ),
+                              color: Color(
+                                int.parse(typeConfig.colorHex, radix: 16),
+                              ),
+                            ),
+                            title: Text(resource.title),
+                            subtitle: Text(typeConfig.name),
+                            value: isSelected,
+                            onChanged: (val) {
+                              setStateDialog(() {
+                                if (val == true) {
+                                  _linkedResourceIds.add(resource.id);
+                                } else {
+                                  _linkedResourceIds.remove(resource.id);
+                                }
+                              });
+                              // Also update main state
+                              setState(() {});
+                            },
+                          );
+                        },
+                      ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Tancar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -419,6 +540,8 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                       _buildItemsList(config),
                       const SizedBox(height: 24),
                       _buildContactsSelector(),
+                      const SizedBox(height: 24),
+                      _buildResourcesSelector(),
                     ],
                   ),
                 ),
@@ -900,41 +1023,334 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
     );
   }
 
-  Widget _buildContactsSelector() {
+  Widget _buildResourcesSelector() {
+    final resourcesAsync = ref.watch(resourcesStreamProvider);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Assignar a:', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8.0,
-          children: ContactsData.allContacts.map((contact) {
-            final isSelected = _contactIds.contains(contact.id);
-            return FilterChip(
-              label: Text(contact.name),
-              avatar: CircleAvatar(
-                backgroundColor: Theme.of(context).canvasColor,
-                child: Text(
-                  contact.name.substring(0, 1),
-                  style: const TextStyle(fontSize: 12),
-                ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Recursos Vinculats'),
+            if (!widget.isReadOnly)
+              IconButton(
+                icon: const Icon(Icons.add_link, color: Colors.blue),
+                onPressed: _showResourcePicker,
               ),
-              selected: isSelected,
-              onSelected: widget.isReadOnly
-                  ? null
-                  : (selected) {
-                      setState(() {
-                        if (selected) {
-                          _contactIds.add(contact.id);
-                        } else {
-                          _contactIds.remove(contact.id);
-                        }
-                      });
-                    },
+          ],
+        ),
+        if (_linkedResourceIds.isEmpty)
+          const Text(
+            'Cap recurs vinculat',
+            style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
+          ),
+        resourcesAsync.when(
+          data: (allResources) {
+            final selectedResources = allResources
+                .where((r) => _linkedResourceIds.contains(r.id))
+                .toList();
+
+            if (selectedResources.isEmpty && _linkedResourceIds.isNotEmpty) {
+              return const Text('Carregant recursos...');
+            }
+
+            return Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: selectedResources.map((resource) {
+                final configAsync = ref.watch(farmConfigStreamProvider);
+                final typeConfig = configAsync.maybeWhen(
+                  data: (config) => config.resourceTypes.firstWhere(
+                    (t) => t.id == resource.typeId,
+                    orElse: () => ResourceTypeConfig(
+                      id: 'other',
+                      name: 'Altre',
+                      colorHex: 'FF9E9E9E',
+                      iconCode: 0xe24d,
+                    ),
+                  ),
+                  orElse: () => ResourceTypeConfig(
+                    id: 'other',
+                    name: 'Altre',
+                    colorHex: 'FF9E9E9E',
+                    iconCode: 0xe24d,
+                  ),
+                );
+                final typeColor = Color(
+                  int.parse(typeConfig.colorHex, radix: 16),
+                );
+
+                return InputChip(
+                  avatar: Icon(
+                    IconData(typeConfig.iconCode, fontFamily: 'MaterialIcons'),
+                    size: 16,
+                    color: typeColor,
+                  ),
+                  label: Text(resource.title),
+                  backgroundColor: typeColor.withValues(alpha: 0.1),
+
+                  // Open logic
+                  onPressed: () async {
+                    final uri = Uri.tryParse(resource.url);
+                    if (uri != null && await canLaunchUrl(uri)) {
+                      await launchUrl(
+                        uri,
+                        mode: LaunchMode.externalApplication,
+                      );
+                    }
+                  },
+
+                  // Delete logic (if not read-only)
+                  deleteIcon: widget.isReadOnly
+                      ? null
+                      : const Icon(Icons.close, size: 18),
+                  onDeleted: widget.isReadOnly
+                      ? null
+                      : () {
+                          setState(() {
+                            _linkedResourceIds.remove(resource.id);
+                          });
+                        },
+                );
+              }).toList(),
             );
-          }).toList(),
+          },
+          loading: () => const LinearProgressIndicator(),
+          error: (_, _) => const Text('Error carregant recursos'),
         ),
       ],
+    );
+  }
+
+  Widget _buildContactsSelector() {
+    final contactsAsync = ref.watch(contactsStreamProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Assignar a:', style: Theme.of(context).textTheme.titleMedium),
+            if (!widget.isReadOnly)
+              IconButton(
+                icon: const Icon(Icons.person_add, color: Colors.blue),
+                onPressed: _showContactPicker,
+              ),
+          ],
+        ),
+        if (_contactIds.isEmpty)
+          const Text(
+            'Cap contacte assignat',
+            style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
+          ),
+        contactsAsync.when(
+          loading: () => const LinearProgressIndicator(),
+          error: (_, _) => const Text('Error carregant contactes'),
+          data: (allContacts) {
+            return Wrap(
+              spacing: 8.0,
+              children: _contactIds.map((cid) {
+                final contact = allContacts
+                    .where((c) => c.id == cid)
+                    .firstOrNull;
+                if (contact == null) return const SizedBox.shrink();
+                return InputChip(
+                  label: Text(contact.name),
+                  avatar: CircleAvatar(
+                    backgroundColor: Theme.of(context).canvasColor,
+                    child: Text(
+                      contact.name.isNotEmpty
+                          ? contact.name.substring(0, 1)
+                          : '?',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  onPressed: () => _showContactActionDialog(contact),
+                  deleteIcon: widget.isReadOnly
+                      ? null
+                      : const Icon(Icons.close, size: 18),
+                  onDeleted: widget.isReadOnly
+                      ? null
+                      : () {
+                          setState(() {
+                            _contactIds.remove(cid);
+                          });
+                        },
+                );
+              }).toList(),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showContactPicker() async {
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        String searchQuery = '';
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return Consumer(
+              builder: (context, ref, child) {
+                final contactsAsync = ref.watch(contactsStreamProvider);
+
+                return contactsAsync.when(
+                  loading: () => const AlertDialog(
+                    content: Center(child: CircularProgressIndicator()),
+                  ),
+                  error: (e, _) => AlertDialog(
+                    title: const Text('Error'),
+                    content: Text('No s\'han pogut carregar els contactes: $e'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Tancar'),
+                      ),
+                    ],
+                  ),
+                  data: (allContacts) {
+                    final filteredContacts = allContacts.where((c) {
+                      final query = searchQuery.toLowerCase();
+                      return c.name.toLowerCase().contains(query) ||
+                          c.role.toLowerCase().contains(query);
+                    }).toList();
+
+                    return AlertDialog(
+                      title: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Assignar Contactes'),
+                          const SizedBox(height: 8),
+                          TextField(
+                            decoration: const InputDecoration(
+                              hintText: 'Cercar contacte...',
+                              prefixIcon: Icon(Icons.search),
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                            ),
+                            onChanged: (val) {
+                              setStateDialog(() {
+                                searchQuery = val;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      content: SizedBox(
+                        width: double.maxFinite,
+                        child: filteredContacts.isEmpty
+                            ? const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(16.0),
+                                  child: Text('No s\'han trobat resultats'),
+                                ),
+                              )
+                            : ListView.builder(
+                                shrinkWrap: true,
+                                itemCount: filteredContacts.length,
+                                itemBuilder: (ctx, i) {
+                                  final contact = filteredContacts[i];
+                                  final isSelected = _contactIds.contains(
+                                    contact.id,
+                                  );
+                                  return CheckboxListTile(
+                                    title: Text(contact.name),
+                                    subtitle: Text(contact.role),
+                                    secondary: CircleAvatar(
+                                      child: Text(
+                                        contact.name.isNotEmpty
+                                            ? contact.name[0]
+                                            : '?',
+                                      ),
+                                    ),
+                                    value: isSelected,
+                                    onChanged: (val) {
+                                      setStateDialog(() {
+                                        if (val == true) {
+                                          _contactIds.add(contact.id);
+                                        } else {
+                                          _contactIds.remove(contact.id);
+                                        }
+                                      });
+                                      setState(() {});
+                                    },
+                                  );
+                                },
+                              ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Tancar'),
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showContactActionDialog(dynamic contact) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(contact.name, style: Theme.of(context).textTheme.titleLarge),
+            Text(contact.role, style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    final Uri launchUri = Uri(
+                      scheme: 'tel',
+                      path: contact.phone,
+                    );
+                    if (await canLaunchUrl(launchUri)) {
+                      await launchUrl(launchUri);
+                    }
+                  },
+                  icon: const Icon(Icons.call),
+                  label: const Text('Trucar'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    final cleanNumber = contact.phone.replaceAll(
+                      RegExp(r'[^\d]'),
+                      '',
+                    );
+                    final Uri launchUri = Uri.parse(
+                      'https://wa.me/34$cleanNumber',
+                    );
+                    if (await canLaunchUrl(launchUri)) {
+                      await launchUrl(
+                        launchUri,
+                        mode: LaunchMode.externalApplication,
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.message),
+                  label: const Text('WhatsApp'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -986,6 +1402,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
         );
       }).toList(),
       contactIds: _contactIds,
+      linkedResourceIds: _linkedResourceIds,
       dueDate: _dueDate,
       latitude: _latitude,
       longitude: _longitude,

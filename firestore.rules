@@ -118,5 +118,14 @@ service cloud.firestore {
       allow read, update, delete: if isAuthorized(resource.data.fincaId);
       allow create: if isAuthorized(request.resource.data.fincaId);
     }
+    match /contacts/{document=**} {
+      allow read, update, delete: if isAuthorized(resource.data.fincaId);
+      allow create: if isAuthorized(request.resource.data.fincaId);
+    }
+
+    match /resources/{document=**} {
+      allow read, update, delete: if isAuthorized(resource.data.fincaId);
+      allow create: if isAuthorized(request.resource.data.fincaId);
+    }
   }
 }

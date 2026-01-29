@@ -17,6 +17,7 @@ class Task {
   final DateTime? completedAt;
   final String? resolution;
   final String? fincaId;
+  final List<String> linkedResourceIds;
 
   const Task({
     required this.id,
@@ -35,6 +36,7 @@ class Task {
     this.completedAt,
     this.resolution,
     this.fincaId,
+    this.linkedResourceIds = const [],
   });
 
   Task copyWith({
@@ -54,6 +56,7 @@ class Task {
     DateTime? completedAt,
     String? resolution,
     String? fincaId,
+    List<String>? linkedResourceIds,
   }) {
     return Task(
       id: id ?? this.id,
@@ -72,6 +75,7 @@ class Task {
       completedAt: completedAt ?? this.completedAt,
       resolution: resolution ?? this.resolution,
       fincaId: fincaId ?? this.fincaId,
+      linkedResourceIds: linkedResourceIds ?? this.linkedResourceIds,
     );
   }
 
@@ -92,6 +96,7 @@ class Task {
       'completedAt': completedAt?.millisecondsSinceEpoch,
       'resolution': resolution,
       'fincaId': fincaId,
+      'linkedResourceIds': linkedResourceIds,
     };
   }
 
@@ -119,6 +124,7 @@ class Task {
           : null,
       resolution: map['resolution'],
       fincaId: map['fincaId'],
+      linkedResourceIds: List<String>.from(map['linkedResourceIds'] ?? []),
     );
   }
 

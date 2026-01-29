@@ -1166,10 +1166,10 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                     ),
                     child: Card(
                       elevation: 0,
-                      color: color.withOpacity(0.1),
+                      color: color.withValues(alpha: 0.1),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: color.withOpacity(0.5)),
+                        side: BorderSide(color: color.withValues(alpha: 0.5)),
                       ),
                       child: ListTile(
                         leading: CircleAvatar(

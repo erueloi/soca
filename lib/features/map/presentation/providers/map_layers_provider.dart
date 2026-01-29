@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 enum MapLayer {
   tasks,
+  pendingTasksOnly, // New: Filter to show only pending tasks
   irrigationZones,
   healthStatus,
   treeLabels,
@@ -17,6 +18,7 @@ class MapLayersNotifier extends Notifier<Map<MapLayer, bool>> {
     _loadPreferences();
     return {
       MapLayer.tasks: true,
+      MapLayer.pendingTasksOnly: true, // Default: show only pending
       MapLayer.irrigationZones: false,
       MapLayer.healthStatus: false,
       MapLayer.treeLabels: false,
@@ -31,6 +33,8 @@ class MapLayersNotifier extends Notifier<Map<MapLayer, bool>> {
       final prefs = await SharedPreferences.getInstance();
       state = {
         MapLayer.tasks: prefs.getBool('layer_tasks') ?? true,
+        MapLayer.pendingTasksOnly:
+            prefs.getBool('layer_pendingTasksOnly') ?? true,
         MapLayer.irrigationZones:
             prefs.getBool('layer_irrigationZones') ?? false,
         MapLayer.healthStatus: prefs.getBool('layer_healthStatus') ?? false,

@@ -603,29 +603,29 @@ class _ClimateBalanceTable extends StatelessWidget {
                                   ),
                                 ),
                                 _buildCell(
-                                  d.maxTemp.toStringAsFixed(0),
+                                  d.maxTemp.toStringAsFixed(2),
                                   Colors.red,
                                 ),
                                 _buildCell(
-                                  d.minTemp.toStringAsFixed(0),
+                                  d.minTemp.toStringAsFixed(2),
                                   Colors.blue,
                                 ),
                                 _buildCell(
-                                  d.humidity.toStringAsFixed(0),
+                                  d.humidity.toStringAsFixed(2),
                                   Colors.purple,
                                 ),
                                 _buildCell(
-                                  (d.windSpeed * 3.6).toStringAsFixed(0),
+                                  (d.windSpeed * 3.6).toStringAsFixed(2),
                                   Colors.grey.shade700,
                                 ),
                                 _buildCell(
-                                  d.radiation.toStringAsFixed(1),
+                                  d.radiation.toStringAsFixed(2),
                                   Colors.orange.shade800,
                                 ),
                                 Padding(
                                   padding: const EdgeInsets.all(8.0),
                                   child: Text(
-                                    d.rain.toStringAsFixed(1),
+                                    d.rain.toStringAsFixed(2),
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                       fontWeight: d.rain > 0
@@ -652,7 +652,7 @@ class _ClimateBalanceTable extends StatelessWidget {
                                 Padding(
                                   padding: const EdgeInsets.all(8.0),
                                   child: Text(
-                                    sb?.toStringAsFixed(1) ?? '-',
+                                    sb?.toStringAsFixed(2) ?? '-',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       color: sb == null ? Colors.grey : null,

@@ -330,20 +330,87 @@ function parseMeteoVariables(vars: any[]): any {
         humidity: 60, radiation: 15, windSpeed: 2
     };
 
-    vars.forEach(v => {
-        const val = v.valor;
-        if (val === undefined || val === null) return; // Skip invalid values
+    // Aggregators matching the app's fromMeteocat logic
+    let max40: number | null = null;  // Temp Max Absoluta
+    let min42: number | null = null;  // Temp Min Absoluta
 
-        switch (v.codi) {
-            case 40: out.maxTemp = Number(val); break; // Tx
-            case 42: out.minTemp = Number(val); break; // Tn
-            case 35: out.rain = Number(val); break; // Rain
-            case 33: out.humidity = Number(val); break; // RH
+    let tempMax32 = -999.0;
+    let tempMin32 = 999.0;
+    let has32 = false;
+
+    let rainSum = 0.0;
+
+    let humidSum = 0.0;
+    let humidCount = 0;
+
+    let radSum = 0.0;
+
+    let windSum = 0.0;
+    let windCount = 0;
+
+    for (const v of vars) {
+        const code = v.codi;
+        const lectures = v.lectures as any[] | undefined;
+
+        if (!lectures || lectures.length === 0) continue;
+
+        for (const r of lectures) {
+            const val = Number(r.valor);
+            if (isNaN(val)) continue;
+
+            // 32: Temperature (Instant readings - find max/min)
+            if (code === 32) {
+                if (val > tempMax32) tempMax32 = val;
+                if (val < tempMin32) tempMin32 = val;
+                has32 = true;
+            }
+
+            // 40: Max Temp (Daily Value)
+            if (code === 40) {
+                if (max40 === null || val > max40) max40 = val;
+            }
+
+            // 42: Min Temp
+            if (code === 42) {
+                if (min42 === null || val < min42) min42 = val;
+            }
+
+            // 35: Rain (Precipitation) - SUM all readings
+            if (code === 35) {
+                rainSum += val;
+            }
+
+            // 33: Relative Humidity - AVERAGE
+            if (code === 33) {
+                humidSum += val;
+                humidCount++;
+            }
+
+            // 36: Global Solar Irradiance (W/m2) - SUM
+            if (code === 36) {
+                radSum += val;
+            }
+
+            // 30: Wind Speed (10m) - AVERAGE (NOT code 31 which is direction)
+            if (code === 30) {
+                windSum += val;
+                windCount++;
+            }
         }
-    });
+    }
 
-    if (out.rain < 0) out.rain = 0;
+    // Final calculations
+    out.maxTemp = max40 ?? (has32 ? tempMax32 : 20);
+    out.minTemp = min42 ?? (has32 ? tempMin32 : 10);
+    out.rain = rainSum < 0 ? 0 : rainSum;
     out.rainAccumulated = out.rain;
+    out.humidity = humidCount > 0 ? humidSum / humidCount : 60;
+
+    // Radiation: Sum(W/m2) * 1800s (30min) / 1e6 => MJ/m2
+    out.radiation = radSum * 1800 / 1000000;
+
+    out.windSpeed = windCount > 0 ? windSum / windCount : 2;
+
     return out;
 }
 

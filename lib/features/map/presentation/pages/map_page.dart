@@ -267,46 +267,56 @@ class _MapPageState extends ConsumerState<MapPage> {
                         final configAsync = ref.watch(farmConfigStreamProvider);
                         final markerSize =
                             configAsync.asData?.value.mapMarkerSize ?? 20.0;
+                        final pendingOnly =
+                            layers[MapLayer.pendingTasksOnly] ?? true;
 
                         List<Marker> markers = [];
                         if (tasksAsyncValue.hasValue) {
+                          // Filter tasks: must have location, and if pendingOnly, exclude completed
+                          final filteredTasks = tasksAsyncValue.value!.where((
+                            t,
+                          ) {
+                            if (t.latitude == null || t.longitude == null) {
+                              return false;
+                            }
+                            if (pendingOnly && t.isDone) {
+                              return false;
+                            }
+                            return true;
+                          });
+
                           markers.addAll(
-                            tasksAsyncValue.value!
-                                .where(
-                                  (t) =>
-                                      t.latitude != null && t.longitude != null,
-                                )
-                                .map((t) {
-                                  final isReforest = t.bucket == 'Reforestació';
-                                  return Marker(
-                                    point: LatLng(t.latitude!, t.longitude!),
-                                    // Use consistent container size for stability
-                                    width: 120.0,
-                                    height: 120.0,
-                                    alignment: Alignment.center,
-                                    child: Center(
-                                      child: GestureDetector(
-                                        onTap: () =>
-                                            _showTaskOptions(context, ref, t),
-                                        child: Icon(
-                                          isReforest
-                                              ? Icons.forest
-                                              : Icons.check_circle,
-                                          color: isReforest
-                                              ? Colors.green[800]
-                                              : Colors.orange,
-                                          size: markerSize * 0.9,
-                                          shadows: const [
-                                            Shadow(
-                                              blurRadius: 5,
-                                              color: Colors.black54,
-                                            ),
-                                          ],
+                            filteredTasks.map((t) {
+                              final isReforest = t.bucket == 'Reforestació';
+                              return Marker(
+                                point: LatLng(t.latitude!, t.longitude!),
+                                // Use consistent container size for stability
+                                width: 120.0,
+                                height: 120.0,
+                                alignment: Alignment.center,
+                                child: Center(
+                                  child: GestureDetector(
+                                    onTap: () =>
+                                        _showTaskOptions(context, ref, t),
+                                    child: Icon(
+                                      isReforest
+                                          ? Icons.forest
+                                          : Icons.check_circle,
+                                      color: isReforest
+                                          ? Colors.green[800]
+                                          : Colors.orange,
+                                      size: markerSize * 0.9,
+                                      shadows: const [
+                                        Shadow(
+                                          blurRadius: 5,
+                                          color: Colors.black54,
                                         ),
-                                      ),
+                                      ],
                                     ),
-                                  );
-                                }),
+                                  ),
+                                ),
+                              );
+                            }),
                           );
                         }
                         return MarkerLayer(markers: markers);

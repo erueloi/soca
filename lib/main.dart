@@ -10,6 +10,7 @@ import 'core/theme/app_theme.dart';
 
 import 'features/dashboard/presentation/pages/home_page.dart';
 import 'features/settings/presentation/providers/settings_provider.dart';
+import 'features/settings/presentation/pages/app_config_page.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/auth/data/repositories/auth_repository.dart';
 
@@ -55,6 +56,7 @@ class SocaApp extends ConsumerWidget {
         Locale('es', 'ES'),
         Locale('en', 'US'),
       ],
+      routes: {'/config': (context) => const AppConfigPage()},
       home: authStateAsync.when(
         data: (user) {
           if (user == null) {

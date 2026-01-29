@@ -1,5 +1,11 @@
 ﻿# Release Notes
 
+## v1.8.13
+Recursos: Afegim recursos per a tasques (Contactes i url, ...).
+Mapa: Filtrem tasques finalitzades o no.
+Clima: Bugfixe functions d'actualitzar dades.
+Menú lateral: Visualització correcte.
+Tasques: Podem adjuntar Recursos (Contactes i recursos).
 ## v1.8.12
 Configuració Finca: Podem posar foto de portada.
 Es poden moure les fases i categories i tenen icones.
@@ -134,6 +140,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

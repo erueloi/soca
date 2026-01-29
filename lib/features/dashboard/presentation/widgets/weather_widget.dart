@@ -51,7 +51,7 @@ class WeatherWidget extends ConsumerWidget {
                                 Icon(
                                   Icons.satellite_alt,
                                   color: Theme.of(context).colorScheme.primary,
-                                  size: 20, // Smaller icon
+                                  size: 20,
                                 ),
                                 const SizedBox(width: 6),
                                 Flexible(
@@ -63,17 +63,16 @@ class WeatherWidget extends ConsumerWidget {
                                     style: Theme.of(context)
                                         .textTheme
                                         .titleLarge
-                                        ?.copyWith(
-                                          fontSize: 16,
-                                        ), // Smaller text
+                                        ?.copyWith(fontSize: 16),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                                 const SizedBox(width: 4),
+                                // Icons with fixed width - won't be clipped
                                 IconButton(
                                   icon: const Icon(
                                     Icons.info_outline,
-                                    size: 16, // Smaller icon
+                                    size: 16,
                                     color: Colors.grey,
                                   ),
                                   onPressed: () => _showHelpDialog(context),

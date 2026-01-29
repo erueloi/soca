@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../contacts/data/contacts_data.dart';
 import '../../domain/entities/task.dart';
+import '../../../directory/presentation/providers/directory_provider.dart';
 
-class TaskCard extends StatelessWidget {
+class TaskCard extends ConsumerWidget {
   final Task task;
   final VoidCallback onToggle;
   final Function(Task task)? onEdit;
@@ -20,11 +21,11 @@ class TaskCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (task.isDone) {
       return GestureDetector(
         onTap: () => onEdit?.call(task),
-        child: _buildCardContent(context),
+        child: _buildCardContent(context, ref),
       );
     }
 
@@ -45,48 +46,33 @@ class TaskCard extends StatelessWidget {
       ),
       confirmDismiss: (direction) async {
         if (direction == DismissDirection.endToStart) {
-          // Archive (Done) - No confirmation needed or maybe yes? User said "esborrar lliscant".
-          // Usually right-to-left is delete in this code (red background is alignment.centerLeft? wait)
-          // Let's check backgrounds.
-          // background: alignment.centerLeft (Red/Delete) -> Swipe Left-to-Right? No defaults.
-          // DismissDirection.startToEnd (Left to Right).
-          // secondaryBackground: alignment.centerRight (Green/Check) -> Swipe Right-to-Left.
-
-          // Text direction LTR.
-          // background (Start/Left side) is revealed when swiping Left to Right -> Delete (Red).
-          // secondaryBackground (End/Right side) is revealed when swiping Right to Left -> Archive/Check (Green).
-          // The code says: onDismissed: if endToStart (Right to Left) -> onArchive. else -> onDelete.
-
-          // Checks:
-          // Swipe Right (Delete): Needs confirmation.
-          // Swipe Left (Archive): Maybe no confirmation? User strictly said "esborrar lliscant".
-
-          if (direction == DismissDirection.startToEnd) {
-            return await showDialog(
-              context: context,
-              builder: (BuildContext context) {
-                return AlertDialog(
-                  title: const Text('Esborrar tasca?'),
-                  content: const Text('Segur que vols esborrar aquesta tasca?'),
-                  actions: <Widget>[
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(false),
-                      child: const Text('Cancel·lar'),
+          // Archive logic
+          return true;
+        } else {
+          // Delete logic
+          return await showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                title: const Text('Esborrar tasca?'),
+                content: const Text('Segur que vols esborrar aquesta tasca?'),
+                actions: <Widget>[
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('Cancel·lar'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: const Text(
+                      'Esborrar',
+                      style: TextStyle(color: Colors.red),
                     ),
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(true),
-                      child: const Text(
-                        'Esborrar',
-                        style: TextStyle(color: Colors.red),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            );
-          }
+                  ),
+                ],
+              );
+            },
+          );
         }
-        return true; // Archive allows straight away
       },
       onDismissed: (direction) {
         if (direction == DismissDirection.endToStart) {
@@ -95,32 +81,14 @@ class TaskCard extends StatelessWidget {
           onDelete?.call(task);
         }
       },
-      child: Draggable<Task>(
-        data: task,
-        feedback: Transform.rotate(
-          angle: 0.05,
-          child: SizedBox(
-            width: 250,
-            child: Material(
-              elevation: 6,
-              borderRadius: BorderRadius.circular(12),
-              child: _buildCardContent(context),
-            ),
-          ),
-        ),
-        childWhenDragging: Opacity(
-          opacity: 0.3,
-          child: _buildCardContent(context),
-        ),
-        child: GestureDetector(
-          onTap: () => onEdit?.call(task),
-          child: _buildCardContent(context),
-        ),
+      child: GestureDetector(
+        onTap: () => onEdit?.call(task),
+        child: _buildCardContent(context, ref),
       ),
     );
   }
 
-  Widget _buildCardContent(BuildContext context) {
+  Widget _buildCardContent(BuildContext context, WidgetRef ref) {
     return Card(
       elevation: 1,
       margin: const EdgeInsets.only(bottom: 8.0),
@@ -314,80 +282,165 @@ class TaskCard extends StatelessWidget {
                 ),
               ),
             ],
-            if (task.contactIds.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              const Divider(height: 1),
-              const SizedBox(height: 8),
-              Row(
-                children: task.contactIds.map((cid) {
-                  final contact = ContactsData.getById(cid);
-                  if (contact == null) return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8.0),
-                    child: InkWell(
-                      onTap: () {
-                        showModalBottomSheet(
-                          context: context,
-                          builder: (context) => Container(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  contact.name,
-                                  style: Theme.of(context).textTheme.titleLarge,
-                                ),
-                                Text(
-                                  contact.role,
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                ),
-                                const SizedBox(height: 16),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceEvenly,
-                                  children: [
-                                    ElevatedButton.icon(
-                                      onPressed: () =>
-                                          _launchUrl('tel:${contact.phone}'),
-                                      icon: const Icon(Icons.call),
-                                      label: const Text('Trucar'),
-                                    ),
-                                    ElevatedButton.icon(
-                                      onPressed: () => _launchUrl(
-                                        'https://wa.me/34${contact.phone.replaceAll(RegExp(r'[^\d]'), '')}',
+            if (task.contactIds.isNotEmpty)
+              ref
+                  .watch(contactsStreamProvider)
+                  .when(
+                    data: (allContacts) {
+                      final assigned = allContacts
+                          .where((c) => task.contactIds.contains(c.id))
+                          .toList();
+                      if (assigned.isEmpty) return const SizedBox.shrink();
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 12),
+                          const Divider(height: 1),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: assigned.map((contact) {
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8.0),
+                                child: InkWell(
+                                  onTap: () {
+                                    showModalBottomSheet(
+                                      context: context,
+                                      builder: (context) => Container(
+                                        padding: const EdgeInsets.all(16),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              contact.name,
+                                              style: Theme.of(
+                                                context,
+                                              ).textTheme.titleLarge,
+                                            ),
+                                            Text(
+                                              contact.role,
+                                              style: Theme.of(
+                                                context,
+                                              ).textTheme.bodyMedium,
+                                            ),
+                                            const SizedBox(height: 16),
+                                            Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.spaceEvenly,
+                                              children: [
+                                                ElevatedButton.icon(
+                                                  onPressed: () => _launchUrl(
+                                                    'tel:${contact.phone}',
+                                                  ),
+                                                  icon: const Icon(Icons.call),
+                                                  label: const Text('Trucar'),
+                                                ),
+                                                ElevatedButton.icon(
+                                                  onPressed: () => _launchUrl(
+                                                    'https://wa.me/34${contact.phone.replaceAll(RegExp(r'[^\d]'), '')}',
+                                                  ),
+                                                  icon: const Icon(
+                                                    Icons.message,
+                                                  ),
+                                                  label: const Text('WhatsApp'),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                      icon: const Icon(Icons.message),
-                                      label: const Text('WhatsApp'),
+                                    );
+                                  },
+                                  child: Tooltip(
+                                    message:
+                                        '${contact.name} (${contact.role})',
+                                    child: CircleAvatar(
+                                      radius: 12,
+                                      backgroundColor: Theme.of(context)
+                                          .colorScheme
+                                          .secondary
+                                          .withValues(alpha: 0.1),
+                                      child: Text(
+                                        contact.name.isNotEmpty
+                                            ? contact.name.substring(0, 1)
+                                            : '?',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.secondary,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                     ),
-                                  ],
+                                  ),
                                 ),
-                              ],
-                            ),
+                              );
+                            }).toList(),
                           ),
-                        );
-                      },
-                      child: Tooltip(
-                        message: '${contact.name} (${contact.role})',
-                        child: CircleAvatar(
-                          radius: 12,
-                          backgroundColor: Theme.of(
-                            context,
-                          ).colorScheme.secondary.withValues(alpha: 0.1),
-                          child: Text(
-                            contact.name.substring(0, 1),
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Theme.of(context).colorScheme.secondary,
-                              fontWeight: FontWeight.bold,
-                            ),
+                        ],
+                      );
+                    },
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, _) => const SizedBox.shrink(),
+                  ),
+            if (task.linkedResourceIds.isNotEmpty)
+              ref
+                  .watch(resourcesStreamProvider)
+                  .when(
+                    data: (allResources) {
+                      final assigned = allResources
+                          .where((r) => task.linkedResourceIds.contains(r.id))
+                          .toList();
+                      if (assigned.isEmpty) return const SizedBox.shrink();
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 8),
+                          if (task.contactIds.isEmpty) const Divider(height: 1),
+                          // If contacts were present, they likely added a divider.
+                          // If not, we might need one.
+                          // But wait, if contacts ARE present, the divider is inside their block.
+                          // If contacts are NOT present (filtered out or empty list), we might want a separator here?
+                          // Let's just add a small space for now, or a Divider if it's the first 'footer' item.
+                          // To be safe and consistent, let's just add a small spacing.
+                          // If contacts are above, we have spacing.
+                          if (task.contactIds.isEmpty)
+                            const SizedBox(height: 8),
+
+                          Wrap(
+                            spacing: 8.0,
+                            runSpacing: 4.0,
+                            children: assigned.map((resource) {
+                              return ActionChip(
+                                avatar: Icon(
+                                  _getResourceIcon(resource.typeId),
+                                  size: 16,
+                                  color: Theme.of(context).primaryColor,
+                                ),
+                                label: Text(
+                                  resource.title,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Theme.of(context).primaryColor,
+                                  ),
+                                ),
+                                backgroundColor: Theme.of(
+                                  context,
+                                ).primaryColor.withValues(alpha: 0.05),
+                                side: BorderSide.none,
+                                padding: const EdgeInsets.all(2),
+                                onPressed: () => _launchUrl(resource.url),
+                              );
+                            }).toList(),
                           ),
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
+                        ],
+                      );
+                    },
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, _) => const SizedBox.shrink(),
+                  ),
             if (task.phase.isNotEmpty) ...[
               const SizedBox(height: 8),
               Align(
@@ -418,6 +471,25 @@ class TaskCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  IconData _getResourceIcon(String typeId) {
+    switch (typeId.toLowerCase()) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'excel':
+      case 'spreadsheet':
+      case 'full de càlcul':
+      case 'full de calcul':
+        return Icons.table_chart;
+      case 'image':
+      case 'imatge':
+        return Icons.image;
+      case 'link':
+      case 'enllaç':
+      default:
+        return Icons.link;
+    }
   }
 
   Future<void> _launchUrl(String url) async {

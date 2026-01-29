@@ -13,7 +13,7 @@ import '../../../../features/settings/presentation/providers/settings_provider.d
 import '../../../../features/settings/domain/entities/farm_config.dart'; // Added
 import '../../../../features/climate/presentation/pages/clima_page.dart';
 import '../../../../features/tasks/presentation/pages/tasks_page.dart';
-import '../../../contacts/presentation/pages/contacts_page.dart';
+import '../../../directory/presentation/pages/directory_page.dart';
 import '../../../map/presentation/pages/map_page.dart';
 import '../../../trees/presentation/pages/trees_page.dart';
 import '../../../trees/presentation/pages/watering_page.dart';
@@ -46,12 +46,6 @@ class _HomePageState extends ConsumerState<HomePage> {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (context) => const TasksPage()));
-  }
-
-  void _navigateToContacts(BuildContext context) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (context) => const ContactsPage()));
   }
 
   @override
@@ -170,7 +164,19 @@ class _HomePageState extends ConsumerState<HomePage> {
       return; // Return, fetch will happen again via stream
     }
 
-    // 2. Auto-repair User Authorization
+    // 2. One-time initialization of resource categories/types
+    if (config.resourceCategories.isEmpty && config.resourceTypes.isEmpty) {
+      debugPrint("Initializing default resource categories and types...");
+      final settingsRepo = ref.read(settingsRepositoryProvider);
+      final updatedConfig = config.copyWith(
+        resourceCategories: FarmConfig.defaultResourceCategories,
+        resourceTypes: FarmConfig.defaultResourceTypes,
+      );
+      await settingsRepo.saveFarmConfig(updatedConfig);
+      // Stream will update automatically
+    }
+
+    // 3. Auto-repair User Authorization
     final user = ref.read(authRepositoryProvider).currentUser;
     if (user != null) {
       final firestoreHandler = FirebaseFirestore.instance;
@@ -351,7 +357,11 @@ class _HomePageState extends ConsumerState<HomePage> {
                     } else if (index == 7) {
                       _navigateToTasks(context);
                     } else if (index == 8) {
-                      _navigateToContacts(context);
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const DirectoryPage(),
+                        ),
+                      );
                     } else if (index == 3) {
                       Navigator.of(context).push(
                         MaterialPageRoute(
@@ -377,22 +387,38 @@ class _HomePageState extends ConsumerState<HomePage> {
                       padding: const EdgeInsets.only(bottom: 16.0),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           const Divider(),
                           // Download App
-                          TextButton.icon(
-                            onPressed: () => launchUrl(
-                              Uri.parse('https://soca-aacac.web.app/soca.apk'),
-                              mode: LaunchMode.externalApplication,
+                          if (isRailExtended)
+                            TextButton.icon(
+                              onPressed: () => launchUrl(
+                                Uri.parse(
+                                  'https://soca-aacac.web.app/soca.apk',
+                                ),
+                                mode: LaunchMode.externalApplication,
+                              ),
+                              icon: const Icon(
+                                Icons.android,
+                                color: Colors.green,
+                              ),
+                              label: const Text('App'),
+                            )
+                          else
+                            IconButton(
+                              onPressed: () => launchUrl(
+                                Uri.parse(
+                                  'https://soca-aacac.web.app/soca.apk',
+                                ),
+                                mode: LaunchMode.externalApplication,
+                              ),
+                              icon: const Icon(
+                                Icons.android,
+                                color: Colors.green,
+                              ),
+                              tooltip: 'Descarregar App',
                             ),
-                            icon: const Icon(
-                              Icons.android,
-                              color: Colors.green,
-                            ),
-                            label: isRailExtended
-                                ? const Text('App')
-                                : const SizedBox.shrink(),
-                          ),
                           const SizedBox(height: 8),
                           // Release Notes / Version
                           FutureBuilder<PackageInfo>(
@@ -490,9 +516,9 @@ class _HomePageState extends ConsumerState<HomePage> {
                       label: Text('Tasques'),
                     ),
                     NavigationRailDestination(
-                      icon: Icon(Icons.people_alt_outlined),
-                      selectedIcon: Icon(Icons.people_alt),
-                      label: Text('Contactes'),
+                      icon: Icon(Icons.folder_shared_outlined),
+                      selectedIcon: Icon(Icons.folder_shared),
+                      label: Text('Recursos'),
                     ),
                     NavigationRailDestination(
                       icon: Icon(Icons.settings_outlined),

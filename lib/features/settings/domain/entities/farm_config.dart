@@ -29,6 +29,9 @@ class FarmConfig {
   final List<ExpenseCategory> expenseCategories; // Custom expense categories
   final List<Bucket> buckets; // Task buckets (columns)
   final List<PermacultureZone> permacultureZones; // [NEW] PDC Zones
+  final List<ResourceCategoryConfig>
+  resourceCategories; // [NEW] Resource Categories
+  final List<ResourceTypeConfig> resourceTypes; // [NEW] Resource Types
 
   final String? fincaId;
   final List<String> authorizedEmails;
@@ -53,6 +56,8 @@ class FarmConfig {
     this.expenseCategories = const [],
     this.buckets = const [],
     this.permacultureZones = const [],
+    this.resourceCategories = const [],
+    this.resourceTypes = const [],
     this.fincaId,
     this.authorizedEmails = const [],
     this.coverPhotoUrl, // [NEW]
@@ -124,11 +129,81 @@ class FarmConfig {
       ],
       buckets: [],
       permacultureZones: [],
+      resourceCategories: [], // Migrated to database
+      resourceTypes: [], // Migrated to database
       fincaId: null,
       authorizedEmails: [],
       coverPhotoUrl: null,
     );
   }
+
+  /// Default resource categories for first-time initialization
+  static List<ResourceCategoryConfig> get defaultResourceCategories => [
+    ResourceCategoryConfig(
+      id: 'admin',
+      name: 'Administració',
+      colorHex: 'FF9E9E9E',
+      iconCode: 0xe3e3,
+    ),
+    ResourceCategoryConfig(
+      id: 'technical',
+      name: 'Tècnic',
+      colorHex: 'FF2196F3',
+      iconCode: 0xe182,
+    ),
+    ResourceCategoryConfig(
+      id: 'events',
+      name: 'Esdeveniments',
+      colorHex: 'FF9C27B0',
+      iconCode: 0xe567,
+    ),
+    ResourceCategoryConfig(
+      id: 'materials',
+      name: 'Materials',
+      colorHex: 'FFFF9800',
+      iconCode: 0xe17f,
+    ),
+    ResourceCategoryConfig(
+      id: 'other',
+      name: 'Altres',
+      colorHex: 'FF607D8B',
+      iconCode: 0xe88e,
+    ),
+  ];
+
+  /// Default resource types for first-time initialization
+  static List<ResourceTypeConfig> get defaultResourceTypes => [
+    ResourceTypeConfig(
+      id: 'link',
+      name: 'Enllaç Web',
+      colorHex: 'FF2196F3',
+      iconCode: 0xe3b6,
+    ),
+    ResourceTypeConfig(
+      id: 'pdf',
+      name: 'Document PDF',
+      colorHex: 'FFF44336',
+      iconCode: 0xe415,
+    ),
+    ResourceTypeConfig(
+      id: 'excel',
+      name: 'Full de Càlcul',
+      colorHex: 'FF4CAF50',
+      iconCode: 0xf02e,
+    ),
+    ResourceTypeConfig(
+      id: 'image',
+      name: 'Imatge',
+      colorHex: 'FF9C27B0',
+      iconCode: 0xe3b3,
+    ),
+    ResourceTypeConfig(
+      id: 'other',
+      name: 'Altre',
+      colorHex: 'FF9E9E9E',
+      iconCode: 0xe24d,
+    ),
+  ];
 
   Map<String, dynamic> toMap() {
     return {
@@ -150,6 +225,8 @@ class FarmConfig {
       'expenseCategories': expenseCategories.map((e) => e.toMap()).toList(),
       'buckets': buckets.map((b) => b.toMap()).toList(),
       'permacultureZones': permacultureZones.map((z) => z.toMap()).toList(),
+      'resourceCategories': resourceCategories.map((e) => e.toMap()).toList(),
+      'resourceTypes': resourceTypes.map((e) => e.toMap()).toList(),
       'fincaId': fincaId,
       'authorizedEmails': authorizedEmails,
       'coverPhotoUrl': coverPhotoUrl,
@@ -249,6 +326,78 @@ class FarmConfig {
               ?.map((z) => PermacultureZone.fromMap(z))
               .toList() ??
           [],
+      resourceCategories:
+          (map['resourceCategories'] as List<dynamic>?)
+              ?.map((e) => ResourceCategoryConfig.fromMap(e))
+              .toList() ??
+          [
+            ResourceCategoryConfig(
+              id: 'admin',
+              name: 'Administració',
+              colorHex: 'FF9E9E9E',
+              iconCode: 0xe3e3,
+            ),
+            ResourceCategoryConfig(
+              id: 'technical',
+              name: 'Tècnic',
+              colorHex: 'FF2196F3',
+              iconCode: 0xe182,
+            ),
+            ResourceCategoryConfig(
+              id: 'events',
+              name: 'Esdeveniments',
+              colorHex: 'FF9C27B0',
+              iconCode: 0xe567,
+            ),
+            ResourceCategoryConfig(
+              id: 'materials',
+              name: 'Materials',
+              colorHex: 'FFFF9800',
+              iconCode: 0xe17f,
+            ),
+            ResourceCategoryConfig(
+              id: 'other',
+              name: 'Altres',
+              colorHex: 'FF607D8B',
+              iconCode: 0xe88e,
+            ),
+          ],
+      resourceTypes:
+          (map['resourceTypes'] as List<dynamic>?)
+              ?.map((e) => ResourceTypeConfig.fromMap(e))
+              .toList() ??
+          [
+            ResourceTypeConfig(
+              id: 'link',
+              name: 'Enllaç Web',
+              colorHex: 'FF2196F3',
+              iconCode: 0xe3b6,
+            ),
+            ResourceTypeConfig(
+              id: 'pdf',
+              name: 'Document PDF',
+              colorHex: 'FFF44336',
+              iconCode: 0xe415,
+            ),
+            ResourceTypeConfig(
+              id: 'excel',
+              name: 'Full de Càlcul',
+              colorHex: 'FF4CAF50',
+              iconCode: 0xf02e,
+            ),
+            ResourceTypeConfig(
+              id: 'image',
+              name: 'Imatge',
+              colorHex: 'FF9C27B0',
+              iconCode: 0xe3b3,
+            ),
+            ResourceTypeConfig(
+              id: 'other',
+              name: 'Altre',
+              colorHex: 'FF9E9E9E',
+              iconCode: 0xe24d,
+            ),
+          ],
       fincaId: map['fincaId'],
       authorizedEmails:
           (map['authorizedEmails'] as List<dynamic>?)
@@ -278,6 +427,8 @@ class FarmConfig {
     List<ExpenseCategory>? expenseCategories,
     List<Bucket>? buckets,
     List<PermacultureZone>? permacultureZones,
+    List<ResourceCategoryConfig>? resourceCategories,
+    List<ResourceTypeConfig>? resourceTypes,
     String? fincaId,
     List<String>? authorizedEmails,
     String? coverPhotoUrl,
@@ -305,6 +456,8 @@ class FarmConfig {
       expenseCategories: expenseCategories ?? this.expenseCategories,
       buckets: buckets ?? this.buckets,
       permacultureZones: permacultureZones ?? this.permacultureZones,
+      resourceCategories: resourceCategories ?? this.resourceCategories,
+      resourceTypes: resourceTypes ?? this.resourceTypes,
       fincaId: fincaId ?? this.fincaId,
       authorizedEmails: authorizedEmails ?? this.authorizedEmails,
       coverPhotoUrl: coverPhotoUrl ?? this.coverPhotoUrl,
@@ -469,5 +622,59 @@ class TaskPhase {
     }
 
     return TaskPhase(name: name, colorHex: color, iconCode: icon);
+  }
+}
+
+class ResourceCategoryConfig {
+  final String id;
+  final String name;
+  final String colorHex;
+  final int iconCode;
+
+  const ResourceCategoryConfig({
+    required this.id,
+    required this.name,
+    required this.colorHex,
+    required this.iconCode,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {'id': id, 'name': name, 'colorHex': colorHex, 'iconCode': iconCode};
+  }
+
+  factory ResourceCategoryConfig.fromMap(Map<String, dynamic> map) {
+    return ResourceCategoryConfig(
+      id: map['id'] ?? '',
+      name: map['name'] ?? '',
+      colorHex: map['colorHex'] ?? 'FF9E9E9E',
+      iconCode: map['iconCode'] ?? 0xe3e3,
+    );
+  }
+}
+
+class ResourceTypeConfig {
+  final String id;
+  final String name;
+  final String colorHex;
+  final int iconCode;
+
+  const ResourceTypeConfig({
+    required this.id,
+    required this.name,
+    required this.colorHex,
+    required this.iconCode,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {'id': id, 'name': name, 'colorHex': colorHex, 'iconCode': iconCode};
+  }
+
+  factory ResourceTypeConfig.fromMap(Map<String, dynamic> map) {
+    return ResourceTypeConfig(
+      id: map['id'] ?? '',
+      name: map['name'] ?? '',
+      colorHex: map['colorHex'] ?? 'FF9E9E9E',
+      iconCode: map['iconCode'] ?? 0xe3e3,
+    );
   }
 }
