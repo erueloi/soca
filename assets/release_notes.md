@@ -1,5 +1,7 @@
 ﻿# Release Notes
 
+## v1.8.14
+Recursos: Obrir-los per Android.
 ## v1.8.13
 Recursos: Afegim recursos per a tasques (Contactes i url, ...).
 Mapa: Filtrem tasques finalitzades o no.
@@ -140,6 +142,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 
