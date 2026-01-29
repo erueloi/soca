@@ -4,6 +4,10 @@ import 'package:table_calendar/table_calendar.dart';
 import '../providers/tasks_provider.dart';
 import '../../domain/entities/task.dart';
 import '../widgets/task_edit_sheet.dart';
+import '../../../directory/presentation/providers/directory_provider.dart';
+import '../../../settings/presentation/providers/settings_provider.dart';
+import '../../../settings/domain/entities/farm_config.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class TasksCalendarPage extends ConsumerStatefulWidget {
   final DateTime? initialDate;
@@ -331,6 +335,126 @@ class _TasksCalendarPageState extends ConsumerState<TasksCalendarPage> {
                   );
                 },
               ),
+              if (task.contactIds.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Consumer(
+                    builder: (context, ref, _) {
+                      final contactsAsync = ref.watch(contactsStreamProvider);
+                      return contactsAsync.when(
+                        data: (contacts) {
+                          final assigned = contacts
+                              .where((c) => task.contactIds.contains(c.id))
+                              .toList();
+                          if (assigned.isEmpty) return const SizedBox.shrink();
+                          return Wrap(
+                            spacing: 8,
+                            children: assigned.map((c) {
+                              return ActionChip(
+                                avatar: CircleAvatar(
+                                  backgroundColor: Colors.grey.shade200,
+                                  child: Text(
+                                    c.name.isNotEmpty
+                                        ? c.name.substring(0, 1)
+                                        : '?',
+                                    style: const TextStyle(fontSize: 10),
+                                  ),
+                                ),
+                                label: Text(
+                                  c.name,
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                backgroundColor: Colors.transparent,
+                                side: BorderSide(color: Colors.grey.shade300),
+                                onPressed: () => _showContactActionDialog(c),
+                              );
+                            }).toList(),
+                          );
+                        },
+                        loading: () => const SizedBox.shrink(),
+                        error: (_, _) => const SizedBox.shrink(),
+                      );
+                    },
+                  ),
+                ),
+              if (task.linkedResourceIds.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Consumer(
+                    builder: (context, ref, _) {
+                      final resourcesAsync = ref.watch(resourcesStreamProvider);
+                      final configAsync = ref.watch(farmConfigStreamProvider);
+                      return resourcesAsync.when(
+                        data: (resources) {
+                          final linked = resources
+                              .where(
+                                (r) => task.linkedResourceIds.contains(r.id),
+                              )
+                              .toList();
+                          if (linked.isEmpty) return const SizedBox.shrink();
+                          return Wrap(
+                            spacing: 8,
+                            children: linked.map((resource) {
+                              final typeConfig = configAsync.maybeWhen(
+                                data: (config) =>
+                                    config.resourceTypes.firstWhere(
+                                      (t) => t.id == resource.typeId,
+                                      orElse: () => ResourceTypeConfig(
+                                        id: 'other',
+                                        name: 'Altre',
+                                        colorHex: 'FF9E9E9E',
+                                        iconCode: 0xe24d,
+                                      ),
+                                    ),
+                                orElse: () => ResourceTypeConfig(
+                                  id: 'other',
+                                  name: 'Altre',
+                                  colorHex: 'FF9E9E9E',
+                                  iconCode: 0xe24d,
+                                ),
+                              );
+                              final color = Color(
+                                int.tryParse(typeConfig.colorHex, radix: 16) ??
+                                    0xFF9E9E9E,
+                              );
+                              return ActionChip(
+                                label: Text(
+                                  resource.title,
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                avatar: Icon(
+                                  IconData(
+                                    typeConfig.iconCode,
+                                    fontFamily: 'MaterialIcons',
+                                  ),
+                                  size: 14,
+                                  color: color,
+                                ),
+                                backgroundColor: color.withValues(alpha: 0.1),
+                                side: BorderSide.none,
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                onPressed: () async {
+                                  final uri = Uri.tryParse(resource.url);
+                                  if (uri != null && await canLaunchUrl(uri)) {
+                                    await launchUrl(
+                                      uri,
+                                      mode: LaunchMode.externalApplication,
+                                    );
+                                  }
+                                },
+                              );
+                            }).toList(),
+                          );
+                        },
+                        loading: () => const SizedBox.shrink(),
+                        error: (_, _) => const SizedBox.shrink(),
+                      );
+                    },
+                  ),
+                ),
               if (task.resolution != null && task.resolution!.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -441,6 +565,60 @@ class _TasksCalendarPageState extends ConsumerState<TasksCalendarPage> {
           ),
         );
       },
+    );
+  }
+
+  void _showContactActionDialog(dynamic contact) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(contact.name, style: Theme.of(context).textTheme.titleLarge),
+            Text(contact.role, style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    final Uri launchUri = Uri(
+                      scheme: 'tel',
+                      path: contact.phone,
+                    );
+                    if (await canLaunchUrl(launchUri)) {
+                      await launchUrl(launchUri);
+                    }
+                  },
+                  icon: const Icon(Icons.call),
+                  label: const Text('Trucar'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    final cleanNumber = contact.phone.replaceAll(
+                      RegExp(r'[^\d]'),
+                      '',
+                    );
+                    final Uri launchUri = Uri.parse(
+                      'https://wa.me/34$cleanNumber',
+                    );
+                    if (await canLaunchUrl(launchUri)) {
+                      await launchUrl(
+                        launchUri,
+                        mode: LaunchMode.externalApplication,
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.message),
+                  label: const Text('WhatsApp'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

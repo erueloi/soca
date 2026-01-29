@@ -14,121 +14,128 @@ class TaskBucketWidget extends ConsumerWidget {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min, // Important for usage in ScrollView
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.list_alt, color: Colors.brown, size: 24),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Projectes Actius',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const TasksPage()),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.list_alt, color: Colors.brown, size: 24),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Projectes Actius',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                // Optional: Add action button here if needed
-              ],
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: SingleChildScrollView(
-                child: tasksAsync.when(
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
-                  error: (e, s) => Text('Error: $e'),
-                  data: (tasks) => bucketsAsync.when(
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: tasksAsync.when(
                     loading: () =>
                         const Center(child: CircularProgressIndicator()),
                     error: (e, s) => Text('Error: $e'),
-                    data: (buckets) {
-                      final activeBuckets = buckets
-                          .where((b) => !b.isArchived && b.showOnDashboard)
-                          .toList();
+                    data: (tasks) => bucketsAsync.when(
+                      loading: () =>
+                          const Center(child: CircularProgressIndicator()),
+                      error: (e, s) => Text('Error: $e'),
+                      data: (buckets) {
+                        final activeBuckets = buckets
+                            .where((b) => !b.isArchived && b.showOnDashboard)
+                            .toList();
 
-                      if (activeBuckets.isEmpty) {
-                        return const Center(
-                          child: Text(
-                            'No hi ha projectes destacats.\nVes a "Gestionar Columnes" per destacar-ne algun.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey),
+                        if (activeBuckets.isEmpty) {
+                          return const Center(
+                            child: Text(
+                              'No hi ha projectes destacats.\nVes a "Gestionar Columnes" per destacar-ne algun.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          );
+                        }
+
+                        return Container(
+                          width: double.infinity,
+                          alignment: Alignment.topLeft,
+                          child: Wrap(
+                            spacing: 16,
+                            runSpacing: 16,
+                            alignment: WrapAlignment.start,
+                            children: activeBuckets.map((bucket) {
+                              final bucketTasks = tasks
+                                  .where((t) => t.bucket == bucket.name)
+                                  .toList();
+
+                              // Calculate Progress
+                              double progress = 0.0;
+                              if (bucketTasks.isNotEmpty) {
+                                final completedCount = bucketTasks
+                                    .where((t) => t.isDone)
+                                    .length;
+                                progress = completedCount / bucketTasks.length;
+                              }
+
+                              // Determine Color
+                              final colors = [
+                                Colors.orange,
+                                Colors.green,
+                                Colors.blue,
+                                Colors.purple,
+                                Colors.teal,
+                              ];
+                              final color =
+                                  colors[bucket.name.hashCode.abs() %
+                                      colors.length];
+
+                              return InkWell(
+                                customBorder: const CircleBorder(),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => TasksPage(
+                                        initialBucketFilter: bucket.name,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: _buildProjectProgress(
+                                    context,
+                                    bucket.name,
+                                    progress,
+                                    color,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
                           ),
                         );
-                      }
-
-                      return Container(
-                        width: double.infinity,
-                        alignment: Alignment.topLeft,
-                        child: Wrap(
-                          spacing: 16,
-                          runSpacing: 16,
-                          alignment: WrapAlignment.start,
-                          children: activeBuckets.map((bucket) {
-                            final bucketTasks = tasks
-                                .where((t) => t.bucket == bucket.name)
-                                .toList();
-
-                            // Calculate Progress
-                            double progress = 0.0;
-                            if (bucketTasks.isNotEmpty) {
-                              final completedCount = bucketTasks
-                                  .where((t) => t.isDone)
-                                  .length;
-                              progress = completedCount / bucketTasks.length;
-                            }
-
-                            // Determine Color (Cycle through a few options or random)
-                            final colors = [
-                              Colors.orange,
-                              Colors.green,
-                              Colors.blue,
-                              Colors.purple,
-                              Colors.teal,
-                            ];
-                            final color =
-                                colors[bucket.name.hashCode.abs() %
-                                    colors.length];
-
-                            return InkWell(
-                              customBorder: const CircleBorder(),
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => TasksPage(
-                                      initialBucketFilter: bucket.name,
-                                    ),
-                                  ),
-                                );
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: _buildProjectProgress(
-                                  context,
-                                  bucket.name,
-                                  progress,
-                                  color,
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      );
-                    },
+                      },
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

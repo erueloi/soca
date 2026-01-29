@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/task.dart';
 import '../providers/tasks_provider.dart';
+import '../widgets/task_edit_sheet.dart';
+import '../../../directory/presentation/providers/directory_provider.dart';
+import '../../../settings/presentation/providers/settings_provider.dart';
+import '../../../settings/domain/entities/farm_config.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class TasksTimelinePage extends ConsumerStatefulWidget {
   const TasksTimelinePage({super.key});
@@ -128,6 +133,8 @@ class _TasksTimelinePageState extends ConsumerState<TasksTimelinePage> {
               isSubtask: false,
               resolution: task.resolution,
               photoUrls: task.photoUrls,
+              linkedResourceIds: task.linkedResourceIds,
+              task: task,
             ),
           );
         }
@@ -144,6 +151,8 @@ class _TasksTimelinePageState extends ConsumerState<TasksTimelinePage> {
                 isSubtask: true,
                 parentTaskTitle: task.title,
                 photoUrls: const [],
+                linkedResourceIds: task.linkedResourceIds,
+                task: task,
               ),
             );
           }
@@ -249,138 +258,244 @@ class _TasksTimelinePageState extends ConsumerState<TasksTimelinePage> {
   Widget _buildTimelineItem(_TimelineItem item) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0, left: 16.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Column(
-            children: [
-              Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: item.isSubtask ? Colors.grey : Colors.green,
-                ),
-              ),
-              Container(
-                width: 2,
-                height: 40,
-                color: Colors.grey.withValues(alpha: 0.3),
-              ),
-            ],
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: InkWell(
+        onTap: () {
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            builder: (context) => TaskEditSheet(
+              task: item.task,
+              initialBucket: item.task.bucket,
+              isReadOnly: true,
+              onSave: (_) {},
+            ),
+          );
+        },
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Column(
               children: [
-                Text(
-                  item.title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 16,
-                    decoration: TextDecoration.lineThrough,
-                    color: Colors.grey[700],
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: item.isSubtask ? Colors.grey : Colors.green,
                   ),
                 ),
-                if (item.isSubtask && item.parentTaskTitle != null)
-                  Text(
-                    'Subtasca de: ${item.parentTaskTitle}',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                if (item.resolution != null && item.resolution!.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: Colors.orange.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(
-                          Icons.info_outline,
-                          size: 14,
-                          color: Colors.orange,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            item.resolution!,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontStyle: FontStyle.italic,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                if (item.photoUrls.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 60,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: item.photoUrls.length,
-                      itemBuilder: (context, index) {
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8.0),
-                          child: InkWell(
-                            onTap: () => _showFullScreenImage(
-                              context,
-                              item.photoUrls[index],
-                            ),
-                            child: Container(
-                              width: 60,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.grey.shade300),
-                                image: DecorationImage(
-                                  image: NetworkImage(item.photoUrls[index]),
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(Icons.access_time, size: 14, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${item.completedAt.day}/${item.completedAt.month} ${item.completedAt.hour}:${item.completedAt.minute.toString().padLeft(2, '0')}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                    if (item.cost > 0) ...[
-                      const SizedBox(width: 16),
-                      Icon(Icons.euro, size: 14, color: Colors.orange[700]),
-                      Text(
-                        item.cost.toStringAsFixed(2),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.orange[700],
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ],
+                Container(
+                  width: 2,
+                  height: 40,
+                  color: Colors.grey.withValues(alpha: 0.3),
                 ),
               ],
             ),
-          ),
-        ],
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                      decoration: TextDecoration.lineThrough,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  if (item.isSubtask && item.parentTaskTitle != null)
+                    Text(
+                      'Subtasca de: ${item.parentTaskTitle}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  if (item.resolution != null &&
+                      item.resolution!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.orange.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.info_outline,
+                            size: 14,
+                            color: Colors.orange,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              item.resolution!,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontStyle: FontStyle.italic,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (item.photoUrls.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 60,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: item.photoUrls.length,
+                        itemBuilder: (context, index) {
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8.0),
+                            child: InkWell(
+                              onTap: () => _showFullScreenImage(
+                                context,
+                                item.photoUrls[index],
+                              ),
+                              child: Container(
+                                width: 60,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Colors.grey.shade300,
+                                  ),
+                                  image: DecorationImage(
+                                    image: NetworkImage(item.photoUrls[index]),
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                  if (item.linkedResourceIds.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Consumer(
+                      builder: (context, ref, _) {
+                        final resourcesAsync = ref.watch(
+                          resourcesStreamProvider,
+                        );
+                        final configAsync = ref.watch(farmConfigStreamProvider);
+
+                        return resourcesAsync.when(
+                          data: (resources) {
+                            final linked = resources
+                                .where(
+                                  (r) => item.linkedResourceIds.contains(r.id),
+                                )
+                                .toList();
+                            if (linked.isEmpty) return const SizedBox.shrink();
+
+                            return Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              children: linked.map((resource) {
+                                final typeConfig = configAsync.maybeWhen(
+                                  data: (config) =>
+                                      config.resourceTypes.firstWhere(
+                                        (t) => t.id == resource.typeId,
+                                        orElse: () => ResourceTypeConfig(
+                                          id: 'other',
+                                          name: 'Altre',
+                                          colorHex: 'FF9E9E9E',
+                                          iconCode: 0xe24d,
+                                        ),
+                                      ),
+                                  orElse: () => ResourceTypeConfig(
+                                    id: 'other',
+                                    name: 'Altre',
+                                    colorHex: 'FF9E9E9E',
+                                    iconCode: 0xe24d,
+                                  ),
+                                );
+                                final color = Color(
+                                  int.tryParse(
+                                        typeConfig.colorHex,
+                                        radix: 16,
+                                      ) ??
+                                      0xFF9E9E9E,
+                                );
+
+                                return ActionChip(
+                                  label: Text(
+                                    resource.title,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  avatar: Icon(
+                                    IconData(
+                                      typeConfig.iconCode,
+                                      fontFamily: 'MaterialIcons',
+                                    ),
+                                    size: 14,
+                                    color: color,
+                                  ),
+                                  backgroundColor: color.withValues(alpha: 0.1),
+                                  side: BorderSide.none,
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  onPressed: () async {
+                                    final uri = Uri.tryParse(resource.url);
+                                    if (uri != null &&
+                                        await canLaunchUrl(uri)) {
+                                      await launchUrl(
+                                        uri,
+                                        mode: LaunchMode.externalApplication,
+                                      );
+                                    }
+                                  },
+                                );
+                              }).toList(),
+                            );
+                          },
+                          loading: () => const SizedBox.shrink(),
+                          error: (_, _) => const SizedBox.shrink(),
+                        );
+                      },
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.access_time,
+                        size: 14,
+                        color: Colors.grey[600],
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${item.completedAt.day}/${item.completedAt.month} ${item.completedAt.hour}:${item.completedAt.minute.toString().padLeft(2, '0')}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                      if (item.cost > 0) ...[
+                        const SizedBox(width: 16),
+                        Icon(Icons.euro, size: 14, color: Colors.orange[700]),
+                        Text(
+                          item.cost.toStringAsFixed(2),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange[700],
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -399,14 +514,18 @@ class _TimelineItem {
   final String? parentTaskTitle;
   final String? resolution;
   final List<String> photoUrls;
+  final List<String> linkedResourceIds;
+  final Task task;
 
   _TimelineItem({
     required this.title,
     required this.completedAt,
     required this.cost,
     required this.isSubtask,
+    required this.task,
     this.parentTaskTitle,
     this.resolution,
     this.photoUrls = const [],
+    this.linkedResourceIds = const [],
   });
 }

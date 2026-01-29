@@ -5,12 +5,18 @@ import '../../../trees/data/repositories/species_repository.dart';
 import '../../../trees/domain/entities/species.dart';
 import '../../../trees/presentation/pages/species_library_page.dart';
 
+final speciesListStreamProvider = StreamProvider<List<Species>>((ref) {
+  final repo = ref.watch(speciesRepositoryProvider);
+  return repo.getSpecies();
+});
+
 class FarmersCalendarWidget extends ConsumerWidget {
   const FarmersCalendarWidget({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final treesAsync = ref.watch(treesStreamProvider);
+    final speciesListAsync = ref.watch(speciesListStreamProvider);
     final now = DateTime.now();
     final currentMonth = now.month;
     final repo = ref.read(speciesRepositoryProvider);
@@ -19,195 +25,282 @@ class FarmersCalendarWidget extends ConsumerWidget {
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const SpeciesLibraryPage()),
-          );
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Row(
-                children: [
-                  const Icon(
-                    Icons.calendar_month,
-                    color: Colors.indigo,
-                    size: 24,
+      child: Column(
+        // Main Column for the Card
+        children: [
+          Expanded(
+            // Make the entire inkwell area expandable
+            child: InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SpeciesLibraryPage(),
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Calendari del Pagès - ${_getMonthName(currentMonth)}',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: Colors.indigo.shade900,
-                    ),
-                  ),
-                  const Spacer(),
-                  const Icon(
-                    Icons.arrow_forward_ios,
-                    size: 14,
-                    color: Colors.grey,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              // ...
-              // ...
-
-              // Content
-              treesAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, s) => Text('Error: $e'),
-                data: (trees) {
-                  if (trees.isEmpty) {
-                    return const Text('No hi ha arbres per analitzar.');
-                  }
-
-                  // 1. Identify distinct species
-                  final speciesMap = <String, int>{}; // Name -> Count
-                  final activeSpecies = <String>{};
-
-                  for (final tree in trees) {
-                    final name = tree.species.isNotEmpty
-                        ? tree.species
-                        : tree.commonName;
-                    if (name.isNotEmpty) {
-                      speciesMap[name] = (speciesMap[name] ?? 0) + 1;
-                      activeSpecies.add(name);
-                    }
-                  }
-
-                  // 2. Fetch Species Details & Categorize
-                  final pruningList = <String>[];
-                  final harvestList =
-                      <MapEntry<String, int>>[]; // entries for count
-                  final plantingList = <String>[];
-                  final climateAlerts = <Widget>[];
-
-                  for (final name in activeSpecies) {
-                    final species = repo.findOfflineSpecies(name);
-                    if (species != null) {
-                      // Pruning
-                      if (species.pruningMonths.contains(currentMonth)) {
-                        pruningList.add(species.commonName);
-                      }
-                      // Harvest
-                      if (species.harvestMonths.contains(currentMonth)) {
-                        final count = speciesMap[name] ?? 0;
-                        harvestList.add(MapEntry(species.commonName, count));
-                      }
-                      // Planting (Suggestion based on what we already have, "Expand inventory")
-                      if (species.plantingMonths.contains(currentMonth)) {
-                        plantingList.add(species.commonName);
-                      }
-                      // Climate
-                      _checkClimate(
-                        context,
-                        species,
-                        currentMonth,
-                        climateAlerts,
-                      );
-                    }
-                  }
-
-                  // Remove duplicates
-                  final uniquePruning = pruningList.toSet().toList();
-                  final uniquePlanting = plantingList.toSet().toList();
-
-                  if (uniquePruning.isEmpty &&
-                      harvestList.isEmpty &&
-                      uniquePlanting.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(
-                        child: Text(
-                          'Res a fer aquest mes! Gaudeix del paisatge.',
-                          style: TextStyle(
-                            fontStyle: FontStyle.italic,
-                            color: Colors.grey,
-                          ),
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.calendar_month,
+                          color: Colors.indigo,
+                          size: 24,
                         ),
-                      ),
-                    );
-                  }
-
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Task Rows
-                      if (uniquePruning.isNotEmpty)
-                        _buildTaskRow(
-                          context,
-                          'PODA',
-                          uniquePruning.join(', '),
-                          Icons.cut,
-                          Colors.orange,
-                          'Tisores a punt?',
-                        ),
-                      if (harvestList.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: _buildTaskRow(
-                            context,
-                            'COLLITA',
-                            harvestList
-                                .map((e) => '${e.key} (${e.value})')
-                                .join(', '),
-                            Icons.shopping_basket,
-                            Colors.green,
-                            'Bona collita!',
-                          ),
-                        ),
-                      if (uniquePlanting.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: _buildTaskRow(
-                            context,
-                            'PLANTACIÓ',
-                            uniquePlanting.join(', '),
-                            Icons.spa, // Sprout equivalent
-                            Colors.blue,
-                            'Bon moment per ampliar.',
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Calendari del Pagès - ${_getMonthName(currentMonth)}',
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                  color: Colors.indigo.shade900,
+                                ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
 
-                      const SizedBox(height: 16),
-                      const Divider(),
-                      const SizedBox(height: 8),
-
-                      // Summary Text
-                      Text(
-                        _generateSummary(
-                          uniquePruning,
-                          harvestList.map((e) => e.key).toList(),
-                        ),
-                        style: TextStyle(
-                          color: Colors.grey.shade700,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-
-                      if (climateAlerts.isNotEmpty) ...[
-                        const SizedBox(height: 16),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: climateAlerts,
+                        const SizedBox(width: 8),
+                        const Icon(
+                          Icons.arrow_forward_ios,
+                          size: 14,
+                          color: Colors.grey,
                         ),
                       ],
-                    ],
-                  );
-                },
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Content
+                    Expanded(
+                      child: treesAsync.when(
+                        loading: () =>
+                            const Center(child: CircularProgressIndicator()),
+                        error: (e, s) => Text('Error: $e'),
+                        data: (trees) {
+                          if (trees.isEmpty) {
+                            return const Center(
+                              child: Text(
+                                'No hi ha arbres per analitzar.',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            );
+                          }
+
+                          // 1. Identify distinct species
+                          final speciesMap = <String, int>{}; // Name -> Count
+                          final activeSpecies = <String>{};
+
+                          for (final tree in trees) {
+                            final name = tree.species.isNotEmpty
+                                ? tree.species
+                                : tree.commonName;
+                            if (name.isNotEmpty) {
+                              speciesMap[name] = (speciesMap[name] ?? 0) + 1;
+                              activeSpecies.add(name);
+                            }
+                          }
+
+                          return speciesListAsync.when(
+                            loading: () => const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(8.0),
+                                child: CircularProgressIndicator(),
+                              ),
+                            ),
+                            error: (_, _) => const SizedBox.shrink(),
+                            data: (allSpecies) {
+                              // Build lookup map (Common + Scientific)
+                              final lookupMap = <String, Species>{};
+                              for (final s in allSpecies) {
+                                lookupMap[s.commonName.toLowerCase()] = s;
+                                lookupMap[s.scientificName.toLowerCase()] = s;
+                              }
+
+                              // 2. Fetch Species Details & Categorize
+                              final pruningList = <String>[];
+                              final harvestList = <MapEntry<String, int>>[];
+                              final plantingList = <String>[];
+                              final climateAlerts = <Widget>[];
+
+                              for (final name in activeSpecies) {
+                                // Priority: Online Data -> Offline Fallback
+                                final species =
+                                    lookupMap[name.toLowerCase()] ??
+                                    repo.findOfflineSpecies(name);
+
+                                if (species != null) {
+                                  // Pruning
+                                  if (species.pruningMonths.contains(
+                                    currentMonth,
+                                  )) {
+                                    pruningList.add(species.commonName);
+                                  }
+                                  // Harvest
+                                  if (species.harvestMonths.contains(
+                                    currentMonth,
+                                  )) {
+                                    final count = speciesMap[name] ?? 0;
+                                    harvestList.add(
+                                      MapEntry(species.commonName, count),
+                                    );
+                                  }
+                                  // Planting
+                                  if (species.plantingMonths.contains(
+                                    currentMonth,
+                                  )) {
+                                    plantingList.add(species.commonName);
+                                  }
+                                  // Climate
+                                  _checkClimate(
+                                    context,
+                                    species,
+                                    currentMonth,
+                                    climateAlerts,
+                                  );
+                                }
+                              }
+
+                              // Remove duplicates logic continues below...
+                              // Need to match the closing structure of the original code.
+                              // Original code ended the loop and then processed lists.
+                              // I need to return the Column here directly?
+                              // The original code returned `Column` AFTER the loop.
+                              // So I should perform the processing inside `data` callback and return result.
+
+                              final uniquePruning = pruningList
+                                  .toSet()
+                                  .toList();
+
+                              final uniquePlanting = plantingList
+                                  .toSet()
+                                  .toList();
+
+                              if (uniquePruning.isEmpty &&
+                                  harvestList.isEmpty &&
+                                  uniquePlanting.isEmpty) {
+                                return const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 24),
+                                  child: Center(
+                                    child: Text(
+                                      'Res a fer aquest mes! Gaudeix del paisatge.',
+                                      style: TextStyle(
+                                        fontStyle: FontStyle.italic,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }
+
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Expanded(
+                                    child: SingleChildScrollView(
+                                      physics: const BouncingScrollPhysics(),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        children: [
+                                          if (uniquePruning.isNotEmpty)
+                                            _buildTaskRow(
+                                              context,
+                                              'PODA',
+                                              uniquePruning,
+                                              Icons.cut,
+                                              Colors.orange,
+                                            ),
+                                          if (harvestList.isNotEmpty)
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                top: 8,
+                                              ),
+                                              child: _buildTaskRow(
+                                                context,
+                                                'COLLITA',
+                                                harvestList
+                                                    .map((e) => e.key)
+                                                    .toList(),
+                                                Icons.shopping_basket,
+                                                Colors.green,
+                                              ),
+                                            ),
+                                          if (uniquePlanting.isNotEmpty)
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                top: 8,
+                                              ),
+                                              child: _buildTaskRow(
+                                                context,
+                                                'PLANTACIÓ',
+                                                uniquePlanting,
+                                                Icons.spa,
+                                                Colors.blue,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+
+                                  if (climateAlerts.isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 0,
+                                      ),
+                                      child: Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: climateAlerts,
+                                      ),
+                                    ),
+                                  ],
+
+                                  const SizedBox(height: 8),
+                                  const Divider(height: 1),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.info_outline,
+                                          size: 20,
+                                          color: Colors.indigo,
+                                        ),
+                                        constraints: const BoxConstraints(),
+                                        padding: EdgeInsets.zero,
+                                        tooltip: 'Veure resum detallat',
+                                        onPressed: () => _showSummaryDialog(
+                                          context,
+                                          trees,
+                                          allSpecies,
+                                          currentMonth,
+                                          repo,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -215,16 +308,19 @@ class FarmersCalendarWidget extends ConsumerWidget {
   Widget _buildTaskRow(
     BuildContext context,
     String label,
-    String items,
+    List<String> items,
     IconData icon,
     Color color,
-    String tooltip,
   ) {
+    const int maxItems = 3;
+    final displayItems = items.take(maxItems).join(', ');
+    final remaining = items.length - maxItems;
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Tooltip(
-          message: tooltip,
+          message: items.join(', '),
           child: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -249,17 +345,91 @@ class FarmersCalendarWidget extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 2),
-              Text(
-                items,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
+              RichText(
+                text: TextSpan(
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: Colors.black87,
+                    fontFamily: 'Inter',
+                  ),
+                  children: [
+                    TextSpan(text: displayItems),
+                    if (remaining > 0) ...[
+                      const TextSpan(text: ' i '),
+                      WidgetSpan(
+                        alignment: PlaceholderAlignment.baseline,
+                        baseline: TextBaseline.alphabetic,
+                        child: InkWell(
+                          onTap: () {
+                            _showListDialog(context, label, items, icon, color);
+                          },
+                          child: Text(
+                            '$remaining més',
+                            style: TextStyle(
+                              color: color,
+                              decoration: TextDecoration.underline,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  void _showListDialog(
+    BuildContext context,
+    String title,
+    List<String> items,
+    IconData icon,
+    Color color,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(icon, color: color),
+            const SizedBox(width: 8),
+            Text(title),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: items
+                .map(
+                  (e) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.circle, size: 6, color: Colors.grey),
+                        const SizedBox(width: 8),
+                        Text(e),
+                      ],
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Tancar'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -333,12 +503,152 @@ class FarmersCalendarWidget extends ConsumerWidget {
     );
   }
 
-  String _generateSummary(List<String> pruning, List<String> harvest) {
-    if (pruning.isEmpty && harvest.isEmpty) return 'Mes tranquil al camp.';
+  void _showSummaryDialog(
+    BuildContext context,
+    List<dynamic> trees,
+    List<Species> allSpecies,
+    int currentMonth,
+    SpeciesRepository repo,
+  ) {
+    // Re-run logic for full lists
+    final speciesMap = <String, int>{};
+    final activeSpecies = <String>{};
+    for (final tree in trees) {
+      final name = tree.species.isNotEmpty ? tree.species : tree.commonName;
+      if (name.isNotEmpty) {
+        speciesMap[name] = (speciesMap[name] ?? 0) + 1;
+        activeSpecies.add(name);
+      }
+    }
 
+    final lookupMap = <String, Species>{};
+    for (final s in allSpecies) {
+      lookupMap[s.commonName.toLowerCase()] = s;
+      lookupMap[s.scientificName.toLowerCase()] = s;
+    }
+
+    final pruningList = <String>[];
+    final harvestList = <String>[];
+    final plantingList = <String>[];
+
+    for (final name in activeSpecies) {
+      final species =
+          lookupMap[name.toLowerCase()] ?? repo.findOfflineSpecies(name);
+      if (species != null) {
+        if (species.pruningMonths.contains(currentMonth)) {
+          pruningList.add(species.commonName);
+        }
+        if (species.harvestMonths.contains(currentMonth)) {
+          harvestList.add(species.commonName);
+        }
+        if (species.plantingMonths.contains(currentMonth)) {
+          plantingList.add(species.commonName);
+        }
+      }
+    }
+
+    final uniquePruning = pruningList.toSet().toList();
+    final uniqueHarvest = harvestList.toSet().toList();
+    final uniquePlanting = plantingList.toSet().toList();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Resum del Mes - ${_getMonthName(currentMonth)}'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _generateSummary(
+                  uniquePruning,
+                  uniqueHarvest,
+                  uniquePlanting,
+                  isFull: true,
+                ),
+                style: const TextStyle(
+                  fontStyle: FontStyle.italic,
+                  fontSize: 14,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (uniquePruning.isNotEmpty) ...[
+                _buildSectionHeader(Icons.cut, 'PODA', Colors.orange),
+                Text(uniquePruning.join(', ')),
+                const SizedBox(height: 12),
+              ],
+              if (uniqueHarvest.isNotEmpty) ...[
+                _buildSectionHeader(
+                  Icons.shopping_basket,
+                  'COLLITA',
+                  Colors.green,
+                ),
+                Text(uniqueHarvest.join(', ')),
+                const SizedBox(height: 12),
+              ],
+              if (uniquePlanting.isNotEmpty) ...[
+                _buildSectionHeader(Icons.spa, 'PLANTACIÓ', Colors.blue),
+                Text(uniquePlanting.join(', ')),
+                const SizedBox(height: 12),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Tancar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(IconData icon, String title, Color color) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _generateSummary(
+    List<String> pruning,
+    List<String> harvest,
+    List<String> planting, {
+    bool isFull = false,
+  }) {
+    if (pruning.isEmpty && harvest.isEmpty && planting.isEmpty) {
+      return 'Mes tranquil al camp.';
+    }
     final parts = <String>[];
-    if (pruning.isNotEmpty) parts.add('es pot podar ${_naturalJoin(pruning)}');
-    if (harvest.isNotEmpty) parts.add('collir ${_naturalJoin(harvest)}');
+
+    if (isFull) {
+      if (pruning.isNotEmpty) {
+        parts.add('es pot podar ${_naturalJoin(pruning)}');
+      }
+      if (harvest.isNotEmpty) {
+        parts.add('collir ${_naturalJoin(harvest)}');
+      }
+      if (planting.isNotEmpty) {
+        parts.add('plantar ${_naturalJoin(planting)}');
+      }
+    } else {
+      if (pruning.isNotEmpty) parts.add('es pot podar');
+      if (harvest.isNotEmpty) parts.add('collir');
+      if (planting.isNotEmpty) parts.add('plantar');
+    }
 
     String result = 'Aquest mes ${parts.join(" i ")}.';
     return result[0].toUpperCase() + result.substring(1);

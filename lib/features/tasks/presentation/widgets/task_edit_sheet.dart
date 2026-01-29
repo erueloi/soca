@@ -78,9 +78,13 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
   // Linked Construction
   ConstructionPoint? _linkedConstruction;
 
+  // Read Only State
+  late bool _isReadOnly;
+
   @override
   void initState() {
     super.initState();
+    _isReadOnly = widget.isReadOnly;
     _titleController = TextEditingController(text: widget.task?.title ?? '');
     _descriptionController = TextEditingController(
       text: widget.task?.description ?? '',
@@ -510,7 +514,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                           alignLabelWithHint: true,
                         ),
                         maxLines: 3,
-                        readOnly: widget.isReadOnly,
+                        readOnly: _isReadOnly,
                       ),
                       const SizedBox(height: 16),
                       Row(
@@ -519,7 +523,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                           const SizedBox(width: 16),
                           Expanded(
                             child: InkWell(
-                              onTap: widget.isReadOnly ? null : _pickDate,
+                              onTap: _isReadOnly ? null : _pickDate,
                               child: InputDecorator(
                                 decoration: const InputDecoration(
                                   labelText: 'Data Límit',
@@ -546,7 +550,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                if (!widget.isReadOnly)
+                if (!_isReadOnly)
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
@@ -597,7 +601,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
             ),
             const SizedBox(width: 8),
             Text(
-              widget.isReadOnly
+              _isReadOnly
                   ? 'Detall de la Tasca'
                   : (widget.task == null ? 'Nova Tasca' : 'Editar Tasca'),
               style: Theme.of(context).textTheme.headlineSmall,
@@ -606,9 +610,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
         ),
         Row(
           children: [
-            if (widget.task != null &&
-                widget.onDelete != null &&
-                !widget.isReadOnly)
+            if (widget.task != null && widget.onDelete != null && !_isReadOnly)
               IconButton(
                 icon: const Icon(Icons.delete_outline, color: Colors.red),
                 tooltip: 'Eliminar Tasca',
@@ -749,7 +751,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
       initialValue: _phase,
       decoration: const InputDecoration(labelText: 'Fase / Etiqueta'),
       items: effectiveItems,
-      onChanged: widget.isReadOnly
+      onChanged: _isReadOnly
           ? null
           : (val) => setState(() => _phase = val ?? ''),
     );
@@ -780,7 +782,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('Subtasques / Material'),
-            if (!widget.isReadOnly)
+            if (!_isReadOnly)
               IconButton(
                 icon: const Icon(Icons.add_circle, color: Colors.green),
                 onPressed: () {
@@ -814,7 +816,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
               children: [
                 Checkbox(
                   value: _itemDoneStates[index],
-                  onChanged: widget.isReadOnly
+                  onChanged: _isReadOnly
                       ? null
                       : (val) {
                           setState(() {
@@ -853,7 +855,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                         ),
                       );
                     }).toList(),
-                    onSelected: widget.isReadOnly
+                    onSelected: _isReadOnly
                         ? null
                         : (val) {
                             setState(() {
@@ -886,7 +888,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
-                    readOnly: widget.isReadOnly,
+                    readOnly: _isReadOnly,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -902,7 +904,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
-                    readOnly: widget.isReadOnly,
+                    readOnly: _isReadOnly,
                     onChanged: (_) => setState(() {}), // Trigger recalc
                   ),
                 ),
@@ -919,11 +921,11 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
-                    readOnly: widget.isReadOnly,
+                    readOnly: _isReadOnly,
                     onChanged: (_) => setState(() {}), // Trigger recalc
                   ),
                 ),
-                if (!widget.isReadOnly)
+                if (!_isReadOnly)
                   IconButton(
                     icon: const Icon(Icons.delete_outline, color: Colors.red),
                     onPressed: () {
@@ -1033,7 +1035,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('Recursos Vinculats'),
-            if (!widget.isReadOnly)
+            if (!_isReadOnly)
               IconButton(
                 icon: const Icon(Icons.add_link, color: Colors.blue),
                 onPressed: _showResourcePicker,
@@ -1102,10 +1104,10 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                   },
 
                   // Delete logic (if not read-only)
-                  deleteIcon: widget.isReadOnly
+                  deleteIcon: _isReadOnly
                       ? null
                       : const Icon(Icons.close, size: 18),
-                  onDeleted: widget.isReadOnly
+                  onDeleted: _isReadOnly
                       ? null
                       : () {
                           setState(() {
@@ -1133,7 +1135,7 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text('Assignar a:', style: Theme.of(context).textTheme.titleMedium),
-            if (!widget.isReadOnly)
+            if (!_isReadOnly)
               IconButton(
                 icon: const Icon(Icons.person_add, color: Colors.blue),
                 onPressed: _showContactPicker,
@@ -1168,10 +1170,10 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                     ),
                   ),
                   onPressed: () => _showContactActionDialog(contact),
-                  deleteIcon: widget.isReadOnly
+                  deleteIcon: _isReadOnly
                       ? null
                       : const Icon(Icons.close, size: 18),
-                  onDeleted: widget.isReadOnly
+                  onDeleted: _isReadOnly
                       ? null
                       : () {
                           setState(() {
