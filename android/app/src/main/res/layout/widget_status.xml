@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_status_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <!-- Main Temperature -->
+    <TextView
+        android:id="@+id/weather_temp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="--°C"
+        android:textSize="32sp"
+        android:textStyle="bold"
+        android:textColor="#2E7D32"/>
+
+    <!-- Secondary Metrics Row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="4dp">
+        
+        <TextView
+            android:id="@+id/weather_humidity"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="💧--%"
+            android:textSize="11sp"
+            android:textColor="#555555"/>
+
+        <TextView
+            android:id="@+id/weather_wind"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="💨-- km/h"
+            android:textSize="11sp"
+            android:textColor="#555555"/>
+
+        <TextView
+            android:id="@+id/weather_et0"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="☀️ET0: --"
+            android:textSize="11sp"
+            android:textColor="#555555"/>
+    </LinearLayout>
+
+    <!-- Irrigation Advice Semaphore -->
+    <TextView
+        android:id="@+id/irrigation_advice"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Carregant..."
+        android:background="#4CAF50"
+        android:padding="6dp"
+        android:gravity="center"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"/>
+
+    <!-- Tree Irrigation Status -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="6dp">
+        
+        <ImageView
+            android:id="@+id/tree_led"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:src="@android:drawable/presence_online"
+            android:tint="#4CAF50"/>
+            
+        <TextView
+            android:id="@+id/tree_status_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text="Tots els arbres OK"
+            android:textSize="11sp"
+            android:textColor="#555555"/>
+    </LinearLayout>
+        
+    <!-- Alert Banner (Hidden by default) -->
+    <TextView
+        android:id="@+id/alert_banner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="⚠️ ALERTA"
+        android:background="#FFEBEE"
+        android:padding="4dp"
+        android:gravity="center"
+        android:textSize="10sp"
+        android:textStyle="bold"
+        android:textColor="#B71C1C"
+        android:visibility="gone"
+        android:layout_marginTop="4dp"/>
+
+</LinearLayout>

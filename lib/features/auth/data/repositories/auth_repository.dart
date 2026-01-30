@@ -3,12 +3,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:google_sign_in/google_sign_in.dart' as gsi;
+import '../../../../core/services/home_widget_service.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
+  final homeWidgetService = ref.watch(homeWidgetServiceProvider);
   return AuthRepository(
     FirebaseAuth.instance,
     FirebaseFirestore.instance,
     gsi.GoogleSignIn(),
+    homeWidgetService,
   );
 });
 
@@ -20,8 +23,14 @@ class AuthRepository {
   final FirebaseAuth _firebaseAuth;
   final FirebaseFirestore _firestore;
   final gsi.GoogleSignIn _googleSignIn;
+  final HomeWidgetService _homeWidgetService;
 
-  AuthRepository(this._firebaseAuth, this._firestore, this._googleSignIn);
+  AuthRepository(
+    this._firebaseAuth,
+    this._firestore,
+    this._googleSignIn,
+    this._homeWidgetService,
+  );
 
   Stream<User?> get authStateChanges => _firebaseAuth.authStateChanges();
 
@@ -112,6 +121,7 @@ class AuthRepository {
   }
 
   Future<void> signOut() async {
+    await _homeWidgetService.clearWidgetData();
     await _firebaseAuth.signOut();
   }
 }

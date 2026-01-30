@@ -1,0 +1,241 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/agenda_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <!-- Header: Icon + Title -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="8dp">
+        
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📅"
+            android:textSize="16sp"/>
+            
+        <TextView
+            android:id="@+id/agenda_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Agenda"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="#333333"
+            android:layout_marginStart="6dp"/>
+            
+        <!-- Soca Logo top right -->
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/ic_stat_logo_soca"
+            android:contentDescription="Soca"/>
+    </LinearLayout>
+
+    <!-- Task 1 -->
+    <LinearLayout
+        android:id="@+id/task_container_0"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="#F5F5F5"
+        android:padding="8dp"
+        android:layout_marginBottom="4dp"
+        android:visibility="gone">
+        
+        <!-- Colored left border indicator using FrameLayout -->
+        <FrameLayout
+            android:layout_width="4dp"
+            android:layout_height="40dp">
+            <TextView
+                android:id="@+id/task_indicator_0"
+                android:layout_width="4dp"
+                android:layout_height="40dp"
+                android:background="#4CAF50"/>
+        </FrameLayout>
+            
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:layout_marginStart="8dp"
+            android:layout_gravity="center_vertical">
+            
+            <TextView
+                android:id="@+id/task_title_0"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Tasca 1"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="#333333"
+                android:maxLines="1"
+                android:ellipsize="end"/>
+                
+            <TextView
+                android:id="@+id/task_date_0"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Descripció..."
+                android:textSize="11sp"
+                android:textColor="#757575"
+                android:maxLines="1"
+                android:ellipsize="end"/>
+        </LinearLayout>
+        
+        <TextView
+            android:id="@+id/task_price_0"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="130€"
+            android:textSize="13sp"
+            android:textColor="#4CAF50"
+            android:textStyle="bold"
+            android:layout_gravity="center_vertical"/>
+    </LinearLayout>
+
+    <!-- Task 2 -->
+    <LinearLayout
+        android:id="@+id/task_container_1"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="#F5F5F5"
+        android:padding="8dp"
+        android:layout_marginBottom="4dp"
+        android:visibility="gone">
+        
+        <FrameLayout
+            android:layout_width="4dp"
+            android:layout_height="40dp">
+            <TextView
+                android:id="@+id/task_indicator_1"
+                android:layout_width="4dp"
+                android:layout_height="40dp"
+                android:background="#4CAF50"/>
+        </FrameLayout>
+            
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:layout_marginStart="8dp"
+            android:layout_gravity="center_vertical">
+            
+            <TextView
+                android:id="@+id/task_title_1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Tasca 2"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="#333333"
+                android:maxLines="1"
+                android:ellipsize="end"/>
+                
+            <TextView
+                android:id="@+id/task_date_1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Descripció..."
+                android:textSize="11sp"
+                android:textColor="#757575"
+                android:maxLines="1"
+                android:ellipsize="end"/>
+        </LinearLayout>
+        
+        <TextView
+            android:id="@+id/task_price_1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="130€"
+            android:textSize="13sp"
+            android:textColor="#4CAF50"
+            android:textStyle="bold"
+            android:layout_gravity="center_vertical"/>
+    </LinearLayout>
+
+    <!-- Task 3 -->
+    <LinearLayout
+        android:id="@+id/task_container_2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="#F5F5F5"
+        android:padding="8dp"
+        android:visibility="gone">
+        
+        <FrameLayout
+            android:layout_width="4dp"
+            android:layout_height="40dp">
+            <TextView
+                android:id="@+id/task_indicator_2"
+                android:layout_width="4dp"
+                android:layout_height="40dp"
+                android:background="#4CAF50"/>
+        </FrameLayout>
+            
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:layout_marginStart="8dp"
+            android:layout_gravity="center_vertical">
+            
+            <TextView
+                android:id="@+id/task_title_2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Tasca 3"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="#333333"
+                android:maxLines="1"
+                android:ellipsize="end"/>
+                
+            <TextView
+                android:id="@+id/task_date_2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Descripció..."
+                android:textSize="11sp"
+                android:textColor="#757575"
+                android:maxLines="1"
+                android:ellipsize="end"/>
+        </LinearLayout>
+        
+        <TextView
+            android:id="@+id/task_price_2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="130€"
+            android:textSize="13sp"
+            android:textColor="#4CAF50"
+            android:textStyle="bold"
+            android:layout_gravity="center_vertical"/>
+    </LinearLayout>
+
+    <!-- Empty State -->
+    <TextView
+        android:id="@+id/empty_view"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Sense tasques pendents"
+        android:gravity="center"
+        android:textColor="#9E9E9E"
+        android:textSize="12sp"
+        android:padding="16dp"
+        android:visibility="visible"/>
+
+</LinearLayout>

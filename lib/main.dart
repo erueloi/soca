@@ -13,6 +13,8 @@ import 'features/settings/presentation/providers/settings_provider.dart';
 import 'features/settings/presentation/pages/app_config_page.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/auth/data/repositories/auth_repository.dart';
+import 'package:home_widget/home_widget.dart';
+import 'core/widgets/widget_sync_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,6 +28,9 @@ void main() async {
   );
 
   runApp(const ProviderScope(child: SocaApp()));
+
+  // Register Background Callback
+  await HomeWidget.registerInteractivityCallback(homeWidgetBackgroundCallback);
 }
 
 class SocaApp extends ConsumerWidget {
@@ -57,23 +62,34 @@ class SocaApp extends ConsumerWidget {
         Locale('en', 'US'),
       ],
       routes: {'/config': (context) => const AppConfigPage()},
-      home: authStateAsync.when(
-        data: (user) {
-          if (user == null) {
-            return const LoginPage();
-          }
-          // Optionally check if email is verified or authorization is strictly needed here?
-          // For now, Firestore rules handle authorization, so even if logged in but unauthorized,
-          // they'll see empty data. We could add an "UnauthorizedPage" later if needed.
-          return const HomePage();
-        },
-        loading: () =>
-            const WelcomeScreen(), // Use WelcomeScreen while checking auth
-        error: (e, s) =>
-            Scaffold(body: Center(child: Text('Error d\'autenticació: $e'))),
+      home: WidgetSyncManager(
+        child: authStateAsync.when(
+          data: (user) {
+            if (user == null) {
+              return const LoginPage();
+            }
+            // Optionally check if email is verified or authorization is strictly needed here?
+            // For now, Firestore rules handle authorization, so even if logged in but unauthorized,
+            // they'll see empty data. We could add an "UnauthorizedPage" later if needed.
+            return const HomePage();
+          },
+          loading: () =>
+              const WelcomeScreen(), // Use WelcomeScreen while checking auth
+          error: (e, s) =>
+              Scaffold(body: Center(child: Text('Error d\'autenticació: $e'))),
+        ),
       ),
     );
   }
+}
+
+// Background Callback (Entry Point)
+@pragma('vm:entry-point')
+Future<void> homeWidgetBackgroundCallback(Uri? uri) async {
+  // Logic to handle background updates if triggered by widget
+  // Initialize Firebase and update widgets if necessary
+  // For now, allow default behavior or implement simple fetch
+  // Note: full dependency injection is hard here without setup.
 }
 
 class WelcomeScreen extends StatelessWidget {

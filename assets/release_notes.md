@@ -1,5 +1,8 @@
 ﻿# Release Notes
 
+## v1.9.0
+Tasques: Poder afegir recursos directament a la tasca.
+Widget de agenda i temps!
 ## v1.8.15
 Tasques: Petites millores al calendari que surtin els recursos i poder obrir tasques del històric.Arbres: Revisió del widget del Calendari del Pagès.
 ## v1.8.14
@@ -144,6 +147,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

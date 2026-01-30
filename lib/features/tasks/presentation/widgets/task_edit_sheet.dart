@@ -14,6 +14,7 @@ import '../../../construction/data/models/construction_point.dart';
 import '../../../construction/presentation/pages/pathology_detail_page.dart';
 import '../../../directory/presentation/providers/directory_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../../directory/presentation/widgets/resource_form_dialog.dart';
 
 class TaskEditSheet extends ConsumerStatefulWidget {
   final Task? task;
@@ -184,8 +185,8 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
   }
 
   Future<void> _showResourcePicker() async {
-    final availableResources = await ref.read(resourcesStreamProvider.future);
-    final config = await ref.read(farmConfigStreamProvider.future);
+    // No longer pre-fetch once, use Consumer in dialog or StreamBuilder
+    // But since we are in a method, we can show a dialog that contains a Consumer.
 
     if (!mounted) return;
 
@@ -193,8 +194,20 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
       context: context,
       builder: (ctx) {
         String searchQuery = '';
-        return StatefulBuilder(
-          builder: (context, setStateDialog) {
+        return Consumer(
+          // Use Consumer to listen to streams live
+          builder: (context, ref, child) {
+            final availableResourcesAsync = ref.watch(resourcesStreamProvider);
+            final configAsync = ref.watch(farmConfigStreamProvider);
+
+            // Handle loading/error states if needed, or just default to empty
+            final availableResources = availableResourcesAsync.value ?? [];
+            final config = configAsync.value;
+
+            if (config == null) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
             final filteredResources = availableResources.where((r) {
               final query = searchQuery.toLowerCase();
               final typeName = config.resourceTypes
@@ -212,89 +225,115 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                   typeName.toLowerCase().contains(query);
             }).toList();
 
-            return AlertDialog(
-              title: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Vincular Recursos'),
-                  const SizedBox(height: 8),
-                  TextField(
-                    decoration: const InputDecoration(
-                      hintText: 'Cercar per títol o tipus...',
-                      prefixIcon: Icon(Icons.search),
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (val) {
-                      setStateDialog(() {
-                        searchQuery = val;
-                      });
-                    },
-                  ),
-                ],
-              ),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: filteredResources.isEmpty
-                    ? const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(16.0),
-                          child: Text('No s\'han trobat resultats'),
-                        ),
-                      )
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: filteredResources.length,
-                        itemBuilder: (ctx, i) {
-                          final resource = filteredResources[i];
-                          final isSelected = _linkedResourceIds.contains(
-                            resource.id,
-                          );
-                          final typeConfig = config.resourceTypes.firstWhere(
-                            (t) => t.id == resource.typeId,
-                            orElse: () => ResourceTypeConfig(
-                              id: 'other',
-                              name: 'Altre',
-                              colorHex: 'FF9E9E9E',
-                              iconCode: 0xe24d,
-                            ),
-                          );
-
-                          return CheckboxListTile(
-                            secondary: Icon(
-                              IconData(
-                                typeConfig.iconCode,
-                                fontFamily: 'MaterialIcons',
-                              ),
-                              color: Color(
-                                int.parse(typeConfig.colorHex, radix: 16),
-                              ),
-                            ),
-                            title: Text(resource.title),
-                            subtitle: Text(typeConfig.name),
-                            value: isSelected,
-                            onChanged: (val) {
-                              setStateDialog(() {
-                                if (val == true) {
-                                  _linkedResourceIds.add(resource.id);
-                                } else {
-                                  _linkedResourceIds.remove(resource.id);
-                                }
-                              });
-                              // Also update main state
-                              setState(() {});
-                            },
-                          );
+            return StatefulBuilder(
+              builder: (context, setStateDialog) {
+                return AlertDialog(
+                  title: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Vincular Recursos'),
+                      IconButton(
+                        icon: const Icon(Icons.add_circle, color: Colors.green),
+                        tooltip: 'Crear Nou Recurs',
+                        onPressed: () {
+                          // Open New Resource Dialog
+                          // We pass 'ref' from the Consumer or the Widget.
+                          // Use the main Widget ref is fine, or this consumer ref.
+                          showResourceFormDialog(context, ref);
                         },
                       ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Tancar'),
-                ),
-              ],
+                    ],
+                  ),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        decoration: const InputDecoration(
+                          hintText: 'Cercar per títol o tipus...',
+                          prefixIcon: Icon(Icons.search),
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                        onChanged: (val) {
+                          setStateDialog(() {
+                            searchQuery = val;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Flexible(
+                        // Use Flexible to avoid unbounded height issues
+                        child: SizedBox(
+                          width: double.maxFinite,
+                          child: filteredResources.isEmpty
+                              ? const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(16.0),
+                                    child: Text('No s\'han trobat resultats'),
+                                  ),
+                                )
+                              : ListView.builder(
+                                  shrinkWrap: true,
+                                  itemCount: filteredResources.length,
+                                  itemBuilder: (ctx, i) {
+                                    final resource = filteredResources[i];
+                                    final isSelected = _linkedResourceIds
+                                        .contains(resource.id);
+                                    final typeConfig = config.resourceTypes
+                                        .firstWhere(
+                                          (t) => t.id == resource.typeId,
+                                          orElse: () => ResourceTypeConfig(
+                                            id: 'other',
+                                            name: 'Altre',
+                                            colorHex: 'FF9E9E9E',
+                                            iconCode: 0xe24d,
+                                          ),
+                                        );
+
+                                    return CheckboxListTile(
+                                      secondary: Icon(
+                                        IconData(
+                                          typeConfig.iconCode,
+                                          fontFamily: 'MaterialIcons',
+                                        ),
+                                        color: Color(
+                                          int.parse(
+                                            typeConfig.colorHex,
+                                            radix: 16,
+                                          ),
+                                        ),
+                                      ),
+                                      title: Text(resource.title),
+                                      subtitle: Text(typeConfig.name),
+                                      value: isSelected,
+                                      onChanged: (val) {
+                                        setStateDialog(() {
+                                          if (val == true) {
+                                            _linkedResourceIds.add(resource.id);
+                                          } else {
+                                            _linkedResourceIds.remove(
+                                              resource.id,
+                                            );
+                                          }
+                                        });
+                                        // Also update main state of TaskEditSheet
+                                        setState(() {});
+                                      },
+                                    );
+                                  },
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Tancar'),
+                    ),
+                  ],
+                );
+              },
             );
           },
         );
