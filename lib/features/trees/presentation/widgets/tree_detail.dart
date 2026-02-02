@@ -204,6 +204,113 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     }
   }
 
+  /// Shows a dialog to confirm planting with date and price, then updates tree status
+  Future<void> _confirmPlanting() async {
+    DateTime selectedDate = DateTime.now();
+    final priceController = TextEditingController(
+      text: widget.tree.price?.toString() ?? '',
+    );
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          icon: const Icon(Icons.check_circle, color: Colors.green, size: 40),
+          title: const Text('Confirmar Plantació'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Estàs a punt de convertir aquest arbre planificat en un arbre real.',
+                style: TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 16),
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: selectedDate,
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime.now(),
+                    helpText: 'Data de Plantació',
+                  );
+                  if (picked != null) {
+                    setDialogState(() => selectedDate = picked);
+                  }
+                },
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Data de Plantació',
+                    border: OutlineInputBorder(),
+                    suffixIcon: Icon(Icons.calendar_today),
+                  ),
+                  child: Text(DateFormat('dd/MM/yyyy').format(selectedDate)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: priceController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Preu de compra (€)',
+                  hintText: 'Opcional',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.euro),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('CANCEL·LAR'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: const Icon(Icons.check, color: Colors.white),
+              label: const Text('CONFIRMAR'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final price = double.tryParse(priceController.text);
+    priceController.dispose();
+
+    // Update tree in Firestore
+    final updatedTree = widget.tree.copyWith(
+      status: 'Viable',
+      plantingDate: selectedDate,
+      price: price,
+    );
+
+    await ref.read(treesRepositoryProvider).updateTree(updatedTree);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Arbre confirmat com a plantat!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      setState(() {
+        _status = 'Viable';
+        _plantingDate = selectedDate;
+        _displayTree = updatedTree;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -351,6 +458,84 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
+          // Planned Tree Banner
+          if (_displayTree.status == 'Planned')
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.deepPurple.withValues(alpha: 0.15),
+                    Colors.deepPurple.withValues(alpha: 0.05),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.deepPurple.withValues(alpha: 0.4),
+                  width: 1.5,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.deepPurple.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.auto_awesome,
+                          color: Colors.deepPurple,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Arbre Planificat',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: Colors.deepPurple,
+                              ),
+                            ),
+                            Text(
+                              'Aquest arbre és provisional i no afecta les estadístiques',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _confirmPlanting,
+                      icon: const Icon(Icons.check_circle, color: Colors.white),
+                      label: const Text('CONFIRMAR PLANTACIÓ'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           // AI Cards
           Row(
             children: [
@@ -1205,9 +1390,15 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                       );
 
                   final hasZone = zone != null;
-                  final color = hasZone
-                      ? Color(int.parse(zone.colorHex))
-                      : Colors.grey.shade400;
+                  // Fix: add 0x prefix for hex parsing
+                  Color color;
+                  try {
+                    color = hasZone
+                        ? Color(int.parse('0x${zone.colorHex}'))
+                        : Colors.grey.shade400;
+                  } catch (e) {
+                    color = Colors.grey.shade400;
+                  }
 
                   return Padding(
                     padding: const EdgeInsets.only(

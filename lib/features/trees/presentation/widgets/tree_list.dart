@@ -28,28 +28,59 @@ class TreeList extends ConsumerWidget {
         return ListTile(
           selected: isSelected,
           selectedTileColor: Colors.green.withValues(alpha: 0.1),
-          leading: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              width: 50,
-              height: 50,
-              color: Colors.grey[300],
-              child: (tree.photoUrl != null && tree.photoUrl!.isNotEmpty)
-                  ? Image.network(
-                      tree.photoUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return const Icon(Icons.park, color: Colors.green);
-                      },
-                    )
-                  : Image.asset(
-                      'assets/images/placeholder_tree.png',
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return const Icon(Icons.park, color: Colors.green);
-                      },
+          leading: Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: 50,
+                  height: 50,
+                  color: Colors.grey[300],
+                  child: Opacity(
+                    opacity: tree.status == 'Planned' ? 0.6 : 1.0,
+                    child: (tree.photoUrl != null && tree.photoUrl!.isNotEmpty)
+                        ? Image.network(
+                            tree.photoUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Icon(
+                                Icons.park,
+                                color: Colors.green,
+                              );
+                            },
+                          )
+                        : Image.asset(
+                            'assets/images/placeholder_tree.png',
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Icon(
+                                Icons.park,
+                                color: Colors.green,
+                              );
+                            },
+                          ),
+                  ),
+                ),
+              ),
+              // Planned tree indicator badge
+              if (tree.status == 'Planned')
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.deepPurple,
+                      borderRadius: BorderRadius.circular(6),
                     ),
-            ),
+                    child: const Icon(
+                      Icons.auto_awesome,
+                      color: Colors.white,
+                      size: 12,
+                    ),
+                  ),
+                ),
+            ],
           ),
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -89,23 +120,41 @@ class TreeList extends ConsumerWidget {
                 style: const TextStyle(fontStyle: FontStyle.italic),
               ),
               Text(
-                'Plantat: ${tree.plantingDate.day}/${tree.plantingDate.month}/${tree.plantingDate.year}',
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                tree.status == 'Planned'
+                    ? 'Planificat'
+                    : 'Plantat: ${tree.plantingDate.day}/${tree.plantingDate.month}/${tree.plantingDate.year}',
+                style: TextStyle(
+                  color: tree.status == 'Planned'
+                      ? Colors.deepPurple
+                      : Colors.grey[600],
+                  fontSize: 12,
+                  fontWeight: tree.status == 'Planned'
+                      ? FontWeight.bold
+                      : FontWeight.normal,
+                ),
               ),
             ],
           ),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                icon: Icon(
-                  Icons.water_drop,
-                  color: tree.waterStatusColor == Colors.grey
-                      ? Colors.blue
-                      : tree.waterStatusColor,
+              // Delete button for planned trees
+              if (tree.status == 'Planned')
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                  tooltip: 'Eliminar arbre planificat',
+                  onPressed: () => _confirmDeletePlanned(context, ref, tree),
+                )
+              else
+                IconButton(
+                  icon: Icon(
+                    Icons.water_drop,
+                    color: tree.waterStatusColor == Colors.grey
+                        ? Colors.blue
+                        : tree.waterStatusColor,
+                  ),
+                  onPressed: () => _showQuickWateringSheet(context, ref, tree),
                 ),
-                onPressed: () => _showQuickWateringSheet(context, ref, tree),
-              ),
               const SizedBox(width: 8),
               // Health/Vitality Indicator
               Container(
@@ -140,9 +189,52 @@ class TreeList extends ConsumerWidget {
         return Colors.orange;
       case 'viable':
         return Colors.green;
+      case 'planned':
+        return Colors.deepPurple;
       default:
         return Colors.grey;
     }
+  }
+
+  /// Deletes a planned tree without extra confirmation (as per user request)
+  void _confirmDeletePlanned(BuildContext context, WidgetRef ref, Tree tree) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.delete_outline, color: Colors.red, size: 40),
+        title: const Text('Eliminar Arbre Planificat'),
+        content: Text(
+          'Vols eliminar "${tree.commonName}" de la planificació?\n\n'
+          'Aquesta acció no es pot desfer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('CANCEL·LAR'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await ref.read(treesRepositoryProvider).deleteTree(tree.id);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('"${tree.commonName}" eliminat'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            icon: const Icon(Icons.delete, color: Colors.white),
+            label: const Text('ELIMINAR'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showQuickWateringSheet(BuildContext context, WidgetRef ref, Tree tree) {

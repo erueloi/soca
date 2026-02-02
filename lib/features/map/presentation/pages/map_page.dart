@@ -46,6 +46,12 @@ class _MapPageState extends ConsumerState<MapPage> {
   StreamSubscription<MapEvent>? _mapEventSubscription;
   LatLng? _selectedLocation;
 
+  // Measurement mode state
+  bool _isMeasuring = false;
+  LatLng? _measurePointA;
+  LatLng? _measurePointB;
+  double _currentZoom = 18.0;
+
   @override
   void initState() {
     super.initState();
@@ -128,6 +134,86 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
   }
 
+  /// Handles taps in measurement mode
+  void _handleMeasureTap(TapPosition tapPosition, LatLng point) {
+    setState(() {
+      if (_measurePointA == null) {
+        _measurePointA = point;
+        _measurePointB = null;
+      } else if (_measurePointB == null) {
+        _measurePointB = point;
+      } else {
+        // Reset and start new measurement
+        _measurePointA = point;
+        _measurePointB = null;
+      }
+    });
+  }
+
+  /// Calculates distance between two points using Haversine formula
+  double _calculateDistance(LatLng a, LatLng b) {
+    const earthRadius = 6371000.0; // meters
+    final dLat = (b.latitude - a.latitude) * (math.pi / 180);
+    final dLng = (b.longitude - a.longitude) * (math.pi / 180);
+    final lat1 = a.latitude * (math.pi / 180);
+    final lat2 = b.latitude * (math.pi / 180);
+
+    final hav =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1) *
+            math.cos(lat2) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
+    final c = 2 * math.atan2(math.sqrt(hav), math.sqrt(1 - hav));
+    return earthRadius * c;
+  }
+
+  /// Returns human-readable distance string
+  String _formatDistance(double meters) {
+    if (meters < 1) {
+      return '${(meters * 100).toStringAsFixed(0)} cm';
+    } else if (meters < 1000) {
+      return '${meters.toStringAsFixed(1)} m';
+    } else {
+      return '${(meters / 1000).toStringAsFixed(2)} km';
+    }
+  }
+
+  /// Gets scale bar width for current zoom level
+  double _getScaleBarWidthMeters() {
+    // At zoom 18, roughly 1m per pixel. Adjust by zoom factor.
+    // We want nice round numbers for the scale bar
+    final metersPerPixel =
+        156543.03392 *
+        math.cos(_currentZoom * math.pi / 180) /
+        math.pow(2, _currentZoom);
+
+    // 100 pixels as base width for scale bar
+    final targetPixels = 80.0;
+    final rawMeters = targetPixels * metersPerPixel;
+
+    // Round to nice values
+    if (rawMeters < 2) return 1;
+    if (rawMeters < 5) return 2;
+    if (rawMeters < 10) return 5;
+    if (rawMeters < 20) return 10;
+    if (rawMeters < 50) return 20;
+    if (rawMeters < 100) return 50;
+    if (rawMeters < 200) return 100;
+    if (rawMeters < 500) return 200;
+    if (rawMeters < 1000) return 500;
+    return 1000;
+  }
+
+  /// Gets scale bar pixel width for given meters
+  double _getScaleBarPixelWidth(double meters) {
+    final metersPerPixel =
+        156543.03392 *
+        math.cos(_currentZoom * math.pi / 180) /
+        math.pow(2, _currentZoom);
+    return meters / metersPerPixel;
+  }
+
   @override
   Widget build(BuildContext context) {
     final layers = ref.watch(mapLayersProvider);
@@ -135,352 +221,661 @@ class _MapPageState extends ConsumerState<MapPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Mapa de la Finca')),
 
-      body: Consumer(
-        builder: (context, ref, child) {
-          final configAsync = ref.watch(farmConfigStreamProvider);
+      body: Stack(
+        children: [
+          // Map content
+          Consumer(
+            builder: (context, ref, child) {
+              final configAsync = ref.watch(farmConfigStreamProvider);
 
-          return configAsync.when(
-            data: (config) {
-              return FlutterMap(
-                mapController: _mapController,
-                options: MapOptions(
-                  initialCenter: LatLng(config.latitude, config.longitude),
-                  initialZoom: config.zoom,
-                  maxZoom: 20.0,
-                  onLongPress: _handleLongPress,
-                ),
-                children: [
-                  TileLayer(
-                    urlTemplate: (layers[MapLayer.useOpenStreetMap] ?? false)
-                        ? ((layers[MapLayer.satellite] ?? false)
-                              ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-                              : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png')
-                        : ((layers[MapLayer.satellite] ?? false)
-                              ? 'https://geoserveis.icgc.cat/icc_mapesmultibase/noutm/wmts/orto/GRID3857/{z}/{x}/{y}.jpeg'
-                              : 'https://geoserveis.icgc.cat/icc_mapesmultibase/noutm/wmts/topo/GRID3857/{z}/{x}/{y}.jpeg'),
-                    userAgentPackageName: 'com.molicaljeroni.soca',
-                  ),
-                  CurrentLocationLayer(
-                    // Align position: Always for centered/compass. Never for none.
-                    alignPositionOnUpdate: _followMode != MapFollowMode.none
-                        ? AlignOnUpdate.always
-                        : AlignOnUpdate.never,
-                    // Align direction: Always for compass. Never for others.
-                    alignDirectionOnUpdate: _followMode == MapFollowMode.compass
-                        ? AlignOnUpdate.always
-                        : AlignOnUpdate.never,
-                    headingStream: _followMode == MapFollowMode.compass
-                        ? FlutterCompass.events?.map((e) {
-                            return LocationMarkerHeading(
-                              heading: (e.heading ?? 0) * (math.pi / 180),
-                              accuracy: (e.accuracy ?? 0) * (math.pi / 180),
-                            );
-                          })
-                        : null,
-                    style: const LocationMarkerStyle(
-                      marker: DefaultLocationMarker(
-                        color: Color(0xFF2E7D32), // Soca Green
-                        child: Icon(
-                          Icons.navigation,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                      ),
-                      markerSize: Size(40, 40),
-                      accuracyCircleColor: Color(0x332E7D32),
-                    ),
-                  ),
-                  // Irrigation Zones Layer (Dynamic from FarmConfig)
-                  if (layers[MapLayer.irrigationZones] == true)
-                    PolygonLayer(
-                      polygons: [
-                        // For now, only mock zones that have real points or rely on matching
-                        // If we want to use the config zones, we would need points in FarmZone
-                        // Since we don't have them yet, keeping the Demo polygons if name matches, or just Demo polygons.
-                        // Given the user request was Metadata-focused, I'll keep the Demo polygons for "Zona A" and "Zona B".
-                        // In future, we can add `points` to FarmZone and map `config.zones`.
-                        Polygon(
-                          points: [
-                            LatLng(41.512800, 0.918400),
-                            LatLng(41.512800, 0.918800),
-                            LatLng(41.512500, 0.918800),
-                            LatLng(41.512500, 0.918400),
-                          ],
-                          color: Colors.blue.withValues(alpha: 0.3),
-                          borderStrokeWidth: 2,
-                          borderColor: Colors.blue,
-                          label: 'Zona A',
-                          labelStyle: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Polygon(
-                          points: [
-                            LatLng(41.512500, 0.918800),
-                            LatLng(41.512500, 0.919200),
-                            LatLng(41.512200, 0.919200),
-                            LatLng(41.512200, 0.918800),
-                          ],
-                          color: Colors.teal.withValues(alpha: 0.3),
-                          borderStrokeWidth: 2,
-                          borderColor: Colors.teal,
-                          label: 'Zona B',
-                          labelStyle: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-
-                  // Permaculture Zones Layer
-                  if (layers[MapLayer.permacultureZones] == true)
-                    PolygonLayer(
-                      polygons: config.permacultureZones.map((zone) {
-                        final color = Color(
-                          int.parse(zone.colorHex, radix: 16),
-                        );
-                        return Polygon(
-                          points: zone.polygon
-                              .map((p) => LatLng(p.latitude, p.longitude))
-                              .toList(),
-                          color: color.withValues(alpha: 0.3),
-                          borderStrokeWidth: 2,
-                          borderColor: color,
-                          label: zone.name,
-                          labelStyle: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            shadows: [
-                              Shadow(blurRadius: 2, color: Colors.black),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    ),
-
-                  // Task Markers Layer
-                  if (layers[MapLayer.tasks] == true)
-                    Consumer(
-                      builder: (context, ref, child) {
-                        final tasksAsyncValue = ref.watch(tasksStreamProvider);
-                        final bucketsAsync = ref.watch(bucketsStreamProvider);
-                        final configAsync = ref.watch(farmConfigStreamProvider);
-                        final markerSize =
-                            configAsync.asData?.value.mapMarkerSize ?? 20.0;
-                        final pendingOnly =
-                            layers[MapLayer.pendingTasksOnly] ?? true;
-
-                        // Get buckets map for icon lookup
-                        final bucketsMap = <String, Bucket>{};
-                        if (bucketsAsync.hasValue) {
-                          for (final b in bucketsAsync.value!) {
-                            bucketsMap[b.name] = b;
-                          }
+              return configAsync.when(
+                data: (config) {
+                  return FlutterMap(
+                    mapController: _mapController,
+                    options: MapOptions(
+                      initialCenter: LatLng(config.latitude, config.longitude),
+                      initialZoom: config.zoom,
+                      maxZoom: 20.0,
+                      onLongPress: _handleLongPress,
+                      onTap: _isMeasuring ? _handleMeasureTap : null,
+                      onPositionChanged: (position, hasGesture) {
+                        if (position.zoom != _currentZoom) {
+                          setState(() => _currentZoom = position.zoom);
                         }
-
-                        List<Marker> markers = [];
-                        if (tasksAsyncValue.hasValue) {
-                          // Filter tasks: must have location, and if pendingOnly, exclude completed
-                          final filteredTasks = tasksAsyncValue.value!.where((
-                            t,
-                          ) {
-                            if (t.latitude == null || t.longitude == null) {
-                              return false;
-                            }
-                            if (pendingOnly && t.isDone) {
-                              return false;
-                            }
-                            return true;
-                          });
-
-                          markers.addAll(
-                            filteredTasks.map((t) {
-                              // Get bucket icon, fallback to default
-                              final bucket = bucketsMap[t.bucket];
-                              final iconData =
-                                  bucket?.icon ??
-                                  IconData(
-                                    Bucket.defaultIconCode,
-                                    fontFamily: Bucket.defaultIconFamily,
-                                  );
-
-                              return Marker(
-                                point: LatLng(t.latitude!, t.longitude!),
-                                // Use consistent container size for stability
-                                width: 120.0,
-                                height: 120.0,
-                                alignment: Alignment.center,
-                                child: Center(
-                                  child: GestureDetector(
-                                    onTap: () =>
-                                        _showTaskOptions(context, ref, t),
-                                    child: Icon(
-                                      iconData,
-                                      color:
-                                          bucket?.iconColor ??
-                                          Bucket.defaultIconColor,
-                                      size: markerSize * 0.9,
-                                      shadows: const [
-                                        Shadow(
-                                          blurRadius: 5,
-                                          color: Colors.black54,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              );
-                            }),
-                          );
-                        }
-                        return MarkerLayer(markers: markers);
                       },
                     ),
+                    children: [
+                      TileLayer(
+                        urlTemplate:
+                            (layers[MapLayer.useOpenStreetMap] ?? false)
+                            ? ((layers[MapLayer.satellite] ?? false)
+                                  ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                                  : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png')
+                            : ((layers[MapLayer.satellite] ?? false)
+                                  ? 'https://geoserveis.icgc.cat/icc_mapesmultibase/noutm/wmts/orto/GRID3857/{z}/{x}/{y}.jpeg'
+                                  : 'https://geoserveis.icgc.cat/icc_mapesmultibase/noutm/wmts/topo/GRID3857/{z}/{x}/{y}.jpeg'),
+                        userAgentPackageName: 'com.molicaljeroni.soca',
+                      ),
+                      CurrentLocationLayer(
+                        // Align position: Always for centered/compass. Never for none.
+                        alignPositionOnUpdate: _followMode != MapFollowMode.none
+                            ? AlignOnUpdate.always
+                            : AlignOnUpdate.never,
+                        // Align direction: Always for compass. Never for others.
+                        alignDirectionOnUpdate:
+                            _followMode == MapFollowMode.compass
+                            ? AlignOnUpdate.always
+                            : AlignOnUpdate.never,
+                        headingStream: _followMode == MapFollowMode.compass
+                            ? FlutterCompass.events?.map((e) {
+                                return LocationMarkerHeading(
+                                  heading: (e.heading ?? 0) * (math.pi / 180),
+                                  accuracy: (e.accuracy ?? 0) * (math.pi / 180),
+                                );
+                              })
+                            : null,
+                        style: const LocationMarkerStyle(
+                          marker: DefaultLocationMarker(
+                            color: Color(0xFF2E7D32), // Soca Green
+                            child: Icon(
+                              Icons.navigation,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                          ),
+                          markerSize: Size(40, 40),
+                          accuracyCircleColor: Color(0x332E7D32),
+                        ),
+                      ),
+                      // Irrigation Zones Layer (Dynamic from FarmConfig)
+                      if (layers[MapLayer.irrigationZones] == true)
+                        PolygonLayer(
+                          polygons: [
+                            // For now, only mock zones that have real points or rely on matching
+                            // If we want to use the config zones, we would need points in FarmZone
+                            // Since we don't have them yet, keeping the Demo polygons if name matches, or just Demo polygons.
+                            // Given the user request was Metadata-focused, I'll keep the Demo polygons for "Zona A" and "Zona B".
+                            // In future, we can add `points` to FarmZone and map `config.zones`.
+                            Polygon(
+                              points: [
+                                LatLng(41.512800, 0.918400),
+                                LatLng(41.512800, 0.918800),
+                                LatLng(41.512500, 0.918800),
+                                LatLng(41.512500, 0.918400),
+                              ],
+                              color: Colors.blue.withValues(alpha: 0.3),
+                              borderStrokeWidth: 2,
+                              borderColor: Colors.blue,
+                              label: 'Zona A',
+                              labelStyle: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Polygon(
+                              points: [
+                                LatLng(41.512500, 0.918800),
+                                LatLng(41.512500, 0.919200),
+                                LatLng(41.512200, 0.919200),
+                                LatLng(41.512200, 0.918800),
+                              ],
+                              color: Colors.teal.withValues(alpha: 0.3),
+                              borderStrokeWidth: 2,
+                              borderColor: Colors.teal,
+                              label: 'Zona B',
+                              labelStyle: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
 
-                  // Tree Markers Layer
-                  Consumer(
-                    builder: (context, ref, child) {
-                      final treesAsyncValue = ref.watch(treesStreamProvider);
-                      final hiddenSpecies = ref.watch(hiddenSpeciesProvider);
+                      // Permaculture Zones Layer
+                      if (layers[MapLayer.permacultureZones] == true)
+                        PolygonLayer(
+                          polygons: config.permacultureZones.map((zone) {
+                            final color = Color(
+                              int.parse(zone.colorHex, radix: 16),
+                            );
+                            return Polygon(
+                              points: zone.polygon
+                                  .map((p) => LatLng(p.latitude, p.longitude))
+                                  .toList(),
+                              color: color.withValues(alpha: 0.3),
+                              borderStrokeWidth: 2,
+                              borderColor: color,
+                              label: zone.name,
+                              labelStyle: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                shadows: [
+                                  Shadow(blurRadius: 2, color: Colors.black),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
 
-                      // We need species data. Let's assume a provider exists or fetch it.
-                      // Since we don't have a stream provider for ALL species handy in the context (maybe),
-                      // let's try to find it or optimize.
-                      // Ideally: ref.watch(speciesListProvider).
-                      // If not found, I'll assume we can add it or just fetch once.
-                      // Let's use FutureBuilder or similar if no provider?
-                      // Wait, usually there's a provider. I'll check `trees_provider.dart` content first?
-                      // Actually, for now, let's assume I can get the repository and fetch.
-                      // BUT `ref.watch` inside build is better.
-                      // Let's assume `speciesListStreamProvider` exists in `species_repository.dart`?
-                      // I need to find the provider.
+                      // Task Markers Layer
+                      if (layers[MapLayer.tasks] == true)
+                        Consumer(
+                          builder: (context, ref, child) {
+                            final tasksAsyncValue = ref.watch(
+                              tasksStreamProvider,
+                            );
+                            final bucketsAsync = ref.watch(
+                              bucketsStreamProvider,
+                            );
+                            final configAsync = ref.watch(
+                              farmConfigStreamProvider,
+                            );
+                            final markerSize =
+                                configAsync.asData?.value.mapMarkerSize ?? 20.0;
+                            final pendingOnly =
+                                layers[MapLayer.pendingTasksOnly] ?? true;
 
-                      // For this step, I will use a simple Future/Stream interaction or a placeholder
-                      // if I can't find the provider immediately.
-                      // Let's check imports.
+                            // Get buckets map for icon lookup
+                            final bucketsMap = <String, Bucket>{};
+                            if (bucketsAsync.hasValue) {
+                              for (final b in bucketsAsync.value!) {
+                                bucketsMap[b.name] = b;
+                              }
+                            }
 
-                      final speciesStream = ref
-                          .watch(speciesRepositoryProvider)
-                          .getSpecies();
-
-                      if (!treesAsyncValue.hasValue) {
-                        return const SizedBox.shrink();
-                      }
-
-                      return StreamBuilder<List<Species>>(
-                        stream: speciesStream,
-                        builder: (context, speciesSnapshot) {
-                          if (!speciesSnapshot.hasData) {
-                            return const SizedBox.shrink();
-                          }
-
-                          final speciesList = speciesSnapshot.data!;
-                          final speciesMap = {
-                            for (var s in speciesList) s.id: s,
-                          };
-
-                          return MarkerLayer(
-                            markers: treesAsyncValue.value!
-                                .where(
-                                  (t) => !hiddenSpecies.contains(t.species),
-                                )
-                                .map((t) {
-                                  final species = speciesMap[t.speciesId];
-                                  // Fallback
-                                  Color color = Colors.green;
-                                  IconData? iconData = Icons.park;
-                                  String label = t.reference ?? '???';
-
-                                  if (species != null) {
-                                    if (species.color.isNotEmpty) {
-                                      try {
-                                        color = Color(
-                                          int.parse(
-                                            '0xFF${species.color.replaceAll('#', '')}',
-                                          ),
-                                        );
-                                      } catch (_) {}
+                            List<Marker> markers = [];
+                            if (tasksAsyncValue.hasValue) {
+                              // Filter tasks: must have location, and if pendingOnly, exclude completed
+                              final filteredTasks = tasksAsyncValue.value!
+                                  .where((t) {
+                                    if (t.latitude == null ||
+                                        t.longitude == null) {
+                                      return false;
                                     }
-                                    if (species.iconCode != null) {
-                                      iconData = IconUtils.resolveIcon(
-                                        species.iconCode!,
-                                        species.iconFamily,
+                                    if (pendingOnly && t.isDone) {
+                                      return false;
+                                    }
+                                    return true;
+                                  });
+
+                              markers.addAll(
+                                filteredTasks.map((t) {
+                                  // Get bucket icon, fallback to default
+                                  final bucket = bucketsMap[t.bucket];
+                                  final iconData =
+                                      bucket?.icon ??
+                                      IconData(
+                                        Bucket.defaultIconCode,
+                                        fontFamily: Bucket.defaultIconFamily,
                                       );
-                                    }
-                                  }
-
-                                  final showLabels =
-                                      layers[MapLayer.treeLabels] ?? false;
-                                  final configAsync = ref.watch(
-                                    farmConfigStreamProvider,
-                                  );
-                                  final markerSize =
-                                      configAsync.asData?.value.mapMarkerSize ??
-                                      20.0;
 
                                   return Marker(
-                                    point: LatLng(t.latitude, t.longitude),
-                                    // Use a fixed extensive container to ensure stability
-                                    // The visual marker (icon) is centered in this container
+                                    point: LatLng(t.latitude!, t.longitude!),
+                                    // Use consistent container size for stability
                                     width: 120.0,
                                     height: 120.0,
                                     alignment: Alignment.center,
                                     child: Center(
                                       child: GestureDetector(
-                                        onTap: () => _showTreeOptions(
-                                          context,
-                                          ref,
-                                          t,
-                                          species,
-                                        ),
-                                        child: CompositeMarker(
-                                          color: color,
-                                          iconData: iconData,
-                                          label: label,
-                                          size: markerSize,
-                                          showLabel: showLabels,
+                                        onTap: () =>
+                                            _showTaskOptions(context, ref, t),
+                                        child: Icon(
+                                          iconData,
+                                          color:
+                                              bucket?.iconColor ??
+                                              Bucket.defaultIconColor,
+                                          size: markerSize * 0.9,
+                                          shadows: const [
+                                            Shadow(
+                                              blurRadius: 5,
+                                              color: Colors.black54,
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
                                   );
-                                })
-                                .toList(),
+                                }),
+                              );
+                            }
+                            return MarkerLayer(markers: markers);
+                          },
+                        ),
+
+                      // Tree Markers Layer
+                      Consumer(
+                        builder: (context, ref, child) {
+                          final treesAsyncValue = ref.watch(
+                            treesStreamProvider,
+                          );
+                          final hiddenSpecies = ref.watch(
+                            hiddenSpeciesProvider,
+                          );
+
+                          // We need species data. Let's assume a provider exists or fetch it.
+                          // Since we don't have a stream provider for ALL species handy in the context (maybe),
+                          // let's try to find it or optimize.
+                          // Ideally: ref.watch(speciesListProvider).
+                          // If not found, I'll assume we can add it or just fetch once.
+                          // Let's use FutureBuilder or similar if no provider?
+                          // Wait, usually there's a provider. I'll check `trees_provider.dart` content first?
+                          // Actually, for now, let's assume I can get the repository and fetch.
+                          // BUT `ref.watch` inside build is better.
+                          // Let's assume `speciesListStreamProvider` exists in `species_repository.dart`?
+                          // I need to find the provider.
+
+                          // For this step, I will use a simple Future/Stream interaction or a placeholder
+                          // if I can't find the provider immediately.
+                          // Let's check imports.
+
+                          final speciesStream = ref
+                              .watch(speciesRepositoryProvider)
+                              .getSpecies();
+
+                          if (!treesAsyncValue.hasValue) {
+                            return const SizedBox.shrink();
+                          }
+
+                          return StreamBuilder<List<Species>>(
+                            stream: speciesStream,
+                            builder: (context, speciesSnapshot) {
+                              if (!speciesSnapshot.hasData) {
+                                return const SizedBox.shrink();
+                              }
+
+                              final speciesList = speciesSnapshot.data!;
+                              final speciesMap = {
+                                for (var s in speciesList) s.id: s,
+                              };
+
+                              // Check if Future Projects layer is enabled
+                              final showPlanned =
+                                  layers[MapLayer.futureProjects] ?? false;
+
+                              // Build adult canopy circles for planned trees
+                              final canopyCircles = <CircleMarker>[];
+                              if (showPlanned) {
+                                for (final t in treesAsyncValue.value!.where(
+                                  (t) =>
+                                      t.status == 'Planned' &&
+                                      !hiddenSpecies.contains(t.species),
+                                )) {
+                                  final species = speciesMap[t.speciesId];
+                                  if (species != null &&
+                                      species.adultDiameter > 0) {
+                                    // adultDiameter is the crown diameter in meters
+                                    final radiusMeters =
+                                        species.adultDiameter / 2;
+                                    canopyCircles.add(
+                                      CircleMarker(
+                                        point: LatLng(t.latitude, t.longitude),
+                                        radius: radiusMeters,
+                                        useRadiusInMeter: true,
+                                        color: Colors.lightGreen.withValues(
+                                          alpha: 0.25,
+                                        ),
+                                        borderColor: Colors.green.withValues(
+                                          alpha: 0.6,
+                                        ),
+                                        borderStrokeWidth: 2,
+                                      ),
+                                    );
+                                  }
+                                }
+                              }
+
+                              return Stack(
+                                children: [
+                                  // Adult canopy circles layer (behind markers)
+                                  if (canopyCircles.isNotEmpty)
+                                    CircleLayer(circles: canopyCircles),
+
+                                  // Tree markers layer
+                                  MarkerLayer(
+                                    markers: treesAsyncValue.value!
+                                        .where((t) {
+                                          if (hiddenSpecies.contains(
+                                            t.species,
+                                          )) {
+                                            return false;
+                                          }
+                                          if (t.status == 'Planned' &&
+                                              !showPlanned) {
+                                            return false;
+                                          }
+                                          return true;
+                                        })
+                                        .map((t) {
+                                          final species =
+                                              speciesMap[t.speciesId];
+                                          Color color = Colors.green;
+                                          IconData? iconData = Icons.park;
+                                          String label = t.reference ?? '???';
+                                          final isPlanned =
+                                              t.status == 'Planned';
+
+                                          if (species != null) {
+                                            if (species.color.isNotEmpty) {
+                                              try {
+                                                color = Color(
+                                                  int.parse(
+                                                    '0xFF${species.color.replaceAll('#', '')}',
+                                                  ),
+                                                );
+                                              } catch (_) {}
+                                            }
+                                            if (species.iconCode != null) {
+                                              iconData = IconUtils.resolveIcon(
+                                                species.iconCode!,
+                                                species.iconFamily,
+                                              );
+                                            }
+                                          }
+
+                                          final showLabels =
+                                              layers[MapLayer.treeLabels] ??
+                                              false;
+                                          final configAsync = ref.watch(
+                                            farmConfigStreamProvider,
+                                          );
+                                          final markerSize =
+                                              configAsync
+                                                  .asData
+                                                  ?.value
+                                                  .mapMarkerSize ??
+                                              20.0;
+
+                                          return Marker(
+                                            point: LatLng(
+                                              t.latitude,
+                                              t.longitude,
+                                            ),
+                                            width: 120.0,
+                                            height: 120.0,
+                                            alignment: Alignment.center,
+                                            child: Center(
+                                              child: GestureDetector(
+                                                onTap: () => _showTreeOptions(
+                                                  context,
+                                                  ref,
+                                                  t,
+                                                  species,
+                                                ),
+                                                child: CompositeMarker(
+                                                  color: color,
+                                                  iconData: iconData,
+                                                  label: label,
+                                                  size: markerSize,
+                                                  showLabel: showLabels,
+                                                  isPlanned: isPlanned,
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        })
+                                        .toList(),
+                                  ),
+                                ],
+                              );
+                            },
                           );
                         },
-                      );
-                    },
-                  ),
+                      ),
 
-                  // Selected Location Marker (Long Press)
-                  if (_selectedLocation != null)
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: _selectedLocation!,
-                          width: 40,
-                          height: 40,
-                          child: const Icon(
-                            Icons.location_on,
-                            color: Colors.red,
-                            size: 40,
-                          ),
+                      // Selected Location Marker (Long Press)
+                      if (_selectedLocation != null)
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: _selectedLocation!,
+                              width: 40,
+                              height: 40,
+                              child: const Icon(
+                                Icons.location_on,
+                                color: Colors.red,
+                                size: 40,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                ],
+
+                      // Measurement Line (Polyline between A and B)
+                      if (_isMeasuring &&
+                          _measurePointA != null &&
+                          _measurePointB != null)
+                        PolylineLayer(
+                          polylines: [
+                            Polyline(
+                              points: [_measurePointA!, _measurePointB!],
+                              color: Colors.orange,
+                              strokeWidth: 3,
+                              pattern: const StrokePattern.dotted(),
+                            ),
+                          ],
+                        ),
+
+                      // Measurement Point Markers
+                      if (_isMeasuring && _measurePointA != null)
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: _measurePointA!,
+                              width: 24,
+                              height: 24,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.orange,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: const Center(
+                                  child: Text(
+                                    'A',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (_measurePointB != null)
+                              Marker(
+                                point: _measurePointB!,
+                                width: 24,
+                                height: 24,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.deepOrange,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: const Center(
+                                    child: Text(
+                                      'B',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+
+                      // Distance Label (midpoint between A and B)
+                      if (_isMeasuring &&
+                          _measurePointA != null &&
+                          _measurePointB != null)
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: LatLng(
+                                (_measurePointA!.latitude +
+                                        _measurePointB!.latitude) /
+                                    2,
+                                (_measurePointA!.longitude +
+                                        _measurePointB!.longitude) /
+                                    2,
+                              ),
+                              width: 100,
+                              height: 40,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.shade800,
+                                  borderRadius: BorderRadius.circular(8),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      blurRadius: 4,
+                                      color: Colors.black26,
+                                    ),
+                                  ],
+                                ),
+                                child: Text(
+                                  _formatDistance(
+                                    _calculateDistance(
+                                      _measurePointA!,
+                                      _measurePointB!,
+                                    ),
+                                  ),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  );
+                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, s) => Center(child: Text('Error: $e')),
               );
             },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, s) => Center(child: Text('Error: $e')),
-          );
-        },
+          ),
+
+          // Fixed Scale Bar (bottom-left)
+          Positioned(
+            left: 16,
+            bottom: 16,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(4),
+                boxShadow: const [
+                  BoxShadow(blurRadius: 4, color: Colors.black26),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: _getScaleBarPixelWidth(
+                      _getScaleBarWidthMeters(),
+                    ).clamp(30.0, 150.0),
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.black87,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _formatDistance(_getScaleBarWidthMeters()),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Measurement mode indicator
+          if (_isMeasuring)
+            Positioned(
+              top: 16,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade600,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: const [
+                      BoxShadow(blurRadius: 4, color: Colors.black26),
+                    ],
+                  ),
+                  child: Text(
+                    _measurePointA == null
+                        ? '📍 Toca el primer punt'
+                        : _measurePointB == null
+                        ? '📍 Toca el segon punt'
+                        : '📏 Toca per mesurar de nou',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
 
       floatingActionButton: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
+          // Measurement mode toggle
+          FloatingActionButton(
+            heroTag: 'measure',
+            mini: true,
+            backgroundColor: _isMeasuring ? Colors.orange : Colors.white,
+            foregroundColor: _isMeasuring ? Colors.white : Colors.black,
+            onPressed: () {
+              setState(() {
+                _isMeasuring = !_isMeasuring;
+                if (!_isMeasuring) {
+                  _measurePointA = null;
+                  _measurePointB = null;
+                }
+              });
+              if (_isMeasuring) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Mode mesura: Toca 2 punts per mesurar'),
+                    duration: Duration(seconds: 2),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              }
+            },
+            child: const Icon(Icons.straighten),
+          ),
+          const SizedBox(height: 8),
           FloatingActionButton(
             heroTag: 'layers',
             mini: true,
@@ -1074,9 +1469,69 @@ class _MapPageState extends ConsumerState<MapPage> {
                 ),
               ),
               const SizedBox(height: 16),
+
+              // Delete button for planned trees
+              if (tree.status == 'Planned')
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _confirmDeletePlanned(context, ref, tree);
+                    },
+                    icon: const Icon(Icons.delete_outline, color: Colors.white),
+                    label: const Text('ELIMINAR ARBRE PLANIFICAT'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// Deletes a planned tree with simple confirmation
+  void _confirmDeletePlanned(BuildContext context, WidgetRef ref, Tree tree) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.delete_outline, color: Colors.red, size: 40),
+        title: const Text('Eliminar Arbre Planificat'),
+        content: Text(
+          'Vols eliminar "${tree.commonName}" de la planificació?\n\n'
+          'Aquesta acció no es pot desfer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('CANCEL·LAR'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await ref.read(treesRepositoryProvider).deleteTree(tree.id);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('"${tree.commonName}" eliminat'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            icon: const Icon(Icons.delete, color: Colors.white),
+            label: const Text('ELIMINAR'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
       ),
     );
   }

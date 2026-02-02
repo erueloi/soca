@@ -43,6 +43,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
   String? _selectedZoneId;
 
   bool _isVeteran = false;
+  bool _isPlanned = false; // For planned/provisional trees
   late TextEditingController _initialAgeController;
   late TextEditingController _heightController;
   late TextEditingController _diameterController;
@@ -320,7 +321,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
       latitude: _latitude!,
       longitude: _longitude!,
       plantingDate: _plantingDate,
-      status: _status,
+      status: _isPlanned ? 'Planned' : _status, // Use Planned status if toggled
       notes: _notesController.text,
       ecologicalFunction: _ecologicalFunction,
       plantingFormat: _plantingFormat,
@@ -716,6 +717,53 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                         );
                       },
                     ),
+
+                    // PLANNED TREE TOGGLE
+                    Container(
+                      margin: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _isPlanned
+                            ? Colors.deepPurple.withValues(alpha: 0.1)
+                            : null,
+                        borderRadius: BorderRadius.circular(12),
+                        border: _isPlanned
+                            ? Border.all(
+                                color: Colors.deepPurple.withValues(alpha: 0.5),
+                                width: 1.5,
+                              )
+                            : null,
+                      ),
+                      child: SwitchListTile(
+                        title: Row(
+                          children: [
+                            Icon(
+                              Icons.auto_awesome,
+                              color: _isPlanned
+                                  ? Colors.deepPurple
+                                  : Colors.grey,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Arbre Provisional (Planificació)',
+                              style: TextStyle(
+                                color: _isPlanned ? Colors.deepPurple : null,
+                                fontWeight: _isPlanned ? FontWeight.bold : null,
+                              ),
+                            ),
+                          ],
+                        ),
+                        subtitle: const Text(
+                          'No afecta estadístiques fins confirmar plantació',
+                        ),
+                        value: _isPlanned,
+                        activeTrackColor: Colors.deepPurple.withValues(
+                          alpha: 0.8,
+                        ),
+                        onChanged: (val) => setState(() => _isPlanned = val),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
 
                     // AGE LOGIC
                     SwitchListTile(

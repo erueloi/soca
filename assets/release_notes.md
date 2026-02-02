@@ -1,5 +1,8 @@
 ﻿# Release Notes
 
+## v1.9.2
+Arbres: Planificar Arbres a plantar.
+Mapa: Medir distància al mapa.
 ## v1.9.1
 Tasques: Afegim icona i colors per cada columna (bucket).
 Arbres: Pujar foto amb loading.
@@ -152,6 +155,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

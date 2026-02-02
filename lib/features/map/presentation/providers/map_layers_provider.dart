@@ -10,6 +10,7 @@ enum MapLayer {
   satellite,
   useOpenStreetMap,
   permacultureZones,
+  futureProjects, // New: Show planned/provisional trees
 }
 
 class MapLayersNotifier extends Notifier<Map<MapLayer, bool>> {
@@ -25,6 +26,7 @@ class MapLayersNotifier extends Notifier<Map<MapLayer, bool>> {
       MapLayer.satellite: true,
       MapLayer.useOpenStreetMap: false,
       MapLayer.permacultureZones: false,
+      MapLayer.futureProjects: false, // Default: hide planned trees
     };
   }
 
@@ -44,6 +46,7 @@ class MapLayersNotifier extends Notifier<Map<MapLayer, bool>> {
             prefs.getBool('layer_useOpenStreetMap') ?? false,
         MapLayer.permacultureZones:
             prefs.getBool('layer_permacultureZones') ?? false,
+        MapLayer.futureProjects: prefs.getBool('layer_futureProjects') ?? false,
       };
     } catch (e) {
       // Gracefully handle missing plugin or other errors
