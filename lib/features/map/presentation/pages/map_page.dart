@@ -19,6 +19,7 @@ import '../../../trees/domain/entities/watering_event.dart';
 import '../../../trees/domain/entities/tree.dart';
 import '../../../trees/domain/entities/tree_extensions.dart';
 import '../../../tasks/domain/entities/task.dart';
+import '../../../tasks/domain/entities/bucket.dart';
 
 import '../../../tasks/presentation/widgets/task_edit_sheet.dart';
 
@@ -264,11 +265,20 @@ class _MapPageState extends ConsumerState<MapPage> {
                     Consumer(
                       builder: (context, ref, child) {
                         final tasksAsyncValue = ref.watch(tasksStreamProvider);
+                        final bucketsAsync = ref.watch(bucketsStreamProvider);
                         final configAsync = ref.watch(farmConfigStreamProvider);
                         final markerSize =
                             configAsync.asData?.value.mapMarkerSize ?? 20.0;
                         final pendingOnly =
                             layers[MapLayer.pendingTasksOnly] ?? true;
+
+                        // Get buckets map for icon lookup
+                        final bucketsMap = <String, Bucket>{};
+                        if (bucketsAsync.hasValue) {
+                          for (final b in bucketsAsync.value!) {
+                            bucketsMap[b.name] = b;
+                          }
+                        }
 
                         List<Marker> markers = [];
                         if (tasksAsyncValue.hasValue) {
@@ -287,7 +297,15 @@ class _MapPageState extends ConsumerState<MapPage> {
 
                           markers.addAll(
                             filteredTasks.map((t) {
-                              final isReforest = t.bucket == 'Reforestació';
+                              // Get bucket icon, fallback to default
+                              final bucket = bucketsMap[t.bucket];
+                              final iconData =
+                                  bucket?.icon ??
+                                  IconData(
+                                    Bucket.defaultIconCode,
+                                    fontFamily: Bucket.defaultIconFamily,
+                                  );
+
                               return Marker(
                                 point: LatLng(t.latitude!, t.longitude!),
                                 // Use consistent container size for stability
@@ -299,12 +317,10 @@ class _MapPageState extends ConsumerState<MapPage> {
                                     onTap: () =>
                                         _showTaskOptions(context, ref, t),
                                     child: Icon(
-                                      isReforest
-                                          ? Icons.forest
-                                          : Icons.check_circle,
-                                      color: isReforest
-                                          ? Colors.green[800]
-                                          : Colors.orange,
+                                      iconData,
+                                      color:
+                                          bucket?.iconColor ??
+                                          Bucket.defaultIconColor,
                                       size: markerSize * 0.9,
                                       shadows: const [
                                         Shadow(

@@ -456,6 +456,56 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
       return;
     }
 
+    // Show optional question dialog
+    final questionController = TextEditingController();
+    final shouldProceed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.auto_awesome, color: Colors.indigoAccent),
+        title: const Text('Analitzar amb Gemini'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Pots afegir una pregunta específica per a l\'IA (opcional):',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: questionController,
+              maxLines: 2,
+              decoration: InputDecoration(
+                hintText: 'p.ex. "El podem podar?", "Estan bé les fulles?"',
+                hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                border: const OutlineInputBorder(),
+                contentPadding: const EdgeInsets.all(12),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('CANCEL·LAR'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.auto_awesome, size: 18),
+            label: const Text('ANALITZAR'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.indigoAccent,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldProceed != true) return;
+
+    final userQuestion = questionController.text.trim();
+    questionController.dispose();
+
     setState(() => _isAnalyzing = true);
 
     try {
@@ -496,6 +546,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
             age: ageStr,
             height: widget.tree.height,
             diameter: widget.tree.trunkDiameter,
+            userQuestion: userQuestion.isNotEmpty ? userQuestion : null,
           );
 
       if (!mounted) {
@@ -1564,7 +1615,12 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                             }
                           });
                         } else {
-                          _showEvolutionPhotoDetail(context, entry);
+                          final adjustedIndex = index - (_isEditing ? 1 : 0);
+                          _showEvolutionPhotoDetail(
+                            context,
+                            entries,
+                            adjustedIndex,
+                          );
                         }
                       },
                       child: Container(
@@ -1725,262 +1781,100 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
         return;
       }
 
-      // Proceed with upload even if context unmounted (common on Android transitions)
-
-      // 2. Upload Image
+      // 2. Show blocking loading dialog
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Pujant foto i dades...')));
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => PopScope(
+            canPop: false,
+            child: AlertDialog(
+              content: Row(
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: Text(
+                      'Pujant foto...',
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
       }
 
-      final url = await ref
-          .read(treesRepositoryProvider)
-          .uploadEvolutionImage(image, widget.tree.id);
-
-      if (url != null) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Guardant dades...')));
-        }
-        // 3. Create Growth Entry
-        final entry = GrowthEntry(
-          id: '',
-          date: DateTime.now(),
-          photoUrl: url,
-          height: result['height'],
-          trunkDiameter: result['diameter'],
-          healthStatus: result['status'],
-          observations: result['observations'],
-        );
-
-        await ref
+      try {
+        // 3. Upload Image
+        final url = await ref
             .read(treesRepositoryProvider)
-            .addGrowthEntry(widget.tree.id, entry);
+            .uploadEvolutionImage(image, widget.tree.id);
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Seguiment registrat correctament!')),
+        if (url != null) {
+          // 4. Create Growth Entry
+          final entry = GrowthEntry(
+            id: '',
+            date: DateTime.now(),
+            photoUrl: url,
+            height: result['height'],
+            trunkDiameter: result['diameter'],
+            healthStatus: result['status'],
+            observations: result['observations'],
           );
+
+          await ref
+              .read(treesRepositoryProvider)
+              .addGrowthEntry(widget.tree.id, entry);
+
+          // Close loading dialog
+          if (mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Seguiment registrat correctament!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } else {
+          // Close loading dialog and show error
+          if (mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Error pujant la imatge.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
         }
-      } else {
+      } catch (e) {
+        // Close loading dialog on error
         if (mounted) {
+          Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Error pujant la imatge.')),
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
           );
         }
       }
     }
   }
 
-  void _showEvolutionPhotoDetail(BuildContext context, GrowthEntry entry) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        insetPadding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              height: 400,
-              color: Colors.black, // Dark background for better contrast
-              child: Stack(
-                children: [
-                  Center(
-                    child: InteractiveViewer(
-                      minScale: 0.5,
-                      maxScale: 4.0,
-                      child: Image.network(
-                        entry.photoUrl,
-                        fit: BoxFit.contain, // Ensure full image is visible
-                        width: double.infinity,
-                        height: double.infinity,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        color: Colors.black45,
-                        shape: BoxShape.circle,
-                      ),
-                      child: IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    DateFormat('dd/MM/yyyy HH:mm').format(entry.date),
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  if (entry.observations.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(entry.observations),
-                    ),
-                  const SizedBox(height: 16),
-                  if (entry.id != 'MAIN_PHOTO')
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.wallpaper),
-                      label: const Text('ESTABLIR COM A FOTO PRINCIPAL'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size(double.infinity, 44),
-                      ),
-                      onPressed: () async {
-                        final currentMain = widget.tree.photoUrl;
-                        if (currentMain != null) {
-                          try {
-                            // Check if current main exists in history
-                            final entries = await ref
-                                .read(treesRepositoryProvider)
-                                .getGrowthEntriesStream(widget.tree.id)
-                                .first;
-
-                            // Check if any existing entry has the same photo URL
-                            final exists = entries.any(
-                              (e) => e.photoUrl == currentMain,
-                            );
-
-                            if (!exists && context.mounted) {
-                              final shouldSave = await showDialog<bool>(
-                                context: context,
-                                builder: (ctx) => AlertDialog(
-                                  title: const Text('Guardar foto actual?'),
-                                  content: const Text(
-                                    'La foto principal actual no existeix al diari visual. '
-                                    'Vols guardar-la a l\'historial abans de substituir-la?',
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(ctx, false),
-                                      child: const Text('NO, PERDRE-LA'),
-                                    ),
-                                    FilledButton(
-                                      onPressed: () => Navigator.pop(ctx, true),
-                                      child: const Text('SÍ, GUARDAR-LA'),
-                                    ),
-                                  ],
-                                ),
-                              );
-
-                              if (shouldSave == true) {
-                                final archiveEntry = GrowthEntry(
-                                  id: '',
-                                  date: widget
-                                      .tree
-                                      .plantingDate, // Use planting date as origin
-                                  photoUrl: currentMain,
-                                  height: 0,
-                                  trunkDiameter: 0,
-                                  healthStatus: 'Desconegut',
-                                  observations:
-                                      'Foto principal anterior arxivada automàticament',
-                                );
-                                await ref
-                                    .read(treesRepositoryProvider)
-                                    .addGrowthEntry(
-                                      widget.tree.id,
-                                      archiveEntry,
-                                    );
-                              }
-                            }
-                          } catch (e) {
-                            debugPrint('Error checking duplicate photo: $e');
-                            // Continue anyway if check fails
-                          }
-                        }
-
-                        // Update Tree Main Photo
-                        final updatedTree = widget.tree.copyWith(
-                          photoUrl: entry.photoUrl,
-                        );
-                        await ref
-                            .read(treesRepositoryProvider)
-                            .updateTree(updatedTree);
-
-                        if (context.mounted) {
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Foto principal actualitzada'),
-                            ),
-                          );
-                        }
-                      },
-                    ),
-                  const SizedBox(height: 8),
-                  if (entry.id != 'MAIN_PHOTO')
-                    TextButton.icon(
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                      label: const Text(
-                        'ELIMINAR FOTO',
-                        style: TextStyle(color: Colors.red),
-                      ),
-                      onPressed: () async {
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('Eliminar foto?'),
-                            content: const Text(
-                              'Aquesta acció no es pot desfer. S\'eliminarà del diari i de l\'històric.',
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: const Text('CANCEL·LAR'),
-                              ),
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, true),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: Colors.red,
-                                ),
-                                child: const Text('ELIMINAR'),
-                              ),
-                            ],
-                          ),
-                        );
-
-                        if (confirm == true && context.mounted) {
-                          await ref
-                              .read(treesRepositoryProvider)
-                              .deleteGrowthEntry(widget.tree.id, entry.id);
-                          if (context.mounted) {
-                            Navigator.pop(context); // Close Detail Dialog
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Foto eliminada correctament'),
-                              ),
-                            );
-                          }
-                        }
-                      },
-                    ),
-                ],
-              ),
-            ),
-          ],
+  void _showEvolutionPhotoDetail(
+    BuildContext context,
+    List<GrowthEntry> allEntries,
+    int initialIndex,
+  ) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _EvolutionGalleryPage(
+          entries: allEntries,
+          initialIndex: initialIndex,
+          tree: widget.tree,
+          ref: ref,
         ),
       ),
     );
@@ -2625,4 +2519,409 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   ) => Container(color: Colors.white, child: _tabBar);
   @override
   bool shouldRebuild(_SliverAppBarDelegate oldDelegate) => false;
+}
+
+/// Gallery page for navigating between evolution photos
+class _EvolutionGalleryPage extends StatefulWidget {
+  final List<GrowthEntry> entries;
+  final int initialIndex;
+  final Tree tree;
+  final WidgetRef ref;
+
+  const _EvolutionGalleryPage({
+    required this.entries,
+    required this.initialIndex,
+    required this.tree,
+    required this.ref,
+  });
+
+  @override
+  State<_EvolutionGalleryPage> createState() => _EvolutionGalleryPageState();
+}
+
+class _EvolutionGalleryPageState extends State<_EvolutionGalleryPage> {
+  late PageController _pageController;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: _currentIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  GrowthEntry get _currentEntry => widget.entries[_currentIndex];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text(
+          '${_currentIndex + 1} / ${widget.entries.length}',
+          style: const TextStyle(color: Colors.white),
+        ),
+        actions: [
+          if (_currentEntry.id != 'MAIN_PHOTO')
+            IconButton(
+              icon: const Icon(Icons.wallpaper),
+              tooltip: 'Establir com a foto principal',
+              onPressed: _setAsMainPhoto,
+            ),
+          if (_currentEntry.id != 'MAIN_PHOTO')
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.red),
+              tooltip: 'Eliminar',
+              onPressed: _deletePhoto,
+            ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Photo PageView with navigation buttons
+          Expanded(
+            child: Stack(
+              children: [
+                PageView.builder(
+                  controller: _pageController,
+                  itemCount: widget.entries.length,
+                  onPageChanged: (index) {
+                    setState(() => _currentIndex = index);
+                  },
+                  itemBuilder: (context, index) {
+                    final entry = widget.entries[index];
+                    return GestureDetector(
+                      onDoubleTap: () => _showZoomView(entry.photoUrl),
+                      child: Image.network(
+                        entry.photoUrl,
+                        fit: BoxFit.contain,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return const Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                            ),
+                          );
+                        },
+                        errorBuilder: (context, error, stack) => const Center(
+                          child: Icon(Icons.error, color: Colors.red, size: 48),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                // Navigation buttons
+                if (widget.entries.length > 1)
+                  Positioned.fill(
+                    child: Row(
+                      children: [
+                        // Previous button
+                        if (_currentIndex > 0)
+                          GestureDetector(
+                            onTap: () {
+                              _pageController.previousPage(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                              );
+                            },
+                            child: Container(
+                              width: 60,
+                              color: Colors.transparent,
+                              alignment: Alignment.center,
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.black45,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const Icon(
+                                  Icons.chevron_left,
+                                  color: Colors.white,
+                                  size: 32,
+                                ),
+                              ),
+                            ),
+                          )
+                        else
+                          const SizedBox(width: 60),
+                        const Spacer(),
+                        // Next button
+                        if (_currentIndex < widget.entries.length - 1)
+                          GestureDetector(
+                            onTap: () {
+                              _pageController.nextPage(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                              );
+                            },
+                            child: Container(
+                              width: 60,
+                              color: Colors.transparent,
+                              alignment: Alignment.center,
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.black45,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const Icon(
+                                  Icons.chevron_right,
+                                  color: Colors.white,
+                                  size: 32,
+                                ),
+                              ),
+                            ),
+                          )
+                        else
+                          const SizedBox(width: 60),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          // Info panel
+          Container(
+            color: Colors.black87,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      DateFormat('dd/MM/yyyy HH:mm').format(_currentEntry.date),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    if (_currentEntry.healthStatus.isNotEmpty)
+                      Chip(
+                        label: Text(
+                          _currentEntry.healthStatus,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        backgroundColor: Colors.indigo.shade100,
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                  ],
+                ),
+                if (_currentEntry.observations.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _currentEntry.observations,
+                    style: const TextStyle(color: Colors.white70),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                if (_currentEntry.height > 0 ||
+                    _currentEntry.trunkDiameter > 0) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      if (_currentEntry.height > 0)
+                        Text(
+                          'Alçada: ${_currentEntry.height.toStringAsFixed(0)} cm',
+                          style: const TextStyle(
+                            color: Colors.white60,
+                            fontSize: 12,
+                          ),
+                        ),
+                      if (_currentEntry.height > 0 &&
+                          _currentEntry.trunkDiameter > 0)
+                        const Text(
+                          ' • ',
+                          style: TextStyle(color: Colors.white60),
+                        ),
+                      if (_currentEntry.trunkDiameter > 0)
+                        Text(
+                          'Diàmetre: ${_currentEntry.trunkDiameter.toStringAsFixed(1)} cm',
+                          style: const TextStyle(
+                            color: Colors.white60,
+                            fontSize: 12,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showZoomView(String photoUrl) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog.fullscreen(
+        backgroundColor: Colors.black,
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 5.0,
+                child: Image.network(
+                  photoUrl,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return const Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    );
+                  },
+                ),
+              ),
+            ),
+            Positioned(
+              top: 40,
+              right: 16,
+              child: IconButton(
+                style: IconButton.styleFrom(backgroundColor: Colors.black54),
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+            Positioned(
+              bottom: 40,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    'Pinça per fer zoom',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _setAsMainPhoto() async {
+    final currentMain = widget.tree.photoUrl;
+
+    // Check if current main photo exists in history
+    if (currentMain != null && currentMain != _currentEntry.photoUrl) {
+      try {
+        final entries = await widget.ref
+            .read(treesRepositoryProvider)
+            .getGrowthEntriesStream(widget.tree.id)
+            .first;
+
+        final exists = entries.any((e) => e.photoUrl == currentMain);
+
+        if (!exists && mounted) {
+          final shouldSave = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Guardar foto actual?'),
+              content: const Text(
+                'La foto principal actual no existeix al diari visual. '
+                'Vols guardar-la a l\'historial abans de substituir-la?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('NO, PERDRE-LA'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('SÍ, GUARDAR-LA'),
+                ),
+              ],
+            ),
+          );
+
+          if (shouldSave == true) {
+            final archiveEntry = GrowthEntry(
+              id: '',
+              date: widget.tree.plantingDate,
+              photoUrl: currentMain,
+              height: 0,
+              trunkDiameter: 0,
+              healthStatus: 'Desconegut',
+              observations: 'Foto principal anterior arxivada automàticament',
+            );
+            await widget.ref
+                .read(treesRepositoryProvider)
+                .addGrowthEntry(widget.tree.id, archiveEntry);
+          }
+        }
+      } catch (e) {
+        debugPrint('Error checking duplicate photo: $e');
+      }
+    }
+
+    // Update Tree Main Photo
+    final updatedTree = widget.tree.copyWith(photoUrl: _currentEntry.photoUrl);
+    await widget.ref.read(treesRepositoryProvider).updateTree(updatedTree);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Foto principal actualitzada'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  Future<void> _deletePhoto() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar foto?'),
+        content: const Text('Aquesta acció no es pot desfer.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('CANCEL·LAR'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('ELIMINAR'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      await widget.ref
+          .read(treesRepositoryProvider)
+          .deleteGrowthEntry(widget.tree.id, _currentEntry.id);
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Foto eliminada')));
+      }
+    }
+  }
 }

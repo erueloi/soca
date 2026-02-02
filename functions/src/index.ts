@@ -270,6 +270,7 @@ exports.analyzeTree = functions.https.onCall(async (data, context) => {
     const age = data.age || "Unknown";
     const height = data.height ? `${data.height} cm` : "Unknown";
     const diameter = data.diameter ? `${data.diameter} cm` : "Unknown";
+    const userQuestion = data.userQuestion || null;
 
     const prompt = `
     Act as an expert arborist specialized in PERMACULTURE and REGENERATIVE AGRICULTURE. Analyze the health of this tree based on the image and context.
@@ -290,12 +291,16 @@ exports.analyzeTree = functions.https.onCall(async (data, context) => {
     - AVOID chemical fertilizers or synthetic pesticides.
     - RECOMMEND natural solutions such as nettle slurry (purí d'ortigues), comfrey tea, worm castings (humus de cuc), compost tea, or mulching.
     - Focus on soil health and biodiversity.
-
+    ${userQuestion ? `
+    USER'S SPECIFIC QUESTION:
+    The user has asked: "${userQuestion}"
+    Please address this question specifically in your advice, in addition to the general analysis.
+    ` : ''}
     Return a strict JSON object (no markdown) with:
     - health: One of "Viable", "Malalt", "Mort".
     - vigor: One of "Alt", "Mitjà", "Baix".
     - estimated_age_years: (float) Estimated visual age of the tree in years. Use the image (size, trunk thickness) and species growth rate context to estimate. If unsure, provide a best guess.
-    - advice: A paragraph of advice and diagnosis in Catalan (Català). Mention specific visual indicators observed in the photo and relate them to the season/species context. Explain why you estimated the age if relevant. Ensure the advice applies permaculture principles (e.g., "Aplicar purí d'ortigues" instead of "Aplicar insecticida").
+    - advice: A paragraph of advice and diagnosis in Catalan (Català). Mention specific visual indicators observed in the photo and relate them to the season/species context. Explain why you estimated the age if relevant. Ensure the advice applies permaculture principles (e.g., "Aplicar purí d'ortigues" instead of "Aplicar insecticida").${userQuestion ? " Make sure to directly answer the user's question at the beginning or end of your advice." : ''}
 
     Example JSON:
     {

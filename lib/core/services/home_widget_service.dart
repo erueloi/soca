@@ -1,4 +1,5 @@
 import 'package:home_widget/home_widget.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:intl/intl.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/tasks/domain/entities/task.dart';
@@ -16,6 +17,9 @@ class HomeWidgetService {
   static const String _statusWidgetProvider = 'SocaStatusWidgetProvider';
 
   Future<void> updateAgenda(List<Task> allTasks) async {
+    // Skip on web - home_widget only supports mobile platforms
+    if (kIsWeb) return;
+
     // 1. Filter and Sort
     final pendingTasks = allTasks.where((t) => !t.isDone).toList();
 
@@ -65,6 +69,9 @@ class HomeWidgetService {
   }
 
   Future<void> updateStatus(WeatherModel weather) async {
+    // Skip on web - home_widget only supports mobile platforms
+    if (kIsWeb) return;
+
     // 1. Save Weather Data
     await HomeWidget.saveWidgetData<String>(
       'weather_temp',
@@ -104,6 +111,9 @@ class HomeWidgetService {
 
   /// Update tree irrigation status for the Status widget
   Future<void> updateTreeIrrigationStatus(List<Tree> trees) async {
+    // Skip on web - home_widget only supports mobile platforms
+    if (kIsWeb) return;
+
     final criticalCount = trees
         .where((t) => t.waterStatusText == 'Estrès Hídric')
         .length;
@@ -169,6 +179,9 @@ class HomeWidgetService {
   }
 
   Future<void> clearWidgetData() async {
+    // Skip on web - home_widget only supports mobile platforms
+    if (kIsWeb) return;
+
     // Clear Agenda
     for (int i = 0; i < 3; i++) {
       await HomeWidget.saveWidgetData<String>('task_title_$i', null);

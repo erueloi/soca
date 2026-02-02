@@ -42,9 +42,20 @@ export const manageWaterCycleAudit = functions.pubsub
     .timeZone('Europe/Madrid')
     .onRun(async (context) => {
         console.log('Starting AUDIT manageWaterCycle...');
+        const db = admin.firestore();
+
         // Force retry logic for audit
         await step1_DataAcquisition(true); // isAudit = true
         await step2_GlobalRecalculation();
+
+        // Reset quota for the new day (audit runs at 00:01)
+        const todayStr = new Date().toISOString().split('T')[0];
+        await db.collection('config').doc('meteocat_quota').set({
+            count: 0,
+            date: todayStr,
+            last_audit: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        console.log(`Quota reset to 0 for ${todayStr}`);
     });
 
 
@@ -127,8 +138,16 @@ async function step1_DataAcquisition(isAudit: boolean): Promise<boolean> {
         // Update Quota (if not audit)
         if (!isAudit) {
             const todayStr = new Date().toISOString().split('T')[0];
+            const quotaDoc = await quotaRef.get();
+            const quotaData = quotaDoc.data() || { count: 0, date: '' };
+
+            // If date changed, reset count to 1. Otherwise, increment.
+            const newCount = (quotaData.date === todayStr)
+                ? (quotaData.count || 0) + 1
+                : 1;
+
             await quotaRef.set({
-                count: admin.firestore.FieldValue.increment(1),
+                count: newCount,
                 date: todayStr,
                 last_success: admin.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
@@ -145,6 +164,44 @@ async function step1_DataAcquisition(isAudit: boolean): Promise<boolean> {
 
 
 // --- STEP 2: GLOBAL RECALCULATION & TREES ---
+
+/**
+ * Gets the soilBalance from the last day of the previous month
+ */
+async function getPreviousMonthBalance(
+    db: admin.firestore.Firestore,
+    monthStart: Date
+): Promise<number> {
+    // Calculate previous month range
+    const prevMonthEnd = new Date(monthStart.getTime() - 24 * 60 * 60 * 1000); // Day before month start
+    const prevMonthStart = new Date(prevMonthEnd.getFullYear(), prevMonthEnd.getMonth(), 1);
+
+    const prevStartStr = prevMonthStart.toISOString().split('T')[0];
+    const prevEndStr = new Date(prevMonthEnd.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    try {
+        const snapshot = await db.collection('clima_historic')
+            .where('fincaId', '==', 'mol-cal-jeroni')
+            .where('date', '>=', prevStartStr)
+            .where('date', '<', prevEndStr)
+            .orderBy('date', 'desc')
+            .limit(1)
+            .get();
+
+        if (!snapshot.empty) {
+            const data = snapshot.docs[0].data();
+            const balance = data.soilBalance;
+            console.log(`Previous month balance from ${data.date}: ${balance}`);
+            if (typeof balance === 'number') {
+                return balance;
+            }
+        }
+    } catch (e) {
+        console.warn('Could not get previous month balance:', e);
+    }
+
+    return 0.0; // Default if no previous data
+}
 
 async function step2_GlobalRecalculation() {
     console.log('Starting Step 2: Global Recalculation...');
@@ -171,7 +228,9 @@ async function step2_GlobalRecalculation() {
     }
 
     // 1. Calculate and Update Global Balance
-    let currentBalance = 0.0;
+    // Fetch previous month's last day balance to carry over
+    let currentBalance = await getPreviousMonthBalance(db, startOfMonth);
+    console.log(`Starting balance from previous month: ${currentBalance}`);
 
     const dailyDataList: any[] = [];
     snapshot.docs.forEach(doc => dailyDataList.push({ id: doc.id, ...doc.data() }));

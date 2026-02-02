@@ -174,17 +174,16 @@ class TreeGrowthTimelinePage extends ConsumerWidget {
                                   if (entry.photoUrl.isNotEmpty)
                                     GestureDetector(
                                       onTap: () {
-                                        showDialog(
-                                          context: context,
-                                          builder: (context) => Dialog(
-                                            insetPadding: EdgeInsets.zero,
-                                            backgroundColor: Colors.transparent,
-                                            child: InteractiveViewer(
-                                              child: Image.network(
-                                                entry.photoUrl,
-                                                fit: BoxFit.contain,
-                                              ),
-                                            ),
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                _TimelineGalleryPage(
+                                                  entries: displayedEntries,
+                                                  initialIndex: index,
+                                                  tree: tree,
+                                                  ref: ref,
+                                                ),
                                           ),
                                         );
                                       },
@@ -278,6 +277,296 @@ class TreeGrowthTimelinePage extends ConsumerWidget {
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
       ],
+    );
+  }
+}
+
+/// Gallery page for navigating between timeline photos
+class _TimelineGalleryPage extends StatefulWidget {
+  final List<GrowthEntry> entries;
+  final int initialIndex;
+  final Tree tree;
+  final WidgetRef ref;
+
+  const _TimelineGalleryPage({
+    required this.entries,
+    required this.initialIndex,
+    required this.tree,
+    required this.ref,
+  });
+
+  @override
+  State<_TimelineGalleryPage> createState() => _TimelineGalleryPageState();
+}
+
+class _TimelineGalleryPageState extends State<_TimelineGalleryPage> {
+  late PageController _pageController;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: _currentIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  GrowthEntry get _currentEntry => widget.entries[_currentIndex];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text(
+          '${_currentIndex + 1} / ${widget.entries.length}',
+          style: const TextStyle(color: Colors.white),
+        ),
+      ),
+      body: Column(
+        children: [
+          // Photo PageView with navigation buttons
+          Expanded(
+            child: Stack(
+              children: [
+                PageView.builder(
+                  controller: _pageController,
+                  itemCount: widget.entries.length,
+                  onPageChanged: (index) {
+                    setState(() => _currentIndex = index);
+                  },
+                  itemBuilder: (context, index) {
+                    final entry = widget.entries[index];
+                    return GestureDetector(
+                      onDoubleTap: () => _showZoomView(entry.photoUrl),
+                      child: Image.network(
+                        entry.photoUrl,
+                        fit: BoxFit.contain,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return const Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                            ),
+                          );
+                        },
+                        errorBuilder: (context, error, stack) => const Center(
+                          child: Icon(Icons.error, color: Colors.red, size: 48),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                // Navigation buttons
+                if (widget.entries.length > 1)
+                  Positioned.fill(
+                    child: Row(
+                      children: [
+                        // Previous button
+                        if (_currentIndex > 0)
+                          GestureDetector(
+                            onTap: () {
+                              _pageController.previousPage(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                              );
+                            },
+                            child: Container(
+                              width: 60,
+                              color: Colors.transparent,
+                              alignment: Alignment.center,
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.black45,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const Icon(
+                                  Icons.chevron_left,
+                                  color: Colors.white,
+                                  size: 32,
+                                ),
+                              ),
+                            ),
+                          )
+                        else
+                          const SizedBox(width: 60),
+                        const Spacer(),
+                        // Next button
+                        if (_currentIndex < widget.entries.length - 1)
+                          GestureDetector(
+                            onTap: () {
+                              _pageController.nextPage(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                              );
+                            },
+                            child: Container(
+                              width: 60,
+                              color: Colors.transparent,
+                              alignment: Alignment.center,
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.black45,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const Icon(
+                                  Icons.chevron_right,
+                                  color: Colors.white,
+                                  size: 32,
+                                ),
+                              ),
+                            ),
+                          )
+                        else
+                          const SizedBox(width: 60),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          // Info panel
+          Container(
+            color: Colors.black87,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      DateFormat('dd/MM/yyyy HH:mm').format(_currentEntry.date),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    if (_currentEntry.healthStatus.isNotEmpty)
+                      Chip(
+                        label: Text(
+                          _currentEntry.healthStatus,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        backgroundColor: Colors.indigo.shade100,
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                  ],
+                ),
+                if (_currentEntry.observations.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _currentEntry.observations,
+                    style: const TextStyle(color: Colors.white70),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                if (_currentEntry.height > 0 ||
+                    _currentEntry.trunkDiameter > 0) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      if (_currentEntry.height > 0)
+                        Text(
+                          'Alçada: ${_currentEntry.height.toStringAsFixed(0)} cm',
+                          style: const TextStyle(
+                            color: Colors.white60,
+                            fontSize: 12,
+                          ),
+                        ),
+                      if (_currentEntry.height > 0 &&
+                          _currentEntry.trunkDiameter > 0)
+                        const Text(
+                          ' • ',
+                          style: TextStyle(color: Colors.white60),
+                        ),
+                      if (_currentEntry.trunkDiameter > 0)
+                        Text(
+                          'Diàmetre: ${_currentEntry.trunkDiameter.toStringAsFixed(1)} cm',
+                          style: const TextStyle(
+                            color: Colors.white60,
+                            fontSize: 12,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showZoomView(String photoUrl) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog.fullscreen(
+        backgroundColor: Colors.black,
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 5.0,
+                child: Image.network(
+                  photoUrl,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return const Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    );
+                  },
+                ),
+              ),
+            ),
+            Positioned(
+              top: 40,
+              right: 16,
+              child: IconButton(
+                style: IconButton.styleFrom(backgroundColor: Colors.black54),
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+            Positioned(
+              bottom: 40,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    'Pinça per fer zoom',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -34,6 +34,7 @@ class AIService {
     required String age, // e.g. "2 anys"
     double? height,
     double? diameter,
+    String? userQuestion, // Optional user question for the AI
   }) async {
     try {
       final callable = FirebaseFunctions.instance.httpsCallable('analyzeTree');
@@ -47,6 +48,8 @@ class AIService {
         'age': age,
         'height': height,
         'diameter': diameter,
+        if (userQuestion != null && userQuestion.isNotEmpty)
+          'userQuestion': userQuestion,
       });
 
       final data = Map<String, dynamic>.from(result.data);

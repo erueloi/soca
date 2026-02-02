@@ -182,6 +182,40 @@ class ClimateRepository {
     }
   }
 
+  /// Gets the soilBalance from the last day of the previous month
+  Future<double> _getPreviousMonthBalance(DateTime monthStart) async {
+    if (fincaId == null) return 0.0;
+
+    // Calculate last day of previous month
+    final previousMonthEnd = monthStart.subtract(const Duration(days: 1));
+    final prevMonthStart = DateTime(
+      previousMonthEnd.year,
+      previousMonthEnd.month,
+      1,
+    );
+
+    try {
+      // Fetch previous month's data
+      final prevDays = await getHistory(prevMonthStart, previousMonthEnd);
+      if (prevDays.isEmpty) return 0.0;
+
+      // Sort and get last day with soilBalance
+      prevDays.sort((a, b) => a.date.compareTo(b.date));
+      final lastDay = prevDays.lastWhere(
+        (d) => d.soilBalance != null,
+        orElse: () => prevDays.last,
+      );
+
+      debugPrint(
+        'Previous month balance from ${lastDay.date}: ${lastDay.soilBalance}',
+      );
+      return lastDay.soilBalance ?? 0.0;
+    } catch (e) {
+      debugPrint('Error getting previous month balance: $e');
+      return 0.0;
+    }
+  }
+
   /// Recalculates RuralCat Soil Balance for a given month
   /// [latitude] is required to repair ET0 if missing (legacy data)
   Future<void> recalculateSoilBalance(DateTime month, double latitude) async {
@@ -195,9 +229,11 @@ class ClimateRepository {
     // Sort by date ascending to ensure correct accumulation
     days.sort((a, b) => a.date.compareTo(b.date));
 
-    double currentBalance = 0.0;
-    // Possible Improvement: Fetch previous month's last day balance to carry over.
-    // For now, assuming start of month = 0 or just calculating relative to start.
+    // Fetch previous month's last day balance to carry over
+    double currentBalance = await _getPreviousMonthBalance(start);
+    debugPrint(
+      'Starting balance for ${month.month}/${month.year}: $currentBalance',
+    );
 
     List<ClimateDailyData> updatedDays = [];
 

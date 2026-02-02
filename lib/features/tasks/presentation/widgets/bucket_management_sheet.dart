@@ -165,6 +165,166 @@ class _BucketManagementSheetState extends ConsumerState<BucketManagementSheet> {
     _saveBuckets();
   }
 
+  /// Available icons for bucket selection
+  static const List<({IconData icon, String label})> _availableIcons = [
+    (icon: Icons.check_circle, label: 'Tasca'),
+    (icon: Icons.forest, label: 'Bosc'),
+    (icon: Icons.water_drop, label: 'Aigua'),
+    (icon: Icons.build, label: 'Construcció'),
+    (icon: Icons.agriculture, label: 'Agricultura'),
+    (icon: Icons.home, label: 'Casa'),
+    (icon: Icons.star, label: 'Important'),
+    (icon: Icons.warning, label: 'Atenció'),
+    (icon: Icons.eco, label: 'Ecologia'),
+    (icon: Icons.spa, label: 'Plantes'),
+    (icon: Icons.landscape, label: 'Paisatge'),
+    (icon: Icons.construction, label: 'Obra'),
+  ];
+
+  void _changeIcon(int index) {
+    final bucket = _localBuckets[index];
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Icona per "${bucket.name}"'),
+          content: SizedBox(
+            width: 300,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _availableIcons.map((item) {
+                final isSelected = bucket.iconCode == item.icon.codePoint;
+                return Tooltip(
+                  message: item.label,
+                  child: InkWell(
+                    onTap: () {
+                      setState(() {
+                        _localBuckets[index] = bucket.copyWith(
+                          iconCode: item.icon.codePoint,
+                          iconFamily: item.icon.fontFamily,
+                        );
+                      });
+                      _saveBuckets();
+                      Navigator.pop(context);
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? Theme.of(context).colorScheme.primaryContainer
+                            : Colors.grey[100],
+                        borderRadius: BorderRadius.circular(8),
+                        border: isSelected
+                            ? Border.all(
+                                color: Theme.of(context).colorScheme.primary,
+                                width: 2,
+                              )
+                            : null,
+                      ),
+                      child: Icon(
+                        item.icon,
+                        size: 28,
+                        color: isSelected
+                            ? Theme.of(context).colorScheme.primary
+                            : Colors.grey[700],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel·lar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Available colors for bucket icon
+  static const List<({Color color, String label})> _availableColors = [
+    (color: Colors.orange, label: 'Taronja'),
+    (color: Colors.green, label: 'Verd'),
+    (color: Colors.blue, label: 'Blau'),
+    (color: Colors.red, label: 'Vermell'),
+    (color: Colors.purple, label: 'Lila'),
+    (color: Colors.teal, label: 'Turquesa'),
+    (color: Colors.brown, label: 'Marró'),
+    (color: Colors.pink, label: 'Rosa'),
+    (color: Colors.amber, label: 'Àmbar'),
+    (color: Colors.indigo, label: 'Índigo'),
+    (color: Colors.cyan, label: 'Cian'),
+    (color: Colors.grey, label: 'Gris'),
+  ];
+
+  void _changeColor(int index) {
+    final bucket = _localBuckets[index];
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Color per "${bucket.name}"'),
+          content: SizedBox(
+            width: 300,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _availableColors.map((item) {
+                final isSelected =
+                    bucket.iconColorValue == item.color.toARGB32();
+                return Tooltip(
+                  message: item.label,
+                  child: InkWell(
+                    onTap: () {
+                      setState(() {
+                        _localBuckets[index] = bucket.copyWith(
+                          iconColorValue: item.color.toARGB32(),
+                        );
+                      });
+                      _saveBuckets();
+                      Navigator.pop(context);
+                    },
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: item.color,
+                        shape: BoxShape.circle,
+                        border: isSelected
+                            ? Border.all(color: Colors.black, width: 3)
+                            : Border.all(color: Colors.grey[300]!, width: 1),
+                      ),
+                      child: isSelected
+                          ? const Icon(
+                              Icons.check,
+                              color: Colors.white,
+                              size: 20,
+                            )
+                          : null,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel·lar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // We watch the provider to keep sync if externa changes happen,
@@ -224,12 +384,47 @@ class _BucketManagementSheetState extends ConsumerState<BucketManagementSheet> {
                       return ListTile(
                         key: ValueKey(bucket.name + index.toString()),
                         contentPadding: EdgeInsets.zero,
-                        leading: ReorderableDragStartListener(
-                          index: index,
-                          child: const Padding(
-                            padding: EdgeInsets.only(right: 16.0, left: 16.0),
-                            child: Icon(Icons.drag_handle, color: Colors.grey),
-                          ),
+                        leading: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ReorderableDragStartListener(
+                              index: index,
+                              child: const Padding(
+                                padding: EdgeInsets.only(left: 8.0),
+                                child: Icon(
+                                  Icons.drag_handle,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            InkWell(
+                              onTap: () => _changeIcon(index),
+                              borderRadius: BorderRadius.circular(20),
+                              child: Padding(
+                                padding: const EdgeInsets.all(4.0),
+                                child: Icon(
+                                  bucket.icon,
+                                  color: bucket.iconColor,
+                                  size: 24,
+                                ),
+                              ),
+                            ),
+                            InkWell(
+                              onTap: () => _changeColor(index),
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                width: 20,
+                                height: 20,
+                                margin: const EdgeInsets.only(left: 4),
+                                decoration: BoxDecoration(
+                                  color: bucket.iconColor,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.grey[400]!),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         title: Text(
                           bucket.name,

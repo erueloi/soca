@@ -14,6 +14,7 @@ import 'features/settings/presentation/pages/app_config_page.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/auth/data/repositories/auth_repository.dart';
 import 'package:home_widget/home_widget.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'core/widgets/widget_sync_manager.dart';
 
 void main() async {
@@ -29,8 +30,12 @@ void main() async {
 
   runApp(const ProviderScope(child: SocaApp()));
 
-  // Register Background Callback
-  await HomeWidget.registerInteractivityCallback(homeWidgetBackgroundCallback);
+  // Register Background Callback (only on mobile platforms)
+  if (!kIsWeb) {
+    await HomeWidget.registerInteractivityCallback(
+      homeWidgetBackgroundCallback,
+    );
+  }
 }
 
 class SocaApp extends ConsumerWidget {

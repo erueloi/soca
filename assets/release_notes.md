@@ -1,5 +1,10 @@
 ﻿# Release Notes
 
+## v1.9.1
+Tasques: Afegim icona i colors per cada columna (bucket).
+Arbres: Pujar foto amb loading.
+IA poder preguntar-li mes coses amb una caixa de text.
+Fotos dels arbres amb galeria.
 ## v1.9.0
 Tasques: Poder afegir recursos directament a la tasca.
 Widget de agenda i temps!
@@ -147,6 +152,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 
