@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/trees_provider.dart';
+import '../providers/tree_filter_provider.dart';
+import '../../../settings/presentation/providers/settings_provider.dart';
 import '../widgets/tree_list.dart';
 import '../widgets/tree_detail.dart';
 import '../widgets/tree_form_sheet.dart';
@@ -17,7 +19,8 @@ class TreesPage extends ConsumerStatefulWidget {
 }
 
 class _TreesPageState extends ConsumerState<TreesPage> {
-  final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _searchController =
+      TextEditingController(); // Search query controller
 
   void _openAddTreeSheet() {
     showModalBottomSheet(
@@ -27,11 +30,200 @@ class _TreesPageState extends ConsumerState<TreesPage> {
     );
   }
 
+  void _showFilterDialog(
+    List<dynamic> allTrees,
+    Map<String, String> zoneNames,
+  ) async {
+    // Cast to List<Tree> if needed or use dynamic if type is not strictly imported in this file context yet
+    // But better to use proper type. trees_provider.dart probably exports it or we can import it.
+    // Let's assume strict typing is preferred. I'll add the import if needed in a separate step or assume it's available.
+    // Actually, `Tree` is used in `TreeDetail(tree: selectedTree)`.
+    // Let's check imports again.
+    // No explicit import of `tree.dart`.
+    // But `TreeList` assigns `trees`.
+    // I will use `dynamic` or `var` in map/where to avoid type errors if `Tree` is not explicitly imported,
+    // OR I should add the import.
+    // Let's add the import to be safe? No, let's use `allTrees` as is, dart infers types.
+    // But for method signature `List<Tree>` is better.
+    // I will use `var` inside method.
+
+    // Actually, let's look at `build` method. `data: (trees)` -> `trees`.
+    // It's `List<Tree>`.
+    // So I can just say `List<dynamic>` or `List<Object>` if I don't want to import, but better to use `List` and cast elements or just let type inference work.
+    // I'll use `List allTrees` to be safe, or just import it.
+    // Wait, I can't add import easily in this `replace_file_content` without touching top of file.
+    // I'll stick to `List allTrees` (raw list) and cast inside or dynamic.
+    // Actually, I'll use `var` for the elements.
+
+    final availableSpecies =
+        allTrees.map((t) => t.species as String).toSet().toList()..sort();
+    final availableZones =
+        allTrees
+            .map((t) => t.zoneId as String?)
+            .where((z) => z != null)
+            .cast<String>()
+            .toSet()
+            .toList()
+          ..sort();
+    final availableStatuses =
+        allTrees.map((t) => t.status as String).toSet().toList()..sort();
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Consumer(
+        builder: (context, ref, _) {
+          final filterState = ref.watch(treeFilterProvider);
+          final filterNotifier = ref.read(treeFilterProvider.notifier);
+          final configAsync = ref.watch(farmConfigStreamProvider);
+
+          // Create Zone ID -> Name Map internally to ensure it's reactive
+          final Map<String, String> zoneNames = {};
+          final config = configAsync.asData?.value;
+          if (config != null) {
+            for (final zone in config.permacultureZones) {
+              zoneNames[zone.id] = zone.name;
+            }
+          }
+
+          return Container(
+            padding: const EdgeInsets.all(16),
+            height: MediaQuery.of(context).size.height * 0.85,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Filtres Avançats',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        filterNotifier.clearFilters();
+                      },
+                      child: const Text('Netejar tot'),
+                    ),
+                  ],
+                ),
+                const Divider(),
+                Expanded(
+                  child: ListView(
+                    children: [
+                      // Status Filter (Replacing Planned Toggle)
+                      const Text(
+                        'Estat',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        children: availableStatuses.map((status) {
+                          // Display 'Planificat' for consistent UX
+                          final label = (status == 'Planned')
+                              ? 'Planificat'
+                              : status;
+                          // Selected if NOT hidden
+                          final isSelected = !filterState.hiddenStatuses
+                              .contains(status);
+
+                          return FilterChip(
+                            label: Text(label),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              filterNotifier.toggleStatusVisibility(status);
+                            },
+                            showCheckmark: true,
+                            avatar: isSelected
+                                ? null
+                                : const Icon(Icons.visibility_off, size: 16),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Species Filter
+                      if (availableSpecies.isNotEmpty) ...[
+                        const Text(
+                          'Espècie',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          children: availableSpecies.map((species) {
+                            final isSelected = filterState.selectedSpecies
+                                .contains(species);
+                            return FilterChip(
+                              label: Text(species),
+                              selected: isSelected,
+                              onSelected: (selected) {
+                                filterNotifier.toggleSpecies(species);
+                              },
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
+                      // Zone Filter
+                      if (availableZones.isNotEmpty) ...[
+                        const Text(
+                          'Zona (Bancal)',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          children: availableZones.map((zoneId) {
+                            final zoneName = zoneNames[zoneId] ?? zoneId;
+                            final isSelected = filterState.selectedZones
+                                .contains(zoneId);
+                            return FilterChip(
+                              label: Text(zoneName),
+                              selected: isSelected,
+                              onSelected: (selected) {
+                                filterNotifier.toggleZone(zoneId);
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('TANCAR'),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final treesAsync = ref.watch(treesStreamProvider);
+    final configAsync = ref.watch(farmConfigStreamProvider);
+    final filterState = ref.watch(treeFilterProvider);
     final selectedTree = ref.watch(selectedTreeProvider);
     final isLargeScreen = MediaQuery.of(context).size.width > 600;
+
+    // Create Zone ID -> Name Map
+    final Map<String, String> zoneNames = {};
+    final config = configAsync.asData?.value;
+    if (config != null) {
+      for (final zone in config.permacultureZones) {
+        zoneNames[zone.id] = zone.name;
+      }
+    }
 
     ref.listen(selectedTreeProvider, (previous, next) {
       if (next != null && !isLargeScreen) {
@@ -80,22 +272,53 @@ class _TreesPageState extends ConsumerState<TreesPage> {
           preferredSize: const Size.fromHeight(60),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Cercar espècie o nom...',
-                prefixIcon: const Icon(Icons.search),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(30),
-                  borderSide: BorderSide.none,
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: 'Cercar espècie o nom...',
+                      prefixIcon: const Icon(Icons.search),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                      ),
+                    ),
+                    onChanged: (val) {
+                      setState(() {}); // Rebuild to filter
+                    },
+                  ),
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-              ),
-              onChanged: (val) {
-                setState(() {}); // Rebuild to filter
-              },
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () {
+                    final trees = treesAsync.asData?.value ?? [];
+                    if (trees.isNotEmpty) {
+                      _showFilterDialog(trees, zoneNames);
+                    }
+                  },
+                  icon: Badge(
+                    isLabelVisible:
+                        filterState.hiddenStatuses.isNotEmpty ||
+                        filterState.selectedSpecies.isNotEmpty ||
+                        filterState.selectedZones.isNotEmpty,
+                    label: Text(
+                      '${filterState.hiddenStatuses.length + filterState.selectedSpecies.length + filterState.selectedZones.length}',
+                    ),
+                    child: const Icon(Icons.tune),
+                  ),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Theme.of(context).primaryColor,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -104,8 +327,34 @@ class _TreesPageState extends ConsumerState<TreesPage> {
         data: (trees) {
           final query = _searchController.text.toLowerCase();
           final filteredTrees = trees.where((t) {
-            return t.commonName.toLowerCase().contains(query) ||
+            // 1. Text Search
+            final matchesQuery =
+                t.commonName.toLowerCase().contains(query) ||
                 t.species.toLowerCase().contains(query);
+            if (!matchesQuery) return false;
+
+            // 2. Status Filter (Blacklist logic)
+            // If status is in hiddenStatuses, we EXCLUDE it.
+            if (filterState.hiddenStatuses.contains(t.status)) {
+              return false;
+            }
+
+            // 3. Species Filter (Whitelist logic)
+            if (filterState.selectedSpecies.isNotEmpty) {
+              if (!filterState.selectedSpecies.contains(t.species)) {
+                return false;
+              }
+            }
+
+            // 4. Zone Filter (Whitelist logic)
+            if (filterState.selectedZones.isNotEmpty) {
+              if (t.zoneId == null ||
+                  !filterState.selectedZones.contains(t.zoneId)) {
+                return false;
+              }
+            }
+
+            return true;
           }).toList();
 
           if (isLargeScreen) {

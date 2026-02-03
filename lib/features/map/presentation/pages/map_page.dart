@@ -30,6 +30,7 @@ import '../providers/species_filter_provider.dart';
 import '../../../trees/data/repositories/species_repository.dart';
 import '../../../trees/domain/entities/species.dart';
 import '../../../settings/presentation/providers/settings_provider.dart';
+import '../providers/sandbox_provider.dart';
 
 enum MapFollowMode { none, centered, compass }
 
@@ -56,7 +57,6 @@ class _MapPageState extends ConsumerState<MapPage> {
   void initState() {
     super.initState();
     _mapEventSubscription = _mapController.mapEventStream.listen((event) {
-      // If user drags or rotates manually, stop following
       if (event.source == MapEventSource.onDrag ||
           event.source == MapEventSource.onMultiFinger) {
         if (_followMode != MapFollowMode.none) {
@@ -73,6 +73,8 @@ class _MapPageState extends ConsumerState<MapPage> {
     _mapEventSubscription?.cancel();
     super.dispose();
   }
+
+  // ... (Permission and Location methods kept same, omitted for brevity if unchanged, but safely keeping in file structure)
 
   void _toggleFollowMode() async {
     // Cycle: none -> centered -> compass -> centered
@@ -217,9 +219,38 @@ class _MapPageState extends ConsumerState<MapPage> {
   @override
   Widget build(BuildContext context) {
     final layers = ref.watch(mapLayersProvider);
+    final isSandboxMode = ref.watch(sandboxProvider); // Watch Sandbox Mode
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Mapa de la Finca')),
+      appBar: AppBar(
+        title: const Text('Mapa de la Finca'),
+        actions: [
+          // Sandbox Mode Toggle
+          IconButton(
+            icon: Icon(
+              isSandboxMode ? Icons.design_services : Icons.square_foot,
+              color: isSandboxMode ? Colors.orange : null,
+            ),
+            tooltip: isSandboxMode
+                ? 'Sortir del Mode Planificador'
+                : 'Entrar al Mode Planificador',
+            onPressed: () {
+              ref.read(sandboxProvider.notifier).toggle();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    isSandboxMode
+                        ? 'Mode Planificador desactivat'
+                        : 'Mode Planificador activat: Capa "Projectes de Futur" visible',
+                  ),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+          ),
+          // ... Existing actions if any (none in original snippet at this spot)
+        ],
+      ),
 
       body: Stack(
         children: [
@@ -769,6 +800,33 @@ class _MapPageState extends ConsumerState<MapPage> {
               );
             },
           ),
+
+          // Sandbox Mode Banner
+          if (isSandboxMode)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                color: Colors.orange.withValues(alpha: 0.9),
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.design_services, color: Colors.white, size: 16),
+                    SizedBox(width: 8),
+                    Text(
+                      'MODE PLANIFICADOR: ON',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
           // Fixed Scale Bar (bottom-left)
           Positioned(
@@ -1332,7 +1390,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                           Icon(Icons.height, size: 14, color: Colors.grey[600]),
                           const SizedBox(width: 4),
                           Text(
-                            '${tree.height!.toStringAsFixed(1)}m',
+                            '${(tree.height! / 100).toStringAsFixed(1)}m',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,

@@ -1,5 +1,9 @@
 ﻿# Release Notes
 
+## v1.9.3
+Arbres: Filtres sobre els arbres.
+Mapa: Mode sandbox per planificar.
+Petits bugfixs al widget de Obres.
 ## v1.9.2
 Arbres: Planificar Arbres a plantar.
 Mapa: Medir distància al mapa.
@@ -155,6 +159,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

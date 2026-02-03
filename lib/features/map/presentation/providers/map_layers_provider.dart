@@ -61,6 +61,16 @@ class MapLayersNotifier extends Notifier<Map<MapLayer, bool>> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('layer_${layer.name}', newState[layer]!);
   }
+
+  Future<void> setLayer(MapLayer layer, bool isVisible) async {
+    if (state[layer] == isVisible) return;
+
+    final newState = {...state, layer: isVisible};
+    state = newState;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('layer_${layer.name}', isVisible);
+  }
 }
 
 final mapLayersProvider =

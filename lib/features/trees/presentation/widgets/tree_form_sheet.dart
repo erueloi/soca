@@ -12,6 +12,7 @@ import '../../../../core/services/ai_service.dart';
 import '../../../settings/presentation/providers/settings_provider.dart';
 
 import 'species_selector.dart';
+import '../../../../features/map/presentation/providers/sandbox_provider.dart';
 
 class TreeFormSheet extends ConsumerStatefulWidget {
   final Tree? tree;
@@ -43,7 +44,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
   String? _selectedZoneId;
 
   bool _isVeteran = false;
-  bool _isPlanned = false; // For planned/provisional trees
+  late bool _isPlanned; // Initialized in initState
   late TextEditingController _initialAgeController;
   late TextEditingController _heightController;
   late TextEditingController _diameterController;
@@ -178,8 +179,14 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
     _selectedZoneId = widget.tree?.zoneId;
     _isVeteran = widget.tree?.isVeteran ?? false;
 
-    if (widget.tree == null) {
-      _fetchLocation();
+    // If it's a new tree, check Sandbox Mode default
+    // If it's a new tree (null or empty ID), check Sandbox Mode default
+    if (widget.tree == null || widget.tree!.id.isEmpty) {
+      _isPlanned = ref.read(sandboxProvider);
+      if (widget.tree == null) _fetchLocation();
+    } else {
+      // Editing existing tree
+      _isPlanned = widget.tree!.status == 'Planned';
     }
   }
 
