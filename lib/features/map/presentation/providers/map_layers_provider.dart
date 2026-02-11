@@ -10,7 +10,9 @@ enum MapLayer {
   satellite,
   useOpenStreetMap,
   permacultureZones,
-  futureProjects, // New: Show planned/provisional trees
+  plantedTrees, // New: Show planted trees
+  provisionalTrees, // New: Show ONLY planned/provisional trees (exclusive)
+  adultCanopy, // New: Show "Adult" size circle for planned trees
 }
 
 class MapLayersNotifier extends Notifier<Map<MapLayer, bool>> {
@@ -26,7 +28,9 @@ class MapLayersNotifier extends Notifier<Map<MapLayer, bool>> {
       MapLayer.satellite: true,
       MapLayer.useOpenStreetMap: false,
       MapLayer.permacultureZones: false,
-      MapLayer.futureProjects: false, // Default: hide planned trees
+      MapLayer.plantedTrees: true, // Default: show planted trees
+      MapLayer.provisionalTrees: false, // Default: hide planned trees
+      MapLayer.adultCanopy: true, // Default: show adult canopy ring
     };
   }
 
@@ -46,7 +50,10 @@ class MapLayersNotifier extends Notifier<Map<MapLayer, bool>> {
             prefs.getBool('layer_useOpenStreetMap') ?? false,
         MapLayer.permacultureZones:
             prefs.getBool('layer_permacultureZones') ?? false,
-        MapLayer.futureProjects: prefs.getBool('layer_futureProjects') ?? false,
+        MapLayer.plantedTrees: prefs.getBool('layer_plantedTrees') ?? true,
+        MapLayer.provisionalTrees:
+            prefs.getBool('layer_provisionalTrees') ?? false,
+        MapLayer.adultCanopy: prefs.getBool('layer_adultCanopy') ?? true,
       };
     } catch (e) {
       // Gracefully handle missing plugin or other errors

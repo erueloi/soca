@@ -1,6 +1,7 @@
 // @ts-nocheck
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
+import axios from "axios";
 import { ImageAnnotatorClient } from "@google-cloud/vision";
 
 admin.initializeApp();
@@ -368,6 +369,7 @@ exports.getBotanicalDataFromText = functions.https.onCall(async (data, context) 
     - ritme_creixement: (text) "Lent", "Mig" o "Ràpid".
     - resistencia_sequera: (int) De 1 (Poca) a 5 (Molta).
     - mesos_plantacio: (array d'ints) Mesos ideals per plantar (1-12).
+    - mesos_floracio: (array d'ints) Mesos de floració (1-12).
     - esperanca_vida: (int) Esperança de vida mitjana en anys (ex: 80).
     - malalties_comunes: (array de strings) Top 3 malalties o plagues més freqüents (ex: ["Pulgó", "Oïdi", "Foc bacterià"]).
 
@@ -886,7 +888,523 @@ exports.cleanupLegacyUsers = functions.https.onRequest(async (req, res) => {
     }
 });
 
+/**
+ * Public Species Card - HTTP endpoint
+ * Renders a beautiful HTML card for a species from species_web collection.
+ * Usage: /fitxa?id={speciesDocId}
+ */
+exports.speciesCard = functions.https.onRequest(async (req, res) => {
+    const id = req.query.id as string;
+    if (!id) {
+        res.status(400).send("Missing 'id' parameter.");
+        return;
+    }
+
+    try {
+        const doc = await admin.firestore().collection('species_web').doc(id).get();
+        if (!doc.exists) {
+            res.status(404).send("Espècie no trobada.");
+            return;
+        }
+
+        const s = doc.data()!;
+
+        const monthNames = ['', 'Gen', 'Feb', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Des'];
+
+        // Build activity row cells
+        function buildActivityCells(months: number[], color: string): string {
+            let cells = '';
+            for (let m = 1; m <= 12; m++) {
+                const active = (months || []).includes(m);
+                cells += `<td class="act-cell ${active ? 'active' : ''}" style="${active ? `background:${color};` : ''}"></td>`;
+            }
+            return cells;
+        }
+
+        // Sun icon
+        function sunIcon(needs: string): string {
+            switch ((needs || '').toLowerCase()) {
+                case 'alt': return '☀️';
+                case 'mitjà': return '🌤️';
+                case 'baix': return '☁️';
+                default: return '☀️';
+            }
+        }
+
+        // Drought resistance bar
+        function droughtBar(val: number): string {
+            let dots = '';
+            for (let i = 1; i <= 5; i++) {
+                dots += `<span class="dot ${i <= val ? 'filled' : ''}"></span>`;
+            }
+            return dots;
+        }
+
+        // Growth rate label
+        function growthLabel(rate: string): string {
+            switch (rate) {
+                case 'Lent': return '🐢 Lent';
+                case 'Mig': return '🌿 Mig';
+                case 'Ràpid': return '🚀 Ràpid';
+                default: return rate || '-';
+            }
+        }
+
+        // Diseases list
+        const diseases = (s.commonDiseases || []).map((d: string) => `<span class="disease-chip">${d}</span>`).join('');
+
+        const speciesColor = s.color ? `#${s.color.replace('#', '')}` : '#4CAF50';
+
+        const html = `<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${s.commonName || 'Espècie'} — Soca</title>
+    <meta name="description" content="Fitxa botànica de ${s.commonName} (${s.scientificName}) — Soca, gestió regenerativa del territori.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,700;1,400&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --green-dark: #1B5E20;
+            --green: #2E7D32;
+            --green-light: #4CAF50;
+            --green-pale: #E8F5E9;
+            --bg: #F5F7F5;
+            --white: #FFFFFF;
+            --text: #1a1a1a;
+            --text-light: #5a5a5a;
+            --species-color: ${speciesColor};
+            --radius: 16px;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        .card-container {
+            max-width: 520px;
+            margin: 24px auto;
+            padding: 0 16px;
+        }
+
+        /* Header */
+        .card-header {
+            background: linear-gradient(135deg, #1B5E20 0%, #2E7D32 50%, #4CAF50 100%);
+            border-radius: var(--radius) var(--radius) 0 0;
+            padding: 32px 28px 24px;
+            color: var(--white);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+        }
+        .card-header::before {
+            content: '';
+            position: absolute;
+            top: -40px; right: -40px;
+            width: 160px; height: 160px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 50%;
+        }
+        .card-header::after {
+            content: '';
+            position: absolute;
+            bottom: -60px; left: -30px;
+            width: 120px; height: 120px;
+            background: rgba(255,255,255,0.04);
+            border-radius: 50%;
+        }
+        .logo-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
+        }
+        .logo-row img { height: 36px; filter: brightness(10); }
+        .logo-row span {
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+        .species-name {
+            font-family: 'Playfair Display', serif;
+            font-size: 32px;
+            font-weight: 700;
+            line-height: 1.15;
+            position: relative;
+            z-index: 1;
+        }
+        .scientific {
+            font-family: 'Playfair Display', serif;
+            font-style: italic;
+            font-size: 18px;
+            opacity: 0.85;
+            margin-top: 4px;
+            position: relative;
+            z-index: 1;
+        }
+        .color-dot {
+            display: inline-block;
+            width: 14px; height: 14px;
+            border-radius: 50%;
+            background: var(--species-color);
+            border: 2px solid rgba(255,255,255,0.7);
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        /* Body */
+        .card-body {
+            background: var(--white);
+            padding: 24px 28px;
+        }
+
+        /* Info Grid */
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+        .info-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-light);
+            margin-bottom: 4px;
+        }
+        .info-value {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text);
+        }
+        .info-value.big {
+            font-size: 22px;
+            color: var(--green);
+        }
+
+        /* Activity Table */
+        .activity-section h3 {
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--green-dark);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .activity-section h3::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 18px;
+            background: var(--green-light);
+            border-radius: 2px;
+        }
+        .activity-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 24px;
+        }
+        .activity-table th {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--text-light);
+            padding: 4px 0;
+            text-align: center;
+        }
+        .activity-table td.act-label {
+            font-size: 12px;
+            font-weight: 600;
+            padding: 6px 8px 6px 0;
+            white-space: nowrap;
+        }
+        .act-cell {
+            width: 28px;
+            height: 24px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        .act-cell.active {
+            opacity: 0.9;
+        }
+        .act-cell:not(.active) {
+            background: #f0f0f0;
+        }
+
+        /* Drought dots */
+        .dot {
+            display: inline-block;
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: #e0e0e0;
+            margin-right: 3px;
+        }
+        .dot.filled { background: #2196F3; }
+
+        /* Diseases */
+        .diseases-row { margin-top: 16px; }
+        .disease-chip {
+            display: inline-block;
+            background: #FFF3E0;
+            color: #E65100;
+            font-size: 12px;
+            font-weight: 500;
+            padding: 4px 10px;
+            border-radius: 12px;
+            margin: 3px 4px 3px 0;
+        }
+
+        /* Footer */
+        .card-footer {
+            background: var(--green-pale);
+            border-radius: 0 0 var(--radius) var(--radius);
+            padding: 16px 28px;
+            text-align: center;
+        }
+        .card-footer p {
+            font-size: 12px;
+            color: var(--green);
+            font-weight: 500;
+        }
+        .card-footer a {
+            color: var(--green-dark);
+            text-decoration: none;
+            font-weight: 700;
+        }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            .card-container { margin: 0; padding: 0; }
+            .card-header { border-radius: 0; padding: 24px 20px 20px; }
+            .card-body { padding: 20px; }
+            .card-footer { border-radius: 0; padding: 14px 20px; }
+            .species-name { font-size: 24px; }
+            .header-image { width: 90px; height: 90px; }
+            .info-grid { gap: 12px; }
+            .act-cell { width: 22px; height: 20px; }
+        }
+
+        /* Header Image Box */
+        .header-image {
+            width: 120px;
+            height: 120px;
+            background-size: cover;
+            background-position: center;
+            border-radius: 12px;
+            border: 3px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            flex-shrink: 0;
+            background-color: rgba(255,255,255,0.1);
+        }
+
+        .header-main {
+            flex: 1;
+        }
+
+        /* Links */
+        .scientific a {
+            color: inherit;
+            text-decoration: none;
+            border-bottom: 1px dashed rgba(255,255,255,0.4);
+        }
+        .scientific a:hover {
+            color: var(--white);
+            border-bottom-style: solid;
+        }
+        .scientific {
+            font-style: italic;
+            opacity: 0.9;
+            margin-top: 4px;
+        }
+    </style>
+    <link rel="icon" type="image/png" href="/assets/assets/logo-soca.png">
+    <meta property="og:image" content="${s.image_url || ''}">
+</head>
+<body>
+    <div class="card-container">
+        <div class="card-header">
+            <div class="header-main">
+                <div class="logo-row">
+                    <span>🌿 SOCA</span>
+                </div>
+                <div class="species-name"><span class="color-dot"></span>${s.commonName || '-'}</div>
+                <div class="scientific">
+                    <a href="https://www.google.com/search?q=${encodeURIComponent(s.scientificName || '')}" target="_blank" title="Cercar a Google">
+                        ${s.scientificName || '-'}
+                    </a>
+                </div>
+            </div>
+            ${s.image_url ? `<div class="header-image" style="background-image: url('${s.image_url}')"></div>` : ''}
+        </div>
+
+        <div class="card-body">
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">Coeficient de Cultiu</span>
+                    <span class="info-value big">${s.kc ?? '-'}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Fulla</span>
+                    <span class="info-value">${s.leafType === 'Perenne' ? '🌲 Perenne' : '🍂 Caduca'}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Necessitat de Sol</span>
+                    <span class="info-value">${sunIcon(s.sunNeeds)} ${s.sunNeeds || '-'}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Sensibilitat Gelades</span>
+                    <span class="info-value">❄️ ${s.frostSensitivity || '-'}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Alçada Adulta</span>
+                    <span class="info-value">${s.adultHeight ? s.adultHeight + ' m' : '-'}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Diàmetre</span>
+                    <span class="info-value">${s.adultDiameter ? s.adultDiameter + ' m' : '-'}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Creixement</span>
+                    <span class="info-value">${growthLabel(s.growthRate)}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Resistència Sequera</span>
+                    <span class="info-value">${droughtBar(s.droughtResistance || 0)}</span>
+                </div>
+                ${s.fruit ? `
+                <div class="info-item">
+                    <span class="info-label">Fruit</span>
+                    <span class="info-value">🍎 ${s.fruitType || 'Sí'}</span>
+                </div>` : ''}
+                ${s.lifeExpectancyYears ? `
+                <div class="info-item">
+                    <span class="info-label">Esperança de Vida</span>
+                    <span class="info-value">⏳ ${s.lifeExpectancyYears} anys</span>
+                </div>` : ''}
+            </div>
+
+            <div class="activity-section">
+                <h3>Calendari d'Activitat</h3>
+                <table class="activity-table">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            ${monthNames.slice(1).map(n => `<th>${n}</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="act-label">✂️ Poda</td>
+                            ${buildActivityCells(s.pruningMonths || [], '#FF9800')}
+                        </tr>
+                        <tr>
+                            <td class="act-label">🌱 Plantació</td>
+                            ${buildActivityCells(s.plantingMonths || [], '#4CAF50')}
+                        </tr>
+                        <tr>
+                            <td class="act-label">🧺 Collita</td>
+                            ${buildActivityCells(s.harvestMonths || [], '#F44336')}
+                        </tr>
+                        <tr>
+                            <td class="act-label">🌸 Floració</td>
+                            ${buildActivityCells(s.floweringMonths || [], '#E91E63')}
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            ${(s.commonDiseases || []).length > 0 ? `
+            <div class="diseases-row">
+                <span class="info-label">🦠 Malalties Comunes</span>
+                <div style="margin-top:6px">${diseases}</div>
+            </div>` : ''}
+        </div>
+
+        <div class="card-footer">
+            <p>Generat per <a href="https://soca-aacac.web.app">Soca</a> · Gestió regenerativa del territori. <a href="https://www.instagram.com/molicaljeroni" target="_blank">@molicaljeroni</a></p>
+        </div>
+    </div>
+</body>
+</html>`;
+
+        // Temporary: 0 cache to allow immediate verification
+        res.set('Cache-Control', 'public, max-age=0, s-maxage=0');
+        res.status(200).send(html);
+
+    } catch (error) {
+        console.error("Species Card Error:", error);
+        res.status(500).send("Error generant la fitxa.");
+    }
+});
+
 // Import new TS Modules
 import * as waterManagement from './water_management';
 exports.manageWaterCycle = waterManagement.manageWaterCycle;
 exports.manageWaterCycleAudit = waterManagement.manageWaterCycleAudit;
+
+/**
+ * Trigger: Update Image URL from Wikimedia when a species is created/updated in species_web
+ */
+exports.updateSpeciesImage = functions.firestore
+    .document('species_web/{speciesId}')
+    .onWrite(async (change, context) => {
+        const after = change.after.exists ? change.after.data() : null;
+
+        // Conditions to run:
+        // 1. Document exists (not deleted)
+        // 2. No image_url (or empty)
+        // 3. Has scientificName
+        if (!after || after.image_url) return null;
+
+        const scientificName = after.scientificName;
+        if (!scientificName) return null;
+
+        console.log(`Fetching image for: ${scientificName}`);
+
+        try {
+            // Unsplash Source (Deprecated) -> Moving to Wikimedia Commons API
+            // Query for page images
+            const wikiUrl = `https://commons.wikimedia.org/w/api.php?action=query&format=json&prop=pageimages&titles=${encodeURIComponent(scientificName)}&pithumbsize=800`;
+
+            const response = await axios.get(wikiUrl, {
+                headers: { 'User-Agent': 'SocaBot/1.0 (soca-aacac.web.app; contact@soca-aacac.web.app)' }
+            });
+            const pages = response.data?.query?.pages;
+
+            if (!pages) return null;
+
+            // Get first page result
+            const pageId = Object.keys(pages)[0];
+            if (pageId === '-1') return null; // Not found
+
+            const imageUrl = pages[pageId]?.thumbnail?.source;
+
+            if (imageUrl) {
+                console.log(`Found image: ${imageUrl}`);
+                // Update file
+                return change.after.ref.update({ image_url: imageUrl });
+            } else {
+                console.log('No image found in Wikimedia response.');
+            }
+
+        } catch (error) {
+            console.error('Error fetching image:', error.message);
+            if (error.response) console.error('Response data:', error.response.data);
+        }
+        return null;
+    });

@@ -26,6 +26,9 @@
     {
       "source": "functions",
       "codebase": "default",
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ],
       "ignore": [
         "node_modules",
         ".git",
@@ -46,6 +49,10 @@
       "**/node_modules/**"
     ],
     "rewrites": [
+      {
+        "source": "/fitxa",
+        "function": "speciesCard"
+      },
       {
         "source": "**",
         "destination": "/index.html"

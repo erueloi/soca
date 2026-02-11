@@ -1,5 +1,12 @@
 ﻿# Release Notes
 
+## v1.9.4
+Arbres: Fitxes públiques de les espècies.
+Descarregar QR de les fitxes amb PDF.
+Mapa: Planificar i veure tamanys segons anys.
+Més zoom.
+Costos: Poder filtrar per dates els costos.
+Que es vegin les despeses pendents al general de costos.
 ## v1.9.3
 Arbres: Filtres sobre els arbres.
 Mapa: Mode sandbox per planificar.
@@ -159,6 +166,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

@@ -79,6 +79,9 @@ class _SpeciesSelectorState extends ConsumerState<SpeciesSelector> {
     final harvestCtrl = TextEditingController(
       text: offlineMatch?.harvestMonths.join(', ') ?? '',
     );
+    final floweringCtrl = TextEditingController(
+      text: offlineMatch?.floweringMonths.join(', ') ?? '',
+    );
 
     // Validate Leaf Type
     final validLeaves = ['Perenne', 'Caduca'];
@@ -225,6 +228,11 @@ class _SpeciesSelectorState extends ConsumerState<SpeciesSelector> {
                                             (data['mesos_collita'] as List)
                                                 .join(', ');
                                       }
+                                      if (data['mesos_floracio'] != null) {
+                                        floweringCtrl.text =
+                                            (data['mesos_floracio'] as List)
+                                                .join(', ');
+                                      }
                                       if (data['sol'] != null) {
                                         final s = data['sol'].toString();
                                         if (s.contains('☀️')) sunNeeds = 'Alt';
@@ -358,6 +366,16 @@ class _SpeciesSelectorState extends ConsumerState<SpeciesSelector> {
                       ),
                       keyboardType: TextInputType.number,
                     ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: floweringCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Mesos de Floració (ex: 4, 5)',
+                        hintText: 'Mesos separats per comes',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
                     CheckboxListTile(
                       title: const Text('Té Fruit?'),
                       value: fruit,
@@ -407,6 +425,7 @@ class _SpeciesSelectorState extends ConsumerState<SpeciesSelector> {
                       sunNeeds: sunNeeds,
                       pruningMonths: parseMonths(pruningCtrl.text),
                       harvestMonths: parseMonths(harvestCtrl.text),
+                      floweringMonths: parseMonths(floweringCtrl.text),
                       color: '4CAF50',
                     );
 

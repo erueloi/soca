@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
+
 import '../../domain/entities/watering_event.dart';
 
 import '../../domain/entities/ai_analysis_entry.dart';
@@ -27,6 +28,10 @@ import '../../../settings/presentation/providers/settings_provider.dart';
 import '../../../settings/domain/entities/farm_config.dart';
 
 class TreeDetail extends ConsumerStatefulWidget {
+  // ... (start of class remains same)
+
+  // ... (jump to the button row area)
+
   final Tree tree;
 
   const TreeDetail({super.key, required this.tree});
@@ -519,18 +524,25 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                     ],
                   ),
                   const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _confirmPlanting,
-                      icon: const Icon(Icons.check_circle, color: Colors.white),
-                      label: const Text('CONFIRMAR PLANTACIÓ'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                  Row(
+                    children: [
+                      // CONFIRM PLANTING
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _confirmPlanting,
+                          icon: const Icon(
+                            Icons.check_circle,
+                            color: Colors.white,
+                          ),
+                          label: const Text('PLANTAR'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ],
               ),
@@ -2427,6 +2439,12 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                 _buildTimeline('Poda', species.pruningMonths, Colors.orange),
                 const SizedBox(height: 8),
                 _buildTimeline('Collita', species.harvestMonths, Colors.green),
+                const SizedBox(height: 8),
+                _buildTimeline(
+                  'Flor.',
+                  species.floweringMonths,
+                  Colors.pinkAccent,
+                ),
               ],
             ),
           ),

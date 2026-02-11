@@ -182,7 +182,7 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
     // If it's a new tree, check Sandbox Mode default
     // If it's a new tree (null or empty ID), check Sandbox Mode default
     if (widget.tree == null || widget.tree!.id.isEmpty) {
-      _isPlanned = ref.read(sandboxProvider);
+      _isPlanned = ref.read(sandboxProvider).isEnabled;
       if (widget.tree == null) _fetchLocation();
     } else {
       // Editing existing tree

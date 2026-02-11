@@ -36,7 +36,9 @@ class IrrigationWidget extends ConsumerWidget {
     // Calculate LED Color based on status
     Color ledColor = Colors.grey;
     if (treesAsync.hasValue) {
-      final trees = treesAsync.value!;
+      final trees = treesAsync.value!
+          .where((t) => t.status != 'Planned')
+          .toList();
       final critical = trees
           .where((t) => t.waterStatusText == 'Estrès Hídric')
           .length;
@@ -148,10 +150,13 @@ class IrrigationWidget extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, s) => const SizedBox(),
       data: (allTrees) {
-        final criticalCount = allTrees
+        final activeTrees = allTrees
+            .where((t) => t.status != 'Planned')
+            .toList();
+        final criticalCount = activeTrees
             .where((t) => t.waterStatusText == 'Estrès Hídric')
             .length;
-        final optionalCount = allTrees
+        final optionalCount = activeTrees
             .where((t) => t.waterStatusText == 'Reg Opcional')
             .length;
 

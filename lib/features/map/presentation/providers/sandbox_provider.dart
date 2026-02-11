@@ -1,21 +1,42 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'map_layers_provider.dart';
 
-class SandboxNotifier extends Notifier<bool> {
-  @override
-  bool build() {
-    return false; // Default: Sandbox Mode OFF
-  }
+class SandboxState {
+  final bool isEnabled;
+  final double years; // 0 = Planting, up to e.g. 30 = Adult
 
-  void toggle() {
-    state = !state;
+  const SandboxState({
+    this.isEnabled = false,
+    this.years = 5.0, // Default start at 5 years
+  });
 
-    // Auto-toggle 'Future Projects' layer based on Sandbox Mode
-    final layersNotifier = ref.read(mapLayersProvider.notifier);
-    layersNotifier.setLayer(MapLayer.futureProjects, state);
+  SandboxState copyWith({bool? isEnabled, double? years}) {
+    return SandboxState(
+      isEnabled: isEnabled ?? this.isEnabled,
+      years: years ?? this.years,
+    );
   }
 }
 
-final sandboxProvider = NotifierProvider<SandboxNotifier, bool>(
+class SandboxNotifier extends Notifier<SandboxState> {
+  @override
+  SandboxState build() {
+    return const SandboxState();
+  }
+
+  void toggle() {
+    state = state.copyWith(isEnabled: !state.isEnabled);
+
+    // Auto-toggle 'Provisional Trees' layer based on Sandbox Mode
+    final layersNotifier = ref.read(mapLayersProvider.notifier);
+    layersNotifier.setLayer(MapLayer.provisionalTrees, state.isEnabled);
+  }
+
+  void setYears(double years) {
+    state = state.copyWith(years: years);
+  }
+}
+
+final sandboxProvider = NotifierProvider<SandboxNotifier, SandboxState>(
   SandboxNotifier.new,
 );

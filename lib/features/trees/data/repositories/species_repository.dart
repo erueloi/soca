@@ -119,6 +119,35 @@ class SpeciesRepository {
     return {'updated': updated};
   }
 
+  /// Sincronitza les espècies a la col·lecció pública `species_web`.
+  /// Retorna el nombre de documents sincronitzats.
+  Future<int> syncToSpeciesWeb() async {
+    if (fincaId == null) throw Exception('No FincaId');
+
+    final snapshot = await _firestore
+        .collection('species')
+        .where('fincaId', isEqualTo: fincaId)
+        .get();
+
+    if (snapshot.docs.isEmpty) return 0;
+
+    final batch = _firestore.batch();
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      // Remove private fields
+      data.remove('fincaId');
+      // Add sync metadata
+      data['syncedAt'] = FieldValue.serverTimestamp();
+      batch.set(
+        _firestore.collection('species_web').doc(doc.id),
+        data,
+        SetOptions(merge: true),
+      );
+    }
+    await batch.commit();
+    return snapshot.docs.length;
+  }
+
   // Offline Knowledge Base
   static final Map<String, Species> _localKnowledgeBase = {
     'olea europaea': Species(

@@ -18,6 +18,7 @@ import '../../../trees/presentation/widgets/tree_detail.dart';
 import '../../../trees/domain/entities/watering_event.dart';
 import '../../../trees/domain/entities/tree.dart';
 import '../../../trees/domain/entities/tree_extensions.dart';
+import '../../domain/services/simulation_engine.dart';
 import '../../../tasks/domain/entities/task.dart';
 import '../../../tasks/domain/entities/bucket.dart';
 
@@ -46,6 +47,10 @@ class _MapPageState extends ConsumerState<MapPage> {
   MapFollowMode _followMode = MapFollowMode.none;
   StreamSubscription<MapEvent>? _mapEventSubscription;
   LatLng? _selectedLocation;
+
+  // Tree Relocation State
+  Tree? _movingTree;
+  LatLng? _crosshairLocation;
 
   // Measurement mode state
   bool _isMeasuring = false;
@@ -218,8 +223,9 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   @override
   Widget build(BuildContext context) {
+    final sandboxState = ref.watch(sandboxProvider); // Watch Sandbox State
+    final isSandboxMode = sandboxState.isEnabled;
     final layers = ref.watch(mapLayersProvider);
-    final isSandboxMode = ref.watch(sandboxProvider); // Watch Sandbox Mode
 
     return Scaffold(
       appBar: AppBar(
@@ -241,7 +247,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                   content: Text(
                     isSandboxMode
                         ? 'Mode Planificador desactivat'
-                        : 'Mode Planificador activat: Capa "Projectes de Futur" visible',
+                        : 'Mode Planificador activat: Capa "Arbres Provisionals" visible',
                   ),
                   duration: const Duration(seconds: 2),
                 ),
@@ -266,7 +272,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                     options: MapOptions(
                       initialCenter: LatLng(config.latitude, config.longitude),
                       initialZoom: config.zoom,
-                      maxZoom: 20.0,
+                      maxZoom: 22.0,
                       onLongPress: _handleLongPress,
                       onTap: _isMeasuring ? _handleMeasureTap : null,
                       onPositionChanged: (position, hasGesture) {
@@ -519,13 +525,116 @@ class _MapPageState extends ConsumerState<MapPage> {
                                 for (var s in speciesList) s.id: s,
                               };
 
-                              // Check if Future Projects layer is enabled
+                              // Check if Planned Trees layer is enabled
                               final showPlanned =
-                                  layers[MapLayer.futureProjects] ?? false;
+                                  layers[MapLayer.provisionalTrees] ?? false;
+                              final showPlanted =
+                                  layers[MapLayer.plantedTrees] ?? true;
 
                               // Build adult canopy circles for planned trees
                               final canopyCircles = <CircleMarker>[];
+
                               if (showPlanned) {
+                                final years = ref.watch(sandboxProvider).years;
+
+                                // --- PRE-CALCULATE SIMULATED RADII ---
+                                // We need to know the radius of EVERY visible tree (active or planned)
+                                // to check for collisions.
+                                final treeRadii =
+                                    <String, double>{}; // treeId -> radius
+                                final visibleTrees = treesAsyncValue.value!
+                                    .where((t) {
+                                      if (hiddenSpecies.contains(t.species)) {
+                                        return false;
+                                      }
+                                      final isPlanned = t.status == 'Planned';
+                                      if (isPlanned && !showPlanned) {
+                                        return false;
+                                      }
+                                      if (!isPlanned && !showPlanted) {
+                                        return false;
+                                      }
+                                      return true;
+                                    })
+                                    .toList();
+
+                                for (final t in visibleTrees) {
+                                  final species = speciesMap[t.speciesId];
+                                  if (species != null) {
+                                    if (t.status == 'Planned') {
+                                      // Simulated growth
+                                      treeRadii[t.id] =
+                                          SimulationEngine.calculateRadius(
+                                            tree: t,
+                                            species: species,
+                                            years: years,
+                                          );
+                                    } else {
+                                      // Existing tree: treat as fully grown or calculate age?
+                                      // User prompt implies "arbre real". Existing trees might be young too.
+                                      // Ideally we should calc their age based on plantingDate vs now + simulator years?
+                                      // For now, let's assume existing trees are STATIC at their current size
+                                      // or maybe we just use their "Adult" size for safety?
+                                      // Or better: calculate their radius based on (Real Age + Sim Years).
+                                      // Let's stick to simplest interpretation:
+                                      // Real trees have a physical presence.
+                                      // If we don't have real size data, let's assume they are "Adult" for collision safety?
+                                      // OR apply the same formula if we have data.
+
+                                      // Let's calculate existing tree radius:
+                                      final realAge =
+                                          DateTime.now()
+                                              .difference(t.plantingDate)
+                                              .inDays /
+                                          365.0;
+                                      final effectiveAge = (realAge + years)
+                                          .clamp(0.0, 100.0);
+
+                                      treeRadii[t.id] =
+                                          SimulationEngine.calculateRadius(
+                                            tree: t,
+                                            species: species,
+                                            years: effectiveAge,
+                                          );
+                                    }
+                                  } else {
+                                    treeRadii[t.id] = 0.5; // Default fallback
+                                  }
+                                }
+
+                                // --- COLLISION DETECTION ---
+                                // Identify trees that are colliding with any other tree
+                                final collidingTreeIds = <String>{};
+                                final distance = const Distance();
+
+                                for (int i = 0; i < visibleTrees.length; i++) {
+                                  final t1 = visibleTrees[i];
+                                  final r1 = treeRadii[t1.id] ?? 0.0;
+                                  if (r1 <= 0) continue;
+
+                                  for (
+                                    int j = i + 1;
+                                    j < visibleTrees.length;
+                                    j++
+                                  ) {
+                                    final t2 = visibleTrees[j];
+                                    final r2 = treeRadii[t2.id] ?? 0.0;
+                                    if (r2 <= 0) continue;
+
+                                    final dist = distance.as(
+                                      LengthUnit.Meter,
+                                      LatLng(t1.latitude, t1.longitude),
+                                      LatLng(t2.latitude, t2.longitude),
+                                    );
+
+                                    // Overlap if distance < sum of radii
+                                    if (dist < (r1 + r2)) {
+                                      collidingTreeIds.add(t1.id);
+                                      collidingTreeIds.add(t2.id);
+                                    }
+                                  }
+                                }
+
                                 for (final t in treesAsyncValue.value!.where(
                                   (t) =>
                                       t.status == 'Planned' &&
@@ -534,21 +643,56 @@ class _MapPageState extends ConsumerState<MapPage> {
                                   final species = speciesMap[t.speciesId];
                                   if (species != null &&
                                       species.adultDiameter > 0) {
-                                    // adultDiameter is the crown diameter in meters
-                                    final radiusMeters =
-                                        species.adultDiameter / 2;
+                                    final maxRadius = species.adultDiameter / 2;
+                                    final currentRadius =
+                                        treeRadii[t.id] ?? 0.1;
+
+                                    // Check collision state
+                                    final isColliding = collidingTreeIds
+                                        .contains(t.id);
+
+                                    // Check if Adult Canopy (ALO) layer is enabled
+                                    final showAdultCanopy =
+                                        layers[MapLayer.adultCanopy] ?? true;
+
+                                    // 1. ADULT Circle (Max Size)
+                                    if (showAdultCanopy) {
+                                      canopyCircles.add(
+                                        CircleMarker(
+                                          point: LatLng(
+                                            t.latitude,
+                                            t.longitude,
+                                          ),
+                                          radius: maxRadius,
+                                          useRadiusInMeter: true,
+                                          color:
+                                              Colors.transparent, // Only border
+                                          // Dynamic Border Color: Orange if colliding, Grey otherwise
+                                          borderColor: isColliding
+                                              ? Colors.deepOrange
+                                              : Colors.black54,
+                                          borderStrokeWidth: isColliding
+                                              ? 2.5
+                                              : 1.5,
+                                        ),
+                                      );
+                                    }
+
+                                    // 2. SIMULATED Circle (Current Radius calculated above)
                                     canopyCircles.add(
                                       CircleMarker(
                                         point: LatLng(t.latitude, t.longitude),
-                                        radius: radiusMeters,
+                                        radius: currentRadius,
                                         useRadiusInMeter: true,
-                                        color: Colors.lightGreen.withValues(
-                                          alpha: 0.25,
-                                        ),
-                                        borderColor: Colors.green.withValues(
-                                          alpha: 0.6,
-                                        ),
-                                        borderStrokeWidth: 2,
+                                        color: isColliding
+                                            ? Colors.deepOrange.withValues(
+                                                alpha: 0.5,
+                                              ) // Warning tint
+                                            : Colors.lightGreen.withValues(
+                                                alpha: 0.4,
+                                              ),
+                                        borderColor: Colors.transparent,
+                                        borderStrokeWidth: 0,
                                       ),
                                     );
                                   }
@@ -570,8 +714,24 @@ class _MapPageState extends ConsumerState<MapPage> {
                                           )) {
                                             return false;
                                           }
-                                          if (t.status == 'Planned' &&
-                                              !showPlanned) {
+
+                                          // Get visibility flags
+                                          final showPlanted =
+                                              layers[MapLayer.plantedTrees] ??
+                                              true;
+                                          final showPlanned =
+                                              layers[MapLayer
+                                                  .provisionalTrees] ??
+                                              false;
+
+                                          final isPlanned =
+                                              t.status == 'Planned';
+
+                                          // Filter based on flags
+                                          if (isPlanned && !showPlanned) {
+                                            return false;
+                                          }
+                                          if (!isPlanned && !showPlanted) {
                                             return false;
                                           }
                                           return true;
@@ -801,6 +961,95 @@ class _MapPageState extends ConsumerState<MapPage> {
             },
           ),
 
+          // Sandbox Time Slider Overlay
+          if (isSandboxMode)
+            Positioned(
+              bottom: 20,
+              left: 20,
+              right: 20,
+              child: Card(
+                elevation: 4,
+                color: Colors.white.withValues(alpha: 0.95),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 16,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.timer,
+                            size: 20,
+                            color: Colors.orange.shade800,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'MODE PLANIFICADOR',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange.shade800,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 24),
+                      Row(
+                        children: [
+                          Text(
+                            'Plantació',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          Expanded(
+                            child: Slider(
+                              value: sandboxState.years,
+                              min: 0,
+                              max: 30, // Assuming 30 is "Adult" max
+                              divisions: 6, // 0, 5, 10, 15, 20, 25, 30
+                              label: sandboxState.years == 0
+                                  ? 'Plantació'
+                                  : sandboxState.years == 30
+                                  ? 'Adult (Màx)'
+                                  : '${sandboxState.years.toInt()} anys',
+                              activeColor: Colors.orange,
+                              onChanged: (val) {
+                                ref
+                                    .read(sandboxProvider.notifier)
+                                    .setYears(val);
+                              },
+                            ),
+                          ),
+                          Text(
+                            'Adult',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        _getGrowthStageLabel(sandboxState.years),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           // Sandbox Mode Banner
           if (isSandboxMode)
             Positioned(
@@ -901,175 +1150,300 @@ class _MapPageState extends ConsumerState<MapPage> {
                 ),
               ),
             ),
-        ],
-      ),
+          // Map Controls (replaced floatingActionButton)
+          Positioned(
+            right: 16,
+            bottom: isSandboxMode ? 100 : 16,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Measurement mode toggle
+                FloatingActionButton(
+                  heroTag: 'measure',
+                  mini: true,
+                  backgroundColor: _isMeasuring ? Colors.orange : Colors.white,
+                  foregroundColor: _isMeasuring ? Colors.white : Colors.black,
+                  onPressed: () {
+                    setState(() {
+                      _isMeasuring = !_isMeasuring;
+                      if (!_isMeasuring) {
+                        _measurePointA = null;
+                        _measurePointB = null;
+                      }
+                    });
+                    if (_isMeasuring) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Mode mesura: Toca 2 punts per mesurar',
+                          ),
+                          duration: Duration(seconds: 2),
+                          backgroundColor: Colors.orange,
+                        ),
+                      );
+                    }
+                  },
+                  child: const Icon(Icons.straighten),
+                ),
+                const SizedBox(height: 8),
 
-      floatingActionButton: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          // Measurement mode toggle
-          FloatingActionButton(
-            heroTag: 'measure',
-            mini: true,
-            backgroundColor: _isMeasuring ? Colors.orange : Colors.white,
-            foregroundColor: _isMeasuring ? Colors.white : Colors.black,
-            onPressed: () {
-              setState(() {
-                _isMeasuring = !_isMeasuring;
-                if (!_isMeasuring) {
-                  _measurePointA = null;
-                  _measurePointB = null;
-                }
-              });
-              if (_isMeasuring) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Mode mesura: Toca 2 punts per mesurar'),
-                    duration: Duration(seconds: 2),
-                    backgroundColor: Colors.orange,
+                // Layers Button
+                FloatingActionButton(
+                  heroTag: 'layers',
+                  mini: true,
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                  onPressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      builder: (context) => const LayerControllerSheet(),
+                    );
+                  },
+                  child: const Icon(Icons.layers),
+                ),
+                const SizedBox(height: 8),
+
+                // Map Follow Mode
+                FloatingActionButton(
+                  heroTag: 'map_follow_fab',
+                  mini: true,
+                  backgroundColor: const Color(0xFF2E7D32),
+                  onPressed: _toggleFollowMode,
+                  child: Icon(
+                    _followMode == MapFollowMode.none
+                        ? Icons.location_searching
+                        : _followMode == MapFollowMode.centered
+                        ? Icons.my_location
+                        : Icons.explore,
+                    color: Colors.white,
                   ),
-                );
-              }
-            },
-            child: const Icon(Icons.straighten),
-          ),
-          const SizedBox(height: 8),
-          FloatingActionButton(
-            heroTag: 'layers',
-            mini: true,
-            backgroundColor: Colors.white,
-            foregroundColor: Colors.black,
-            onPressed: () {
-              showModalBottomSheet(
-                context: context,
-                builder: (context) => const LayerControllerSheet(),
-              );
-            },
-            child: const Icon(Icons.layers),
-          ),
-          const SizedBox(height: 8),
-          FloatingActionButton(
-            heroTag: 'map_follow_fab',
-            mini: true,
-            backgroundColor: const Color(0xFF2E7D32), // Soca Green
-            onPressed: _toggleFollowMode,
-            child: Icon(
-              _followMode == MapFollowMode.none
-                  ? Icons.location_searching
-                  : _followMode == MapFollowMode.centered
-                  ? Icons.my_location
-                  : Icons.explore,
-              color: Colors.white,
+                ),
+                const SizedBox(height: 8),
+
+                // Zoom In
+                FloatingActionButton(
+                  heroTag: 'zoom_in',
+                  mini: true,
+                  onPressed: () {
+                    final currentZoom = _mapController.camera.zoom;
+                    _mapController.move(
+                      _mapController.camera.center,
+                      currentZoom + 1,
+                    );
+                  },
+                  child: const Icon(Icons.add),
+                ),
+                const SizedBox(height: 8),
+
+                // Zoom Out
+                FloatingActionButton(
+                  heroTag: 'zoom_out',
+                  mini: true,
+                  onPressed: () {
+                    final currentZoom = _mapController.camera.zoom;
+                    _mapController.move(
+                      _mapController.camera.center,
+                      currentZoom - 1,
+                    );
+                  },
+                  child: const Icon(Icons.remove),
+                ),
+                const SizedBox(height: 16),
+
+                // Speed Dial (Add Tree/Task) - Hide in Moving Mode or Measuring
+                if (_movingTree == null)
+                  SpeedDial(
+                    icon: Icons.add,
+                    activeIcon: Icons.close,
+                    backgroundColor: const Color(0xFF2E7D32),
+                    foregroundColor: Colors.white,
+                    overlayColor: Colors.black,
+                    overlayOpacity: 0.5,
+                    spacing: 12,
+                    spaceBetweenChildren: 8,
+                    children: [
+                      SpeedDialChild(
+                        child: const Icon(Icons.park),
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        label: 'Nou Arbre',
+                        onTap: () {
+                          final center = _mapController.camera.center;
+                          showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            builder: (context) => TreeFormSheet(
+                              tree: Tree(
+                                id: '',
+                                species: '',
+                                commonName: '',
+                                latitude: center.latitude,
+                                longitude: center.longitude,
+                                plantingDate: DateTime.now(),
+                                status: 'Viable',
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      SpeedDialChild(
+                        child: const Icon(Icons.assignment),
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                        label: 'Nova Tasca',
+                        onTap: () async {
+                          final center = _mapController.camera.center;
+                          Task? createdTask;
+
+                          await showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            builder: (context) => TaskEditSheet(
+                              initialBucket: 'Pendent',
+                              task: Task(
+                                id: const Uuid().v4(),
+                                title: '',
+                                bucket: 'Pendent',
+                                latitude: center.latitude,
+                                longitude: center.longitude,
+                              ),
+                              onSave: (task) {
+                                createdTask = task;
+                              },
+                            ),
+                          );
+
+                          if (createdTask == null) return;
+                          if (!context.mounted) return;
+
+                          final selectedBucket = await _askForBucket(context);
+                          if (selectedBucket == null) return;
+
+                          final taskToSave = createdTask!.copyWith(
+                            bucket: selectedBucket,
+                          );
+                          await ref
+                              .read(tasksRepositoryProvider)
+                              .addTask(taskToSave);
+
+                          if (!context.mounted) return;
+
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Tasca creada a "$selectedBucket"'),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          FloatingActionButton(
-            heroTag: 'zoom_in',
-            mini: true,
-            onPressed: () {
-              final currentZoom = _mapController.camera.zoom;
-              _mapController.move(
-                _mapController.camera.center,
-                currentZoom + 1,
-              );
-            },
-            child: const Icon(Icons.add),
-          ),
-          const SizedBox(height: 8),
-          FloatingActionButton(
-            heroTag: 'zoom_out',
-            mini: true,
-            onPressed: () {
-              final currentZoom = _mapController.camera.zoom;
-              _mapController.move(
-                _mapController.camera.center,
-                currentZoom - 1,
-              );
-            },
-            child: const Icon(Icons.remove),
-          ),
-          const SizedBox(height: 16),
-          SpeedDial(
-            icon: Icons.add,
-            activeIcon: Icons.close,
-            backgroundColor: const Color(0xFF2E7D32),
-            foregroundColor: Colors.white,
-            overlayColor: Colors.black,
-            overlayOpacity: 0.5,
-            spacing: 12,
-            spaceBetweenChildren: 8,
-            children: [
-              SpeedDialChild(
-                child: const Icon(Icons.park),
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-                label: 'Nou Arbre',
-                onTap: () {
-                  final center = _mapController.camera.center;
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    builder: (context) => TreeFormSheet(
-                      tree: Tree(
-                        id: '',
-                        species: '',
-                        commonName: '',
-                        latitude: center.latitude,
-                        longitude: center.longitude,
-                        plantingDate: DateTime.now(),
-                        status: 'Viable',
+
+          // MOVING MODE UI
+          if (_movingTree != null) ...[
+            // Crosshair in center
+            const Center(
+              child: Icon(Icons.add, size: 40, color: Colors.deepPurple),
+            ),
+            // Top Banner
+            Positioned(
+              top: 100, // Below AppBar
+              left: 16,
+              right: 16,
+              child: Card(
+                color: Colors.deepPurple,
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'REUBICANT ARBRE',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
                       ),
-                    ),
-                  );
-                },
-              ),
-              SpeedDialChild(
-                child: const Icon(Icons.assignment),
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-                label: 'Nova Tasca',
-                onTap: () async {
-                  final center = _mapController.camera.center;
-                  Task? createdTask;
-
-                  await showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    builder: (context) => TaskEditSheet(
-                      initialBucket: 'Pendent',
-                      task: Task(
-                        id: const Uuid().v4(),
-                        title: '',
-                        bucket: 'Pendent',
-                        latitude: center.latitude,
-                        longitude: center.longitude,
+                      const SizedBox(height: 4),
+                      Text(
+                        _movingTree!.commonName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                      onSave: (task) {
-                        createdTask = task;
-                      },
-                    ),
-                  );
-
-                  if (createdTask == null) return;
-                  if (!context.mounted) return;
-
-                  final selectedBucket = await _askForBucket(context);
-                  if (selectedBucket == null) return;
-
-                  final taskToSave = createdTask!.copyWith(
-                    bucket: selectedBucket,
-                  );
-                  await ref.read(tasksRepositoryProvider).addTask(taskToSave);
-
-                  if (!context.mounted) return;
-
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Tasca creada a "$selectedBucket"')),
-                  );
-                },
+                      const Text(
+                        'Mou el mapa per ajustar la posició',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ],
-          ),
+            ),
+            // Bottom Controls
+            Positioned(
+              bottom: 30,
+              left: 16,
+              right: 16,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  FloatingActionButton.extended(
+                    heroTag: 'cancelMove',
+                    onPressed: () {
+                      setState(() {
+                        _movingTree = null;
+                        _crosshairLocation = null;
+                      });
+                    },
+                    label: const Text('CANCEL·LAR'),
+                    icon: const Icon(Icons.close),
+                    backgroundColor: Colors.red,
+                  ),
+                  FloatingActionButton.extended(
+                    heroTag: 'confirmMove',
+                    onPressed: () async {
+                      if (_movingTree != null) {
+                        // Get center from map controller
+                        final center = _mapController.camera.center;
+                        final updatedTree = _movingTree!.copyWith(
+                          latitude: center.latitude,
+                          longitude: center.longitude,
+                        );
+
+                        await ref
+                            .read(treesRepositoryProvider)
+                            .updateTree(updatedTree);
+
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Ubicació de "${updatedTree.commonName}" actualitzada',
+                              ),
+                            ),
+                          );
+                          setState(() {
+                            _movingTree = null;
+                            _crosshairLocation = null;
+                          });
+                        }
+                      }
+                    },
+                    label: const Text('GUARDAR'),
+                    icon: const Icon(Icons.check),
+                    backgroundColor: Colors.green,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1451,13 +1825,24 @@ class _MapPageState extends ConsumerState<MapPage> {
                 ),
                 trailing: IconButton(
                   icon: const Icon(Icons.info_outline),
-                  onPressed: () {
+                  onPressed: () async {
                     Navigator.pop(context);
-                    Navigator.of(context).push(
+                    final result = await Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (context) => TreeDetail(tree: tree),
                       ),
                     );
+
+                    if (result == 'MOVE') {
+                      setState(() {
+                        _movingTree = tree;
+                        _crosshairLocation = LatLng(
+                          tree.latitude,
+                          tree.longitude,
+                        );
+                        _mapController.move(_crosshairLocation!, _currentZoom);
+                      });
+                    }
                   },
                 ),
               ),
@@ -1527,6 +1912,34 @@ class _MapPageState extends ConsumerState<MapPage> {
                 ),
               ),
               const SizedBox(height: 16),
+
+              // Move button for planned trees (Sandbox Mode only)
+              if (tree.status == 'Planned' &&
+                  ref.read(sandboxProvider).isEnabled)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      // Enter moving mode
+                      setState(() {
+                        _movingTree = tree;
+                        _crosshairLocation = LatLng(
+                          tree.latitude,
+                          tree.longitude,
+                        );
+                        _mapController.move(_crosshairLocation!, _currentZoom);
+                      });
+                    },
+                    icon: const Icon(Icons.open_with, color: Colors.deepPurple),
+                    label: const Text('MOURE ARBRE'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.deepPurple,
+                      side: const BorderSide(color: Colors.deepPurple),
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                  ),
+                ),
 
               // Delete button for planned trees
               if (tree.status == 'Planned')
@@ -1795,5 +2208,13 @@ class _MapPageState extends ConsumerState<MapPage> {
         ],
       ),
     );
+  }
+
+  String _getGrowthStageLabel(double years) {
+    if (years <= 0) return 'Any 0: Plantació';
+    if (years <= 3) return 'Any ${years.toInt()}: Arrelament inicial';
+    if (years <= 10) return 'Any ${years.toInt()}: Fase d\'Establiment';
+    if (years <= 20) return 'Any ${years.toInt()}: Creixement Exponencial';
+    return 'Any ${years.toInt()}: Maduresa i Producció';
   }
 }

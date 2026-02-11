@@ -19,7 +19,18 @@ class LayerControllerSheet extends ConsumerWidget {
 
     final trees = treesAsync.value ?? [];
     final speciesCounts = <String, int>{};
+
+    // Filter trees based on active layers BEFORE counting
+    final showPlanted = layers[MapLayer.plantedTrees] ?? true;
+    final showPlanned = layers[MapLayer.provisionalTrees] ?? false;
+
     for (final tree in trees) {
+      // 1. Check if tree type is visible
+      final isPlanned = tree.status == 'Planned';
+      if (isPlanned && !showPlanned) continue;
+      if (!isPlanned && !showPlanted) continue;
+
+      // 2. Count species
       if (tree.species.isNotEmpty) {
         speciesCounts[tree.species] = (speciesCounts[tree.species] ?? 0) + 1;
       }
@@ -123,16 +134,40 @@ class LayerControllerSheet extends ConsumerWidget {
               onChanged: (val) =>
                   notifier.toggleLayer(MapLayer.permacultureZones),
             ),
+            const Divider(),
             SwitchListTile(
-              title: const Text('Projectes de Futur'),
-              subtitle: const Text('Mostra arbres planificats (provisionals)'),
-              secondary: const Icon(
-                Icons.auto_awesome,
-                color: Colors.deepPurple,
-              ),
-              value: layers[MapLayer.futureProjects] ?? false,
-              onChanged: (val) => notifier.toggleLayer(MapLayer.futureProjects),
+              title: const Text('Arbres Plantats'),
+              subtitle: const Text('Mostra arbres existents'),
+              secondary: const Icon(Icons.park, color: Colors.green),
+              value: layers[MapLayer.plantedTrees] ?? true,
+              onChanged: (val) => notifier.toggleLayer(MapLayer.plantedTrees),
             ),
+            SwitchListTile(
+              title: const Text('Arbres Planificats'),
+              subtitle: const Text('Mostra arbres provisionals'),
+              secondary: const Icon(
+                Icons.design_services,
+                color: Colors.orange,
+              ),
+              value: layers[MapLayer.provisionalTrees] ?? false,
+              onChanged: (val) =>
+                  notifier.toggleLayer(MapLayer.provisionalTrees),
+            ),
+            if (layers[MapLayer.provisionalTrees] ?? false)
+              Padding(
+                padding: const EdgeInsets.only(left: 32.0),
+                child: SwitchListTile(
+                  title: const Text('Mida Adulta (ALO)'),
+                  subtitle: const Text('Mostra l\'ocupació màxima futura'),
+                  secondary: const Icon(
+                    Icons.circle_outlined,
+                    color: Colors.grey,
+                  ),
+                  value: layers[MapLayer.adultCanopy] ?? true,
+                  onChanged: (val) =>
+                      notifier.toggleLayer(MapLayer.adultCanopy),
+                ),
+              ),
             SwitchListTile(
               title: const Text('Salut dels Arbres'),
               subtitle: const Text(

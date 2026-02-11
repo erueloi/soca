@@ -1,4 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'dart:ui' as ui;
+
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/repositories/species_repository.dart';
 import '../../domain/entities/species.dart';
@@ -6,6 +9,11 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import '../../../../core/services/ai_service.dart';
 import '../../../../core/utils/icon_utils.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class SpeciesLibraryPage extends ConsumerStatefulWidget {
   final String? initialSearchQuery;
@@ -21,6 +29,7 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
   int? _sortColumnIndex;
   bool _sortAscending = true;
   String? _updatingSpeciesId;
+  final _horizontalScrollController = ScrollController();
 
   Future<MapEntry<String, IconData>?> _showBotanicalPicker(
     BuildContext context,
@@ -81,6 +90,7 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
   @override
   void dispose() {
     _searchController.dispose();
+    _horizontalScrollController.dispose();
     super.dispose();
   }
 
@@ -118,6 +128,9 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
     );
     final harvestCtrl = TextEditingController(
       text: formatList(existing?.harvestMonths),
+    );
+    final floweringCtrl = TextEditingController(
+      text: formatList(existing?.floweringMonths),
     );
     // New Fields
     final plantingCtrl = TextEditingController(
@@ -260,6 +273,11 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                                             (data['mesos_collita'] as List)
                                                 .join(', ');
                                       }
+                                      if (data['mesos_floracio'] != null) {
+                                        floweringCtrl.text =
+                                            (data['mesos_floracio'] as List)
+                                                .join(', ');
+                                      }
                                       if (data['sol'] != null) {
                                         final s = data['sol'].toString();
                                         if (s.contains('☀️')) sunNeeds = 'Alt';
@@ -303,7 +321,7 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                                         if ([
                                           'Lent',
                                           'Mig',
-                                          'Ràpid',
+                                          'RÃ pid',
                                         ].contains(r)) {
                                           growthRate = r;
                                         }
@@ -659,7 +677,7 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                           child: TextFormField(
                             controller: diameterCtrl,
                             decoration: const InputDecoration(
-                              labelText: 'Ø Adult (m)',
+                              labelText: 'Ã˜ Adult (m)',
                             ),
                             keyboardType: TextInputType.number,
                           ),
@@ -688,8 +706,15 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                         prefixIcon: Icon(Icons.shopping_basket, size: 16),
                       ),
                     ),
+                    TextFormField(
+                      controller: floweringCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Mesos Floració (ex: 4, 5)',
+                        prefixIcon: Icon(Icons.local_florist, size: 16),
+                      ),
+                    ),
                     CheckboxListTile(
-                      title: const Text('Té Fruit?'),
+                      title: const Text('TÃ© Fruit?'),
                       value: fruit,
                       onChanged: (v) =>
                           setStateDialog(() => fruit = v ?? false),
@@ -705,7 +730,7 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                     TextFormField(
                       controller: lifeExpectancyCtrl,
                       decoration: const InputDecoration(
-                        labelText: 'Esperança de Vida (Anys)',
+                        labelText: 'EsperanÃ§a de Vida (Anys)',
                         suffixText: 'anys',
                       ),
                       keyboardType: TextInputType.number,
@@ -715,7 +740,7 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                       controller: commonDiseasesCtrl,
                       decoration: const InputDecoration(
                         labelText: 'Malalties Comunes (separades per comes)',
-                        hintText: 'Ex: Pulgó, Oïdi, Foc bacterià',
+                        hintText: 'Ex: PulgÃ³, OÃ¯di, Foc bacteriÃ ',
                       ),
                       maxLines: 2,
                     ),
@@ -751,6 +776,7 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                       prefix: prefixCtrl.text.toUpperCase(),
                       pruningMonths: parseMonths(pruningCtrl.text),
                       harvestMonths: parseMonths(harvestCtrl.text),
+                      floweringMonths: parseMonths(floweringCtrl.text),
                       plantingMonths: parseMonths(plantingCtrl.text),
                       color: selectedColor,
                       iconCode: selectedIconCode,
@@ -845,7 +871,7 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
               _buildLegendItem(
                 Icons.ac_unit,
                 'Sensibilitat a Gelades',
-                '❄️❄️❄️ (Alta), ❄️❄️ (Mitjana), ❄️ (Baixa)',
+                'â„ï¸â„ï¸â„ï¸ (Alta), â„ï¸â„ï¸ (Mitjana), â„ï¸ (Baixa)',
               ),
               const Divider(),
               _buildLegendItem(
@@ -866,25 +892,25 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                 'Si produeix fruit comestible/aprofit.',
               ),
               const Divider(),
-              _buildLegendItem(Icons.height, 'Alçada Adulta', 'En metres (m)'),
+              _buildLegendItem(Icons.height, 'AlÃ§ada Adulta', 'En metres (m)'),
               const Divider(),
               _buildLegendItem(
                 Icons.circle_outlined,
-                'Diàmetre',
+                'DiÃ metre',
                 'En metres (m)',
               ),
               const Divider(),
-              _buildLegendItem(Icons.speed, 'Creixement', 'Lent, Mig o Ràpid'),
+              _buildLegendItem(Icons.speed, 'Creixement', 'Lent, Mig o RÃ pid'),
               const Divider(),
               _buildLegendItem(
                 Icons.calendar_month,
                 'Mesos Plantació',
-                'Època ideal',
+                'Ãˆpoca ideal',
               ),
               const Divider(),
               _buildLegendItem(
                 Icons.water_drop,
-                'Resistència Sequera',
+                'ResistÃ¨ncia Sequera',
                 'De 1 (Poca) a 5 (Molta)',
               ),
             ],
@@ -979,7 +1005,7 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
         adultDiameter: data['diametre_adult'] is num
             ? (data['diametre_adult'] as num).toDouble()
             : s.adultDiameter,
-        growthRate: ['Lent', 'Mig', 'Ràpid'].contains(data['ritme_creixement'])
+        growthRate: ['Lent', 'Mig', 'RÃ pid'].contains(data['ritme_creixement'])
             ? data['ritme_creixement']
             : s.growthRate,
         droughtResistance: data['resistencia_sequera'] is int
@@ -1000,6 +1026,9 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
         plantingMonths: data['mesos_plantacio'] != null
             ? parseMonths(data['mesos_plantacio'])
             : s.plantingMonths,
+        floweringMonths: data['mesos_floracio'] != null
+            ? parseMonths(data['mesos_floracio'])
+            : s.floweringMonths,
         iconCode: data['iconCode'] ?? s.iconCode,
         color: data['color']?.toString().replaceAll('#', '') ?? s.color,
       );
@@ -1008,11 +1037,11 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
       String newSun = s.sunNeeds;
       if (data['sol'] != null) {
         final solStr = data['sol'].toString();
-        if (solStr.contains('☀️')) {
+        if (solStr.contains('â˜€ï¸')) {
           newSun = 'Alt';
-        } else if (solStr.contains('🌤️')) {
-          newSun = 'Mitjà';
-        } else if (solStr.contains('☁️')) {
+        } else if (solStr.contains('ðŸŒ¤ï¸')) {
+          newSun = 'MitjÃ ';
+        } else if (solStr.contains('â˜ï¸')) {
           newSun = 'Baix';
         }
       }
@@ -1027,7 +1056,7 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Dades actualitzades per ${s.commonName} 🪄'),
+            content: Text('Dades actualitzades per ${s.commonName} ðŸª„'),
             backgroundColor: Colors.green,
           ),
         );
@@ -1088,6 +1117,57 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                   ),
                 );
               }
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.public),
+            tooltip: 'Sincronitzar a Fitxes Web',
+            onPressed: () async {
+              try {
+                final count = await ref
+                    .read(speciesRepositoryProvider)
+                    .syncToSpeciesWeb();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        '$count espècies sincronitzades a la web 🌍',
+                      ),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error sincronitzant: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.table_view),
+            tooltip: 'Exportar Enllaços',
+            onPressed: () {
+              // We need access to filtered list.
+              // Ideally pass it or just use current state if available.
+              // Since filtered is calculated in build, we can't access it easily here without moving logic.
+              // For now, let's trigger a rebuild or use repository getter?
+              // Actually, we can just access the stream provider if we want all, but user might want filtered.
+              // Re-calculating filtered here is duplicating logic.
+              // Alternative: Move filtered list to state? Or simpler: Just export ALL species for now.
+              // User asked: "a la barra d'estat d'especies pots posar una modal que obri una taula..."
+              // Assuming copying existing list is fine.
+              // I'll assume 'all' for now, or I have to refactor 'build' to expose filtered.
+              // Start simple: All species.
+              final asyncValue = ref
+                  .read(speciesRepositoryProvider)
+                  .getSpecies();
+              asyncValue.first.then((list) => _showBulkExportDialog(list));
             },
           ),
         ],
@@ -1155,7 +1235,7 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                         cmp = a.adultDiameter.compareTo(b.adultDiameter);
                         break;
                       case 11:
-                        const map = {'Lent': 1, 'Mig': 2, 'Ràpid': 3};
+                        const map = {'Lent': 1, 'Mig': 2, 'RÃ pid': 3};
                         final va = map[a.growthRate] ?? 0;
                         final vb = map[b.growthRate] ?? 0;
                         cmp = va.compareTo(vb);
@@ -1188,16 +1268,25 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                         cmp = ma.compareTo(mb);
                         break;
                       case 15:
+                        final fa = a.floweringMonths.isEmpty
+                            ? 99
+                            : a.floweringMonths.first;
+                        final fb = b.floweringMonths.isEmpty
+                            ? 99
+                            : b.floweringMonths.first;
+                        cmp = fa.compareTo(fb);
+                        break;
+                      case 16:
                         cmp = a.droughtResistance.compareTo(
                           b.droughtResistance,
                         );
                         break;
-                      case 16:
+                      case 17:
                         final la = a.lifeExpectancyYears ?? 0;
                         final lb = b.lifeExpectancyYears ?? 0;
                         cmp = la.compareTo(lb);
                         break;
-                      case 17:
+                      case 18:
                         // Sort by number of diseases as a proxy
                         cmp = a.commonDiseases.length.compareTo(
                           b.commonDiseases.length,
@@ -1209,467 +1298,648 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
                 }
 
                 if (filtered.isEmpty) {
-                  return const Center(child: Text('Cap espècie trobada.'));
+                  return const Center(child: Text('Cap espÃ¨cie trobada.'));
                 }
 
+                // Fix: Vertical scroll outside, Horizontal inside with Scrollbar
                 return SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: SingleChildScrollView(
-                    child: DataTable(
-                      sortColumnIndex: _sortColumnIndex,
-                      sortAscending: _sortAscending,
-                      columnSpacing: 20,
-                      columns: [
-                        DataColumn(
-                          label: const Text('Nom Comú'),
-                          onSort: (idx, asc) =>
-                              _sort<String>((d) => d.commonName, idx, asc),
-                        ),
-                        const DataColumn(label: Text('Icona')),
-                        const DataColumn(label: Text('Color')),
-                        const DataColumn(
-                          label: Text(
-                            'Cod.',
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                  child: Scrollbar(
+                    controller: _horizontalScrollController,
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      controller: _horizontalScrollController,
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        sortColumnIndex: _sortColumnIndex,
+                        sortAscending: _sortAscending,
+                        columnSpacing: 20,
+                        columns: [
+                          DataColumn(
+                            label: const Text('Nom Comú'),
+                            onSort: (idx, asc) =>
+                                _sort<String>((d) => d.commonName, idx, asc),
                           ),
-                        ),
-                        DataColumn(
-                          label: const Text('Científic'),
-                          onSort: (idx, asc) =>
-                              _sort<String>((d) => d.scientificName, idx, asc),
-                        ),
-                        DataColumn(
-                          label: const Text('Kc'),
-                          onSort: (idx, asc) =>
-                              _sort<num>((d) => d.kc, idx, asc),
-                        ),
-                        DataColumn(
-                          label: Tooltip(
-                            message: 'Necessitat de Sol',
-                            child: Container(
-                              alignment: Alignment.centerLeft,
-                              child: Icon(
-                                Icons.wb_sunny,
-                                size: 18,
-                                color: Colors.black54,
+                          const DataColumn(label: Text('Icona')),
+                          const DataColumn(label: Text('Color')),
+                          const DataColumn(
+                            label: Text(
+                              'Cod.',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          DataColumn(
+                            label: const Text('Científic'),
+                            onSort: (idx, asc) => _sort<String>(
+                              (d) => d.scientificName,
+                              idx,
+                              asc,
+                            ),
+                          ),
+                          DataColumn(
+                            label: const Text('Kc'),
+                            onSort: (idx, asc) =>
+                                _sort<num>((d) => d.kc, idx, asc),
+                          ),
+                          DataColumn(
+                            label: Tooltip(
+                              message: 'Necessitat de Sol',
+                              child: Container(
+                                alignment: Alignment.centerLeft,
+                                child: Icon(
+                                  Icons.wb_sunny,
+                                  size: 18,
+                                  color: Colors.black54,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        DataColumn(
-                          label: Tooltip(
-                            message: 'Sensibilitat a Gelades',
-                            child: Container(
-                              alignment: Alignment.centerLeft,
-                              child: Icon(
-                                Icons.ac_unit,
-                                size: 18,
-                                color: Colors.black54,
+                          DataColumn(
+                            label: Tooltip(
+                              message: 'Sensibilitat a Gelades',
+                              child: Container(
+                                alignment: Alignment.centerLeft,
+                                child: Icon(
+                                  Icons.ac_unit,
+                                  size: 18,
+                                  color: Colors.black54,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        DataColumn(
-                          label: Tooltip(
-                            message: 'Fruit Comestible/Aprofitable',
-                            child: Container(
-                              alignment: Alignment.centerLeft,
-                              child: Icon(
-                                Icons.apple,
-                                size: 18,
-                                color: Colors.black54,
+                          DataColumn(
+                            label: Tooltip(
+                              message: 'Fruit Comestible/Aprofitable',
+                              child: Container(
+                                alignment: Alignment.centerLeft,
+                                child: Icon(
+                                  Icons.apple,
+                                  size: 18,
+                                  color: Colors.black54,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        DataColumn(
-                          label: Tooltip(
-                            message: 'Alçada Adulta (m)',
-                            child: Container(
-                              alignment: Alignment.centerLeft,
-                              child: Icon(
-                                Icons.height,
-                                size: 18,
-                                color: Colors.black54,
+                          DataColumn(
+                            label: Tooltip(
+                              message: 'AlÃ§ada Adulta (m)',
+                              child: Container(
+                                alignment: Alignment.centerLeft,
+                                child: Icon(
+                                  Icons.height,
+                                  size: 18,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ),
+                            onSort: (idx, asc) =>
+                                _sort<num>((d) => d.adultHeight, idx, asc),
+                          ), // Height
+                          DataColumn(
+                            label: Tooltip(
+                              message: 'Diàmetre Adult (m)',
+                              child: Container(
+                                alignment: Alignment.centerLeft,
+                                child: Icon(
+                                  Icons.circle_outlined,
+                                  size: 18,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ),
+                            onSort: (idx, asc) =>
+                                _sort<num>((d) => d.adultDiameter, idx, asc),
+                          ), // Diameter
+                          DataColumn(
+                            label: Tooltip(
+                              message: 'Ritme de Creixement',
+                              child: Container(
+                                alignment: Alignment.centerLeft,
+                                child: Icon(
+                                  Icons.speed,
+                                  size: 18,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ),
+                            onSort: (idx, asc) =>
+                                _sort<String>((d) => d.growthRate, idx, asc),
+                          ), // Growth
+                          DataColumn(
+                            label: Tooltip(
+                              message: 'Mesos de Collita',
+                              child: Container(
+                                alignment: Alignment.centerLeft,
+                                child: Icon(
+                                  Icons.shopping_basket,
+                                  size: 18,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ),
+                            onSort: (idx, asc) => _sort<num>(
+                              (d) => d.harvestMonths.isEmpty
+                                  ? 99
+                                  : d.harvestMonths.first,
+                              idx,
+                              asc,
+                            ),
+                          ),
+                          DataColumn(
+                            label: Tooltip(
+                              message: 'Mesos de Poda',
+                              child: Container(
+                                alignment: Alignment.centerLeft,
+                                child: Icon(
+                                  Icons.cut,
+                                  size: 18,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ),
+                            onSort: (idx, asc) => _sort<num>(
+                              (d) => d.pruningMonths.isEmpty
+                                  ? 99
+                                  : d.pruningMonths.first,
+                              idx,
+                              asc,
+                            ),
+                          ),
+                          DataColumn(
+                            label: Tooltip(
+                              message: 'Mesos Plantació',
+                              child: Container(
+                                alignment: Alignment.centerLeft,
+                                child: Icon(
+                                  Icons.calendar_month,
+                                  size: 18,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ),
+                            onSort: (idx, asc) => _sort<num>(
+                              (d) => d.plantingMonths.isEmpty
+                                  ? 99
+                                  : d.plantingMonths.first,
+                              idx,
+                              asc,
+                            ),
+                          ), // Planting
+                          DataColumn(
+                            label: Tooltip(
+                              message: 'Mesos de Floració',
+                              child: Container(
+                                alignment: Alignment.centerLeft,
+                                child: Icon(
+                                  Icons.local_florist,
+                                  size: 18,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ),
+                            onSort: (idx, asc) => _sort<num>(
+                              (d) => d.floweringMonths.isEmpty
+                                  ? 99
+                                  : d.floweringMonths.first,
+                              idx,
+                              asc,
+                            ),
+                          ), // Flowering
+                          DataColumn(
+                            label: Tooltip(
+                              message: 'Resistència Sequera',
+                              child: Container(
+                                alignment: Alignment.centerLeft,
+                                child: Icon(
+                                  Icons.water_drop,
+                                  size: 18,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ),
+                            onSort: (idx, asc) => _sort<num>(
+                              (d) => d.droughtResistance,
+                              idx,
+                              asc,
+                            ),
+                          ), // Drought
+                          DataColumn(
+                            label: Tooltip(
+                              message: 'Esperança de Vida (Anys)',
+                              child: Container(
+                                alignment: Alignment.center,
+                                child: Icon(
+                                  Icons.hourglass_bottom,
+                                  size: 18,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ),
+                            numeric: true,
+                            onSort: (idx, asc) => _sort<num>(
+                              (d) => d.lifeExpectancyYears ?? 0,
+                              idx,
+                              asc,
+                            ),
+                          ),
+                          DataColumn(
+                            label: Tooltip(
+                              message: 'Malalties Comunes',
+                              child: Container(
+                                alignment: Alignment.centerLeft,
+                                child: Icon(
+                                  Icons.bug_report,
+                                  size: 18,
+                                  color: Colors.black54,
+                                ),
                               ),
                             ),
                           ),
-                          onSort: (idx, asc) =>
-                              _sort<num>((d) => d.adultHeight, idx, asc),
-                        ), // Height
-                        DataColumn(
-                          label: Tooltip(
-                            message: 'Diàmetre Adult (m)',
-                            child: Container(
-                              alignment: Alignment.centerLeft,
-                              child: Icon(
-                                Icons.circle_outlined,
-                                size: 18,
-                                color: Colors.black54,
+                          DataColumn(
+                            label: Tooltip(
+                              message: 'Accions',
+                              child: Container(
+                                alignment: Alignment.center,
+                                child: Icon(
+                                  Icons.settings,
+                                  size: 18,
+                                  color: Colors.black54,
+                                ),
                               ),
                             ),
                           ),
-                          onSort: (idx, asc) =>
-                              _sort<num>((d) => d.adultDiameter, idx, asc),
-                        ), // Diameter
-                        DataColumn(
-                          label: Tooltip(
-                            message: 'Ritme de Creixement',
-                            child: Container(
-                              alignment: Alignment.centerLeft,
-                              child: Icon(
-                                Icons.speed,
-                                size: 18,
-                                color: Colors.black54,
-                              ),
-                            ),
-                          ),
-                          onSort: (idx, asc) =>
-                              _sort<String>((d) => d.growthRate, idx, asc),
-                        ), // Growth
-                        DataColumn(
-                          label: Tooltip(
-                            message: 'Mesos de Collita',
-                            child: Container(
-                              alignment: Alignment.centerLeft,
-                              child: Icon(
-                                Icons.shopping_basket,
-                                size: 18,
-                                color: Colors.black54,
-                              ),
-                            ),
-                          ),
-                          onSort: (idx, asc) => _sort<num>(
-                            (d) => d.harvestMonths.isEmpty
-                                ? 99
-                                : d.harvestMonths.first,
-                            idx,
-                            asc,
-                          ),
-                        ),
-                        DataColumn(
-                          label: Tooltip(
-                            message: 'Mesos de Poda',
-                            child: Container(
-                              alignment: Alignment.centerLeft,
-                              child: Icon(
-                                Icons.cut,
-                                size: 18,
-                                color: Colors.black54,
-                              ),
-                            ),
-                          ),
-                          onSort: (idx, asc) => _sort<num>(
-                            (d) => d.pruningMonths.isEmpty
-                                ? 99
-                                : d.pruningMonths.first,
-                            idx,
-                            asc,
-                          ),
-                        ),
-                        DataColumn(
-                          label: Tooltip(
-                            message: 'Mesos Plantació',
-                            child: Container(
-                              alignment: Alignment.centerLeft,
-                              child: Icon(
-                                Icons.calendar_month,
-                                size: 18,
-                                color: Colors.black54,
-                              ),
-                            ),
-                          ),
-                          onSort: (idx, asc) => _sort<num>(
-                            (d) => d.plantingMonths.isEmpty
-                                ? 99
-                                : d.plantingMonths.first,
-                            idx,
-                            asc,
-                          ),
-                        ), // Planting
-                        DataColumn(
-                          label: Tooltip(
-                            message: 'Resistència Sequera',
-                            child: Container(
-                              alignment: Alignment.centerLeft,
-                              child: Icon(
-                                Icons.water_drop,
-                                size: 18,
-                                color: Colors.black54,
-                              ),
-                            ),
-                          ),
-                          onSort: (idx, asc) =>
-                              _sort<num>((d) => d.droughtResistance, idx, asc),
-                        ), // Drought
-                        DataColumn(
-                          label: Tooltip(
-                            message: 'Esperança de Vida (Anys)',
-                            child: Container(
-                              alignment: Alignment.center,
-                              child: Icon(
-                                Icons.hourglass_bottom,
-                                size: 18,
-                                color: Colors.black54,
-                              ),
-                            ),
-                          ),
-                          numeric: true,
-                          onSort: (idx, asc) => _sort<num>(
-                            (d) => d.lifeExpectancyYears ?? 0,
-                            idx,
-                            asc,
-                          ),
-                        ),
-                        DataColumn(
-                          label: Tooltip(
-                            message: 'Malalties Comunes',
-                            child: Container(
-                              alignment: Alignment.centerLeft,
-                              child: Icon(
-                                Icons.bug_report,
-                                size: 18,
-                                color: Colors.black54,
-                              ),
-                            ),
-                          ),
-                        ),
-                        DataColumn(
-                          label: Tooltip(
-                            message: 'Accions',
-                            child: Container(
-                              alignment: Alignment.center,
-                              child: Icon(
-                                Icons.settings,
-                                size: 18,
-                                color: Colors.black54,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                      rows: filtered.map((s) {
-                        Color speciesColor = Colors.grey;
-                        if (s.color.isNotEmpty) {
-                          try {
-                            speciesColor = Color(
-                              int.parse('0xFF${s.color.replaceAll('#', '')}'),
+                        ],
+                        rows: filtered.map((s) {
+                          Color speciesColor = Colors.grey;
+                          if (s.color.isNotEmpty) {
+                            try {
+                              speciesColor = Color(
+                                int.parse('0xFF${s.color.replaceAll('#', '')}'),
+                              );
+                            } catch (_) {}
+                          }
+
+                          IconData icon = Icons.help_outline;
+                          if (s.iconCode != null) {
+                            icon = IconUtils.resolveIcon(
+                              s.iconCode!,
+                              s.iconFamily,
                             );
-                          } catch (_) {}
-                        }
+                          }
 
-                        IconData icon = Icons.help_outline;
-                        if (s.iconCode != null) {
-                          icon = IconUtils.resolveIcon(
-                            s.iconCode!,
-                            s.iconFamily,
-                          );
-                        }
-
-                        return DataRow(
-                          cells: [
-                            DataCell(
-                              Text(
-                                s.commonName,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            DataCell(Icon(icon, size: 20)),
-                            DataCell(
-                              Container(
-                                width: 20,
-                                height: 20,
-                                decoration: BoxDecoration(
-                                  color: speciesColor,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.grey.shade400,
+                          return DataRow(
+                            cells: [
+                              DataCell(
+                                Text(
+                                  s.commonName,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ),
-                            ),
-                            DataCell(Text(s.prefix)),
-                            DataCell(
-                              Text(
-                                s.scientificName,
-                                style: const TextStyle(
-                                  fontStyle: FontStyle.italic,
+                              DataCell(Icon(icon, size: 20)),
+                              DataCell(
+                                Container(
+                                  width: 20,
+                                  height: 20,
+                                  decoration: BoxDecoration(
+                                    color: speciesColor,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.grey.shade400,
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
-                            DataCell(Text(s.kc.toString())),
-                            DataCell(Text(_getSunIcon(s.sunNeeds))),
-                            DataCell(
-                              Builder(
-                                builder: (context) {
-                                  final frostSensitivityLower = s
-                                      .frostSensitivity
-                                      .toLowerCase();
-                                  int count = 0;
-                                  if (frostSensitivityLower.contains('alta')) {
-                                    count = 3;
-                                  } else if (frostSensitivityLower.contains(
-                                    'mitjana',
-                                  )) {
-                                    count = 2;
-                                  } else if (frostSensitivityLower.contains(
-                                    'baixa',
-                                  )) {
-                                    count = 1;
-                                  }
+                              DataCell(Text(s.prefix)),
+                              DataCell(
+                                Text(
+                                  s.scientificName,
+                                  style: const TextStyle(
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ),
+                              DataCell(Text(s.kc.toString())),
+                              DataCell(Text(_getSunIcon(s.sunNeeds))),
+                              DataCell(
+                                Builder(
+                                  builder: (context) {
+                                    final frostSensitivityLower = s
+                                        .frostSensitivity
+                                        .toLowerCase();
+                                    int count = 0;
+                                    if (frostSensitivityLower.contains(
+                                      'alta',
+                                    )) {
+                                      count = 3;
+                                    } else if (frostSensitivityLower.contains(
+                                      'mitjana',
+                                    )) {
+                                      count = 2;
+                                    } else if (frostSensitivityLower.contains(
+                                      'baixa',
+                                    )) {
+                                      count = 1;
+                                    }
 
-                                  if (count > 0) {
-                                    return Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: List.generate(
-                                        3,
-                                        (index) => Icon(
-                                          Icons.ac_unit,
-                                          size: 14,
-                                          color: index < count
-                                              ? Colors.lightBlue
-                                              : Colors.grey.shade200,
+                                    if (count > 0) {
+                                      return Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: List.generate(
+                                          3,
+                                          (index) => Icon(
+                                            Icons.ac_unit,
+                                            size: 14,
+                                            color: index < count
+                                                ? Colors.lightBlue
+                                                : Colors.grey.shade200,
+                                          ),
                                         ),
-                                      ),
-                                    );
-                                  }
-                                  return Text(s.frostSensitivity); // Fallback
-                                },
-                              ),
-                            ),
-                            DataCell(
-                              Text(
-                                s.fruitType?.isNotEmpty == true
-                                    ? s.fruitType!
-                                    : (s.fruit ? 'Sí' : '-'),
-                              ),
-                            ),
-                            DataCell(Text('${s.adultHeight}m')),
-                            DataCell(Text('${s.adultDiameter}m')),
-                            DataCell(Text(s.growthRate)),
-                            DataCell(
-                              SizedBox(
-                                width: 100,
-                                child: Text(
-                                  _formatMonths(s.harvestMonths),
-                                  style: const TextStyle(fontSize: 12),
-                                  overflow: TextOverflow.ellipsis,
+                                      );
+                                    }
+                                    return Text(s.frostSensitivity); // Fallback
+                                  },
                                 ),
                               ),
-                            ),
-                            DataCell(
-                              SizedBox(
-                                width: 100,
-                                child: Text(
-                                  _formatMonths(s.pruningMonths),
-                                  style: const TextStyle(fontSize: 12),
-                                  overflow: TextOverflow.ellipsis,
+                              DataCell(
+                                Text(
+                                  s.fruitType?.isNotEmpty == true
+                                      ? s.fruitType!
+                                      : (s.fruit ? 'Sí' : '-'),
                                 ),
                               ),
-                            ),
-                            DataCell(
-                              SizedBox(
-                                width: 100,
-                                child: Text(
-                                  _formatMonths(s.plantingMonths),
-                                  style: const TextStyle(fontSize: 12),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                            DataCell(
-                              Row(
-                                children: List.generate(
-                                  5,
-                                  (index) => Icon(
-                                    index < s.droughtResistance
-                                        ? Icons.water_drop
-                                        : Icons.water_drop_outlined,
-                                    size: 12,
-                                    color: Colors.blueAccent,
+                              DataCell(Text('${s.adultHeight}m')),
+                              DataCell(Text('${s.adultDiameter}m')),
+                              DataCell(Text(s.growthRate)),
+                              DataCell(
+                                SizedBox(
+                                  width: 100,
+                                  child: Text(
+                                    _formatMonths(s.harvestMonths),
+                                    style: const TextStyle(fontSize: 12),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ),
-                            ),
-                            DataCell(
-                              Text(
-                                s.lifeExpectancyYears != null
-                                    ? '${s.lifeExpectancyYears}'
-                                    : '-',
-                              ),
-                            ),
-                            DataCell(
-                              SizedBox(
-                                width: 150,
-                                child: Text(
-                                  s.commonDiseases.isEmpty
-                                      ? '-'
-                                      : s.commonDiseases.join(', '),
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 2,
+                              DataCell(
+                                SizedBox(
+                                  width: 100,
+                                  child: Text(
+                                    _formatMonths(s.pruningMonths),
+                                    style: const TextStyle(fontSize: 12),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
                               ),
-                            ),
-                            DataCell(
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  // Magic Button
-                                  if (_updatingSpeciesId == s.id)
-                                    const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
+                              DataCell(
+                                SizedBox(
+                                  width: 100,
+                                  child: Text(
+                                    _formatMonths(s.plantingMonths),
+                                    style: const TextStyle(fontSize: 12),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                SizedBox(
+                                  width: 100,
+                                  child: Text(
+                                    _formatMonths(s.floweringMonths),
+                                    style: const TextStyle(fontSize: 12),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Row(
+                                  children: List.generate(
+                                    5,
+                                    (index) => Icon(
+                                      index < s.droughtResistance
+                                          ? Icons.water_drop
+                                          : Icons.water_drop_outlined,
+                                      size: 12,
+                                      color: Colors.blueAccent,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  s.lifeExpectancyYears != null
+                                      ? '${s.lifeExpectancyYears}'
+                                      : '-',
+                                ),
+                              ),
+                              DataCell(
+                                SizedBox(
+                                  width: 150,
+                                  child: Text(
+                                    s.commonDiseases.isEmpty
+                                        ? '-'
+                                        : s.commonDiseases.join(', '),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 2,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Magic Button
+                                    if (_updatingSpeciesId == s.id)
+                                      const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    else
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.auto_fix_high,
+                                          size: 20,
+                                          color: Colors.purple,
+                                        ),
+                                        tooltip: 'Màgic (Actualitzar IA)',
+                                        onPressed: () => _onMagicUpdate(s),
                                       ),
-                                    )
-                                  else
+                                    // Search Button
                                     IconButton(
                                       icon: const Icon(
-                                        Icons.auto_fix_high,
+                                        Icons.search,
                                         size: 20,
-                                        color: Colors.purple,
+                                        color: Colors.blue,
                                       ),
-                                      tooltip: 'Màgic (Actualitzar IA)',
-                                      onPressed: () => _onMagicUpdate(s),
+                                      tooltip: 'Cercar a Google',
+                                      onPressed: () => _onWebSearch(s),
                                     ),
-                                  // Search Button
-                                  IconButton(
-                                    icon: const Icon(
-                                      Icons.search,
-                                      size: 20,
-                                      color: Colors.blue,
+                                    // QR Code Button
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.qr_code_2,
+                                        size: 20,
+                                        color: Colors.black87,
+                                      ),
+                                      tooltip: 'Fitxa Pública QR',
+                                      onPressed: () {
+                                        final qrKey = GlobalKey();
+                                        showDialog(
+                                          context: context,
+                                          builder: (context) => AlertDialog(
+                                            title: const Text(
+                                              'Fitxa Pública QR',
+                                            ),
+                                            content: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  s.commonName,
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 18,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 16),
+                                                RepaintBoundary(
+                                                  key: qrKey,
+                                                  child: Container(
+                                                    height: 200,
+                                                    width: 200,
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.white,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            12,
+                                                          ),
+                                                    ),
+                                                    padding:
+                                                        const EdgeInsets.all(8),
+                                                    child: QrImageView(
+                                                      data:
+                                                          'https://soca-aacac.web.app/fitxa?id=${s.id}',
+                                                      version: QrVersions.auto,
+                                                      size: 200,
+                                                      embeddedImage:
+                                                          const AssetImage(
+                                                            'assets/logo-soca.png',
+                                                          ),
+                                                      embeddedImageStyle:
+                                                          const QrEmbeddedImageStyle(
+                                                            size: Size(30, 30),
+                                                          ),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 16),
+                                                const Text(
+                                                  'Escaneja per veure la fitxa',
+                                                  style: TextStyle(
+                                                    color: Colors.grey,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 8),
+                                                // Direct Link
+                                                const SizedBox(height: 8),
+                                                // Direct Link
+                                                InkWell(
+                                                  onTap: () => launchUrl(
+                                                    Uri.parse(
+                                                      'https://soca-aacac.web.app/fitxa?id=${s.id}',
+                                                    ),
+                                                  ),
+                                                  child: Text(
+                                                    'soca-aacac.web.app/fitxa?id=${s.id}',
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.blue,
+                                                      decoration: TextDecoration
+                                                          .underline,
+                                                    ),
+                                                    textAlign: TextAlign.center,
+                                                  ),
+                                                ),
+                                                TextButton.icon(
+                                                  icon: const Icon(
+                                                    Icons.copy,
+                                                    size: 16,
+                                                  ),
+                                                  label: const Text(
+                                                    'Copiar Enllaç',
+                                                  ),
+                                                  onPressed: () {
+                                                    Clipboard.setData(
+                                                      ClipboardData(
+                                                        text:
+                                                            'https://soca-aacac.web.app/fitxa?id=${s.id}',
+                                                      ),
+                                                    );
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      const SnackBar(
+                                                        content: Text(
+                                                          'Enllaç copiat!',
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                              ],
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () =>
+                                                    Navigator.pop(context),
+                                                child: const Text('TANCAR'),
+                                              ),
+                                              ElevatedButton.icon(
+                                                icon: const Icon(Icons.share),
+                                                label: const Text('COMPARTIR'),
+                                                onPressed: () {
+                                                  // ignore: deprecated_member_use
+                                                  Share.share(
+                                                    'https://soca-aacac.web.app/fitxa?id=${s.id}',
+                                                    subject:
+                                                        'Fitxa de ${s.commonName} - Soca',
+                                                  );
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
                                     ),
-                                    tooltip: 'Cercar a Google',
-                                    onPressed: () => _onWebSearch(s),
-                                  ),
-                                  // Edit Button
-                                  IconButton(
-                                    icon: const Icon(
-                                      Icons.edit,
-                                      size: 20,
-                                      color: Colors.grey,
+                                    // Edit Button (Restoring hidden edit via row click logic but adding explicit)
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.edit,
+                                        size: 20,
+                                        color: Colors.grey,
+                                      ),
+                                      tooltip: 'Editar',
+                                      onPressed: () => _showAddSpeciesDialog(s),
                                     ),
-                                    tooltip: 'Editar',
-                                    onPressed: () => _showAddSpeciesDialog(s),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
-                          onSelectChanged: (selected) {
-                            // If clicked elsewhere, maybe strictly nothing or toggle dialog?
-                            // DataTable default behavior selects row.
-                            // We keep dialog on row click or just use the edit button?
-                            // Let's keep existing behavior: Row click -> Edit
-                            if (selected == true) {
-                              _showAddSpeciesDialog(s);
-                            }
-                          },
-                        );
-                      }).toList(),
+                            ],
+                            onSelectChanged: (selected) {
+                              // If clicked elsewhere, maybe strictly nothing or toggle dialog?
+                              // DataTable default behavior selects row.
+                              // We keep dialog on row click or just use the edit button?
+                              // Let's keep existing behavior: Row click -> Edit
+                              if (selected == true) {
+                                _showAddSpeciesDialog(s);
+                              }
+                            },
+                          );
+                        }).toList(),
+                      ),
                     ),
                   ),
                 );
@@ -1682,6 +1952,514 @@ class _SpeciesLibraryPageState extends ConsumerState<SpeciesLibraryPage> {
         onPressed: () => _showAddSpeciesDialog(),
         child: const Icon(Icons.add),
       ),
+    );
+  }
+
+  void _showBulkExportDialog(List<Species> allSpecies) {
+    showDialog(
+      context: context,
+      builder: (context) => BulkExportDialog(allSpecies: allSpecies),
+    );
+  }
+}
+
+class BulkExportDialog extends StatefulWidget {
+  final List<Species> allSpecies;
+  const BulkExportDialog({super.key, required this.allSpecies});
+
+  @override
+  State<BulkExportDialog> createState() => _BulkExportDialogState();
+}
+
+class _BulkExportDialogState extends State<BulkExportDialog> {
+  Set<String> _selectedIds = {};
+  final _scrollCtrl = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Initially select all
+    _selectedIds = widget.allSpecies.map((s) => s.id).toSet();
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  void _showSelectionDialog() async {
+    final result = await showDialog<Set<String>>(
+      context: context,
+      builder: (ctx) => SpeciesSelectionDialog(
+        allSpecies: widget.allSpecies,
+        initialSelection: _selectedIds,
+      ),
+    );
+    if (result != null) {
+      setState(() {
+        _selectedIds = result;
+      });
+    }
+  }
+
+  List<Species> get _filtered =>
+      widget.allSpecies.where((s) => _selectedIds.contains(s.id)).toList();
+
+  Future<void> _generatePdf(List<Species> speciesList) async {
+    // Show loading dialog
+    // Show loading dialog
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Generant PDF...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    try {
+      final pdf = pw.Document();
+      final List<Map<String, dynamic>> items = [];
+
+      // Generate QR images
+      for (var s in speciesList) {
+        final url = 'https://soca-aacac.web.app/fitxa?id=${s.id}';
+
+        final qrValidationResult = QrValidator.validate(
+          data: url,
+          version: QrVersions.auto,
+          errorCorrectionLevel: QrErrorCorrectLevel.H,
+        );
+
+        if (qrValidationResult.isValid) {
+          final qrCode = qrValidationResult.qrCode!;
+          final painter = QrPainter.withQr(
+            qr: qrCode,
+            eyeStyle: const QrEyeStyle(
+              eyeShape: QrEyeShape.square,
+              color: Color(0xFF000000),
+            ),
+            dataModuleStyle: const QrDataModuleStyle(
+              dataModuleShape: QrDataModuleShape.square,
+              color: Color(0xFF000000),
+            ),
+            gapless: false,
+          );
+
+          // Manually paint white background
+          final recorder = ui.PictureRecorder();
+          final canvas = Canvas(recorder);
+          const size = Size(300, 300);
+
+          final whitePaint = Paint()..color = const Color(0xFFFFFFFF);
+          canvas.drawRect(
+            Rect.fromLTWH(0, 0, size.width, size.height),
+            whitePaint,
+          );
+
+          painter.paint(canvas, size);
+
+          final picture = recorder.endRecording();
+          final image = await picture.toImage(300, 300);
+          final byteData = await image.toByteData(
+            format: ui.ImageByteFormat.png,
+          );
+          final pngBytes = byteData!.buffer.asUint8List();
+
+          items.add({'species': s, 'qrBytes': pngBytes});
+        }
+      }
+
+      // Create pages with grid layout
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(24),
+          build: (pw.Context context) {
+            return [
+              pw.Header(
+                level: 0,
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(
+                      'Soca - Fitxes QR',
+                      style: pw.TextStyle(
+                        fontSize: 24,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.Text(
+                      'Generat: ${DateTime.now().toString().split('.')[0]}',
+                      style: const pw.TextStyle(
+                        fontSize: 12,
+                        color: PdfColors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              pw.Wrap(
+                spacing: 20,
+                runSpacing: 20,
+                children: items.map((item) {
+                  final s = item['species'] as Species;
+                  final qrBytes = item['qrBytes'] as Uint8List;
+
+                  return pw.Container(
+                    width: 150,
+                    height: 200,
+                    decoration: pw.BoxDecoration(
+                      border: pw.Border.all(color: PdfColors.grey300),
+                      borderRadius: pw.BorderRadius.circular(8),
+                    ),
+                    padding: const pw.EdgeInsets.all(10),
+                    child: pw.Column(
+                      mainAxisAlignment: pw.MainAxisAlignment.center,
+                      children: [
+                        // Use Raster Image
+                        pw.Image(
+                          pw.MemoryImage(qrBytes),
+                          width: 100,
+                          height: 100,
+                        ),
+                        pw.SizedBox(height: 10),
+                        pw.Text(
+                          s.commonName,
+                          textAlign: pw.TextAlign.center,
+                          style: pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                          maxLines: 2,
+                          overflow: pw.TextOverflow.clip,
+                        ),
+                        pw.SizedBox(height: 4),
+                        pw.Text(
+                          s.scientificName,
+                          textAlign: pw.TextAlign.center,
+                          style: pw.TextStyle(
+                            fontStyle: pw.FontStyle.italic,
+                            fontSize: 10,
+                            color: PdfColors.grey700,
+                          ),
+                          maxLines: 1,
+                          overflow: pw.TextOverflow.clip,
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ];
+          },
+        ),
+      );
+
+      // Dismiss loading
+      if (mounted) {
+        Navigator.pop(context);
+      }
+
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+        name: 'Soca-QRs.pdf',
+      );
+    } catch (e) {
+      // Dismiss loading if error
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Sort filtered list by common name for display
+    final displayList = List<Species>.from(_filtered)
+      ..sort((a, b) => a.commonName.compareTo(b.commonName));
+
+    return AlertDialog(
+      title: const Text('Exportar Enllaços / QR'),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 600,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Mostrant ${displayList.length} de ${widget.allSpecies.length} espècies',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.filter_list),
+                    label: const Text('SELECCIONAR ESPÈCIES'),
+                    onPressed: _showSelectionDialog,
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Scrollbar(
+                controller: _scrollCtrl,
+                thumbVisibility: true,
+                child: SingleChildScrollView(
+                  controller: _scrollCtrl,
+                  scrollDirection: Axis.horizontal,
+                  child: SingleChildScrollView(
+                    child: DataTable(
+                      columns: const [
+                        DataColumn(label: Text('Nom Comú')),
+                        DataColumn(label: Text('Científic')),
+                        DataColumn(label: Text('QR (Alta Qualitat)')),
+                        DataColumn(label: Text('Enllaç')),
+                      ],
+                      dataRowMinHeight: 110, // Increased height for larger QR
+                      dataRowMaxHeight: 110,
+                      rows: displayList.map((s) {
+                        final url =
+                            'https://soca-aacac.web.app/fitxa?id=${s.id}';
+                        return DataRow(
+                          cells: [
+                            DataCell(Text(s.commonName)),
+                            DataCell(Text(s.scientificName)),
+                            DataCell(
+                              Container(
+                                height: 100,
+                                width: 100,
+                                padding: const EdgeInsets.all(4),
+                                color: Colors.white,
+                                child: QrImageView(
+                                  data: url,
+                                  version: QrVersions.auto,
+                                  size: 100,
+                                  gapless: false,
+                                  errorCorrectionLevel: QrErrorCorrectLevel.H,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    width: 150,
+                                    child: InkWell(
+                                      onTap: () => launchUrl(Uri.parse(url)),
+                                      child: Text(
+                                        url,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.blue,
+                                          decoration: TextDecoration.underline,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.copy, size: 16),
+                                    onPressed: () {
+                                      Clipboard.setData(
+                                        ClipboardData(text: url),
+                                      );
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Copiat!'),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('TANCAR'),
+        ),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.picture_as_pdf),
+          label: const Text('EXPORTAR PDF'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.orange,
+            foregroundColor: Colors.white,
+          ),
+          onPressed: () => _generatePdf(displayList),
+        ),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.copy_all),
+          label: const Text('COPIAR LLISTA'),
+          onPressed: () {
+            final text = displayList
+                .map(
+                  (s) =>
+                      '${s.commonName}\t${s.scientificName}\thttps://soca-aacac.web.app/fitxa?id=${s.id}',
+                )
+                .join('\n');
+            Clipboard.setData(ClipboardData(text: text));
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Llista copiada al porta-retalls!'),
+                ),
+              );
+            }
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class SpeciesSelectionDialog extends StatefulWidget {
+  final List<Species> allSpecies;
+  final Set<String> initialSelection;
+
+  const SpeciesSelectionDialog({
+    super.key,
+    required this.allSpecies,
+    required this.initialSelection,
+  });
+
+  @override
+  State<SpeciesSelectionDialog> createState() => _SpeciesSelectionDialogState();
+}
+
+class _SpeciesSelectionDialogState extends State<SpeciesSelectionDialog> {
+  late Set<String> _tempSelected;
+  late List<Species> _sortedSpecies;
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _tempSelected = Set.from(widget.initialSelection);
+    _sortedSpecies = List.from(widget.allSpecies)
+      ..sort((a, b) => a.commonName.compareTo(b.commonName));
+  }
+
+  void _toggleAll(bool select) {
+    setState(() {
+      if (select) {
+        _tempSelected = widget.allSpecies.map((s) => s.id).toSet();
+      } else {
+        _tempSelected.clear();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _sortedSpecies.where((s) {
+      if (_searchQuery.isEmpty) return true;
+      return s.commonName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          s.scientificName.toLowerCase().contains(_searchQuery.toLowerCase());
+    }).toList();
+
+    return AlertDialog(
+      title: const Text('Seleccionar Espècies'),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 500,
+        child: Column(
+          children: [
+            TextField(
+              decoration: const InputDecoration(
+                hintText: 'Cercar...',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: (val) => setState(() => _searchQuery = val),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                TextButton(
+                  onPressed: () => _toggleAll(true),
+                  child: const Text('Totes'),
+                ),
+                TextButton(
+                  onPressed: () => _toggleAll(false),
+                  child: const Text('Cap'),
+                ),
+              ],
+            ),
+            const Divider(),
+            Expanded(
+              child: ListView.builder(
+                itemCount: filtered.length,
+                itemBuilder: (context, index) {
+                  final s = filtered[index];
+                  final isSelected = _tempSelected.contains(s.id);
+                  return CheckboxListTile(
+                    title: Text(s.commonName),
+                    subtitle: Text(s.scientificName),
+                    value: isSelected,
+                    onChanged: (val) {
+                      setState(() {
+                        if (val == true) {
+                          _tempSelected.add(s.id);
+                        } else {
+                          _tempSelected.remove(s.id);
+                        }
+                      });
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('CANCEL·LAR'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, _tempSelected),
+          child: const Text('CONFIRMAR'),
+        ),
+      ],
     );
   }
 }

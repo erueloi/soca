@@ -26,6 +26,7 @@ class _CostDashboardPageState extends ConsumerState<CostDashboardPage> {
   bool _showZeroCost = false;
   int _sortColumnIndex = 0; // Default: Data
   bool _sortAscending = true; // Default: Ascending
+  DateTimeRange? _selectedDateRange;
 
   void _onSort(int columnIndex, bool ascending) {
     setState(() {
@@ -64,6 +65,18 @@ class _CostDashboardPageState extends ConsumerState<CostDashboardPage> {
     // Filter
     var filteredItems = allItems.where((d) {
       if (!_showZeroCost && d.totalCost == 0) return false;
+
+      // Date Filter
+      if (_selectedDateRange != null) {
+        if (d.task.dueDate == null) return false;
+        if (d.task.dueDate!.isBefore(_selectedDateRange!.start) ||
+            d.task.dueDate!.isAfter(
+              _selectedDateRange!.end.add(const Duration(days: 1)),
+            )) {
+          return false;
+        }
+      }
+
       if (_filter == 'Tots') return true;
       if (_filter == 'Pendents') return !d.isSpent;
       if (_filter == 'Gastats') return d.isSpent;
@@ -114,17 +127,20 @@ class _CostDashboardPageState extends ConsumerState<CostDashboardPage> {
     });
 
     // Calculate Totals & Stats
-    final totalBudget = allItems.fold<double>(
+    // Use filteredItems instead of allItems to respect the active filters
+    final totalBudget = filteredItems.fold<double>(
       0,
       (sum, i) => sum + (i.item.cost * i.item.quantity),
     );
-    final totalSpent = allItems
+    // Since filteredItems might already be filtered by status, we just sum up the real cost if spent,
+    // or 0 if not spent (though if filtered by 'Pendents', this will naturally be 0).
+    final totalSpent = filteredItems
         .where((i) => i.isSpent)
         .fold<double>(0, (sum, i) => sum + i.totalCost);
 
-    // Group by Category (ID) for PieChart (Budget based)
+    // Group by Category (ID) for PieChart (Budget based on filtered items)
     final categoryMap = <String, double>{};
-    for (var d in allItems) {
+    for (var d in filteredItems) {
       final catId = d.item.categoryId;
       final cost = d.item.cost * d.item.quantity;
       categoryMap[catId] = (categoryMap[catId] ?? 0) + cost;
@@ -237,31 +253,75 @@ class _CostDashboardPageState extends ConsumerState<CostDashboardPage> {
     Widget buildTableSection() {
       return Column(
         children: [
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'Tots', label: Text('Tots')),
-              ButtonSegment(value: 'Pendents', label: Text('Pendents')),
-              ButtonSegment(value: 'Gastats', label: Text('Gastats')),
-            ],
-            selected: {_filter},
-            onSelectionChanged: (Set<String> newSelection) {
-              setState(() {
-                _filter = newSelection.first;
-              });
-            },
-          ),
-          const SizedBox(height: 8),
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text('Mostrar sense despeses (0€)'),
-              Switch(
-                value: _showZeroCost,
-                onChanged: (val) {
-                  setState(() {
-                    _showZeroCost = val;
-                  });
+              Expanded(
+                child: SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'Tots', label: Text('Tots')),
+                    ButtonSegment(value: 'Pendents', label: Text('Pendents')),
+                    ButtonSegment(value: 'Gastats', label: Text('Gastats')),
+                  ],
+                  selected: {_filter},
+                  onSelectionChanged: (Set<String> newSelection) {
+                    setState(() {
+                      _filter = newSelection.first;
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Date Filter Button
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final picked = await showDateRangePicker(
+                    context: context,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2030),
+                    initialDateRange: _selectedDateRange,
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      _selectedDateRange = picked;
+                    });
+                  }
                 },
+                icon: const Icon(Icons.date_range),
+                label: Text(
+                  _selectedDateRange == null
+                      ? 'Filtrar per dates'
+                      : '${DateFormat('dd/MM/yy').format(_selectedDateRange!.start)} - ${DateFormat('dd/MM/yy').format(_selectedDateRange!.end)}',
+                ),
+              ),
+              if (_selectedDateRange != null)
+                IconButton(
+                  onPressed: () {
+                    setState(() {
+                      _selectedDateRange = null;
+                    });
+                  },
+                  icon: const Icon(Icons.close),
+                  tooltip: 'Esborrar filtre de dates',
+                ),
+
+              // Zero Cost Toggle
+              Row(
+                children: [
+                  const Text('Mostrar sense despeses (0€)'),
+                  Switch(
+                    value: _showZeroCost,
+                    onChanged: (val) {
+                      setState(() {
+                        _showZeroCost = val;
+                      });
+                    },
+                  ),
+                ],
               ),
             ],
           ),

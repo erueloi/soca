@@ -12,7 +12,7 @@ class FinancesPage extends ConsumerStatefulWidget {
 }
 
 class _FinancesPageState extends ConsumerState<FinancesPage> {
-  String _groupBy = 'Phase'; // 'Phase' or 'Bucket'
+  String _groupBy = 'Bucket'; // 'Phase' or 'Bucket'
 
   @override
   Widget build(BuildContext context) {
@@ -166,7 +166,7 @@ class _FinancesPageState extends ConsumerState<FinancesPage> {
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
                       child: ExpansionTile(
-                        initiallyExpanded: true,
+                        initiallyExpanded: false,
                         title: Text(
                           groupKey,
                           style: const TextStyle(fontWeight: FontWeight.bold),
@@ -211,7 +211,7 @@ class _FinancesPageState extends ConsumerState<FinancesPage> {
                             child: Row(
                               children: [
                                 const Expanded(
-                                  flex: 3,
+                                  flex: 4,
                                   child: Text(
                                     'Tasca',
                                     style: TextStyle(
@@ -244,6 +244,18 @@ class _FinancesPageState extends ConsumerState<FinancesPage> {
                                     ),
                                   ),
                                 ),
+                                Expanded(
+                                  flex: 1,
+                                  child: Text(
+                                    'Pendent',
+                                    textAlign: TextAlign.end,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -268,6 +280,7 @@ class _FinancesPageState extends ConsumerState<FinancesPage> {
   }
 
   Widget _buildTaskRow(BuildContext context, Task task) {
+    final balance = task.totalBudget - task.totalSpent;
     return InkWell(
       onTap: () {
         // Optional: Navigate to task details or expand
@@ -277,7 +290,7 @@ class _FinancesPageState extends ConsumerState<FinancesPage> {
         child: Row(
           children: [
             Expanded(
-              flex: 3,
+              flex: 4,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -332,6 +345,18 @@ class _FinancesPageState extends ConsumerState<FinancesPage> {
                       task.totalSpent > task.totalBudget && task.totalBudget > 0
                       ? Colors.red
                       : Colors.green.shade800,
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 1,
+              child: Text(
+                '${balance.toStringAsFixed(0)}€',
+                textAlign: TextAlign.end,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: balance < 0 ? Colors.red : Colors.orange.shade800,
                 ),
               ),
             ),

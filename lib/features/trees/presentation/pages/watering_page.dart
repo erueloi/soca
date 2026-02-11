@@ -85,7 +85,8 @@ class _WateringPageState extends ConsumerState<WateringPage> {
 
     // 1. Filter Trees
     final filters = ref.watch(wateringFiltersProvider);
-    var filteredTrees = trees;
+    // Base filter: Exclude Planned trees
+    var filteredTrees = trees.where((t) => t.status != 'Planned').toList();
 
     // Filter by Species
     if (filters.species != null) {
