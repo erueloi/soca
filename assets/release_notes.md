@@ -1,5 +1,10 @@
 ﻿# Release Notes
 
+## v1.9.5
+Mapa: Filtre per dates.
+Marca si has regat avui.
+Arbres i Reg: Pots anar directament al map i te'l marca.
+Arbres: Pots borrar arbres existents (si t'has equivocat).
 ## v1.9.4
 Arbres: Fitxes públiques de les espècies.
 Descarregar QR de les fitxes amb PDF.
@@ -166,6 +171,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

@@ -8,6 +8,7 @@ import '../../domain/entities/tree_extensions.dart';
 import '../../domain/entities/watering_event.dart';
 import '../providers/trees_provider.dart';
 import 'package:soca/features/climate/presentation/providers/climate_provider.dart';
+import '../../../map/presentation/pages/map_page.dart';
 
 class WateringPage extends ConsumerStatefulWidget {
   final String? initialTreeId;
@@ -20,12 +21,18 @@ class WateringPage extends ConsumerStatefulWidget {
 
 class _WateringPageState extends ConsumerState<WateringPage> {
   late TextEditingController _referenceController;
+  late LinkedScrollControllerGroup _horizontalControllers;
+  late ScrollController _headerScroll;
+  late ScrollController _bodyScroll;
   Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
     _referenceController = TextEditingController();
+    _horizontalControllers = LinkedScrollControllerGroup();
+    _headerScroll = _horizontalControllers.addAndGet();
+    _bodyScroll = _horizontalControllers.addAndGet();
     // Handle Deep Link
     if (widget.initialTreeId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -39,6 +46,8 @@ class _WateringPageState extends ConsumerState<WateringPage> {
   @override
   void dispose() {
     _referenceController.dispose();
+    _headerScroll.dispose();
+    _bodyScroll.dispose();
     _debounce?.cancel();
     super.dispose();
   }
@@ -122,11 +131,6 @@ class _WateringPageState extends ConsumerState<WateringPage> {
 
     // 2. Prepare Data Structure
     final Map<String, Map<String, List<WateringEvent>>> data = {};
-
-    // Sticky Header Scroll Controllers
-    final horizontalControllers = LinkedScrollControllerGroup();
-    final headerScroll = horizontalControllers.addAndGet();
-    final bodyScroll = horizontalControllers.addAndGet();
 
     final double colTreeWidth = 160;
     final double colDateWidth = 90;
@@ -365,7 +369,7 @@ class _WateringPageState extends ConsumerState<WateringPage> {
         Container(
           color: Colors.blue.shade50,
           child: SingleChildScrollView(
-            controller: headerScroll,
+            controller: _headerScroll,
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
@@ -458,7 +462,7 @@ class _WateringPageState extends ConsumerState<WateringPage> {
           child: SingleChildScrollView(
             scrollDirection: Axis.vertical,
             child: SingleChildScrollView(
-              controller: bodyScroll,
+              controller: _bodyScroll,
               scrollDirection: Axis.horizontal,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -534,42 +538,60 @@ class _WateringPageState extends ConsumerState<WateringPage> {
                           // Tree Name Column
                           Container(
                             width: colTreeWidth,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
+                            // Remove inner padding to allow InkWell to fill cell
+                            padding: EdgeInsets.zero,
                             alignment: Alignment.centerLeft,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  tree.commonName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
+                            child: InkWell(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        MapPage(initialTreeId: tree.id),
                                   ),
-                                  overflow: TextOverflow.ellipsis,
+                                );
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
                                 ),
-                                if (tree.reference != null &&
-                                    tree.reference!.isNotEmpty)
-                                  Text(
-                                    tree.reference!,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.indigo.shade400,
-                                      fontWeight: FontWeight.bold,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      tree.commonName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.indigo,
+                                        decoration: TextDecoration.underline,
+                                        decorationColor: Colors.indigo,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                  ),
-                                Text(
-                                  tree.species,
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.grey.shade600,
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
+                                    if (tree.reference != null &&
+                                        tree.reference!.isNotEmpty)
+                                      Text(
+                                        tree.reference!,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.indigo.shade400,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    Text(
+                                      tree.species,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey.shade600,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
                           ),
                           // Date Cells

@@ -330,7 +330,8 @@ class _TreesPageState extends ConsumerState<TreesPage> {
             // 1. Text Search
             final matchesQuery =
                 t.commonName.toLowerCase().contains(query) ||
-                t.species.toLowerCase().contains(query);
+                t.species.toLowerCase().contains(query) ||
+                (t.reference?.toLowerCase().contains(query) ?? false);
             if (!matchesQuery) return false;
 
             // 2. Status Filter (Blacklist logic)

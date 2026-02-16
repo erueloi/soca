@@ -6,6 +6,9 @@ import '../../data/repositories/trees_repository.dart';
 
 import '../../../settings/presentation/providers/settings_provider.dart';
 
+import '../../data/repositories/species_repository.dart';
+import '../../domain/entities/species.dart';
+
 final treesRepositoryProvider = Provider<TreesRepository>((ref) {
   final configAsync = ref.watch(farmConfigStreamProvider);
   final fincaId = configAsync.value?.fincaId;
@@ -15,6 +18,11 @@ final treesRepositoryProvider = Provider<TreesRepository>((ref) {
 final treesStreamProvider = StreamProvider<List<Tree>>((ref) {
   final repository = ref.watch(treesRepositoryProvider);
   return repository.getTreesStream();
+});
+
+final speciesStreamProvider = StreamProvider<List<Species>>((ref) {
+  final repository = ref.watch(speciesRepositoryProvider);
+  return repository.getSpecies();
 });
 
 class _Sentinel {

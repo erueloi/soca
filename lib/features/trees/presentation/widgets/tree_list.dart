@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../domain/entities/species.dart';
 import '../../domain/entities/tree.dart';
 import '../../domain/entities/tree_extensions.dart';
 import '../../domain/entities/watering_event.dart';
 import '../providers/trees_provider.dart';
 import '../widgets/tree_detail.dart';
+
+import '../../../../core/utils/icon_utils.dart';
 
 class TreeList extends ConsumerWidget {
   final List<Tree> trees;
@@ -18,69 +21,53 @@ class TreeList extends ConsumerWidget {
     }
 
     final selectedTree = ref.watch(selectedTreeProvider);
+    final speciesAsync = ref.watch(speciesStreamProvider);
+
+    // Create a map for quick access, defaulting to empty if loading/error
+    final speciesMap = speciesAsync.maybeWhen(
+      data: (list) => {for (var s in list) s.id: s},
+      orElse: () => <String, Species>{},
+    );
 
     return ListView.builder(
       itemCount: trees.length,
       itemBuilder: (context, index) {
         final tree = trees[index];
         final isSelected = selectedTree?.id == tree.id;
+        final species = speciesMap[tree.speciesId];
 
         return ListTile(
           selected: isSelected,
           selectedTileColor: Colors.green.withValues(alpha: 0.1),
-          leading: Stack(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  width: 50,
-                  height: 50,
-                  color: Colors.grey[300],
-                  child: Opacity(
-                    opacity: tree.status == 'Planned' ? 0.6 : 1.0,
-                    child: (tree.photoUrl != null && tree.photoUrl!.isNotEmpty)
-                        ? Image.network(
-                            tree.photoUrl!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return const Icon(
-                                Icons.park,
-                                color: Colors.green,
-                              );
-                            },
-                          )
-                        : Image.asset(
-                            'assets/images/placeholder_tree.png',
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return const Icon(
-                                Icons.park,
-                                color: Colors.green,
-                              );
-                            },
-                          ),
-                  ),
-                ),
-              ),
-              // Planned tree indicator badge
-              if (tree.status == 'Planned')
-                Positioned(
-                  top: 0,
-                  right: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: Colors.deepPurple,
-                      borderRadius: BorderRadius.circular(6),
+          leading: Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: (tree.photoUrl != null && tree.photoUrl!.isNotEmpty)
+                ? Image.network(
+                    tree.photoUrl!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Icon(
+                        IconUtils.resolveIcon(
+                          species?.iconCode ?? Icons.park.codePoint,
+                          species?.iconFamily,
+                        ),
+                        color: Colors.green,
+                      );
+                    },
+                  )
+                : Icon(
+                    IconUtils.resolveIcon(
+                      species?.iconCode ?? Icons.park.codePoint,
+                      species?.iconFamily,
                     ),
-                    child: const Icon(
-                      Icons.auto_awesome,
-                      color: Colors.white,
-                      size: 12,
-                    ),
+                    color: Colors.green,
                   ),
-                ),
-            ],
           ),
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -138,14 +125,14 @@ class TreeList extends ConsumerWidget {
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Delete button for planned trees
-              if (tree.status == 'Planned')
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  tooltip: 'Eliminar arbre planificat',
-                  onPressed: () => _confirmDeletePlanned(context, ref, tree),
-                )
-              else
+              // Delete button (Available for ALL trees now)
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                tooltip: 'Eliminar arbre',
+                onPressed: () => _confirmDeleteTree(context, ref, tree),
+              ),
+
+              if (tree.status != 'Planned')
                 IconButton(
                   icon: Icon(
                     Icons.water_drop,
@@ -155,6 +142,7 @@ class TreeList extends ConsumerWidget {
                   ),
                   onPressed: () => _showQuickWateringSheet(context, ref, tree),
                 ),
+
               const SizedBox(width: 8),
               // Health/Vitality Indicator
               Container(
@@ -196,7 +184,16 @@ class TreeList extends ConsumerWidget {
     }
   }
 
-  /// Deletes a planned tree without extra confirmation (as per user request)
+  /// Handles delete confirmation based on tree status
+  void _confirmDeleteTree(BuildContext context, WidgetRef ref, Tree tree) {
+    if (tree.status == 'Planned') {
+      _confirmDeletePlanned(context, ref, tree);
+    } else {
+      _confirmDeleteSecure(context, ref, tree);
+    }
+  }
+
+  /// Deletes a planned tree with simple confirmation
   void _confirmDeletePlanned(BuildContext context, WidgetRef ref, Tree tree) {
     showDialog(
       context: context,
@@ -231,6 +228,98 @@ class TreeList extends ConsumerWidget {
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Deletes an existing tree requiring reference confirmation
+  void _confirmDeleteSecure(BuildContext context, WidgetRef ref, Tree tree) {
+    final controller = TextEditingController();
+    final treeRef = tree.reference ?? '???';
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(
+          Icons.warning_amber_rounded,
+          color: Colors.red,
+          size: 40,
+        ),
+        title: const Text('Eliminar Arbre Existent'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'ATENCIÓ: Estàs a punt d\'eliminar "${tree.commonName}" (Plantat).\n\n'
+              'Per confirmar, escriu la referència de l\'arbre a continuació:',
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                treeRef,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'Escriu la referència per confirmar',
+              ),
+              textCapitalization: TextCapitalization.characters,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('CANCEL·LAR'),
+          ),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder: (context, value, child) {
+              final isValid = value.text.trim() == treeRef;
+              return ElevatedButton.icon(
+                onPressed: isValid
+                    ? () async {
+                        Navigator.pop(dialogContext);
+                        await ref
+                            .read(treesRepositoryProvider)
+                            .deleteTree(tree.id);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '"${tree.commonName}" eliminat definitivament',
+                              ),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    : null,
+                icon: const Icon(Icons.delete_forever, color: Colors.white),
+                label: const Text('ELIMINAR DEFINITIVAMENT'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.red.withValues(alpha: 0.3),
+                  disabledForegroundColor: Colors.white.withValues(alpha: 0.5),
+                ),
+              );
+            },
           ),
         ],
       ),

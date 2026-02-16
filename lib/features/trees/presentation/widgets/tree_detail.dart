@@ -26,6 +26,7 @@ import 'growth_entry_form_sheet.dart';
 import '../../domain/entities/growth_entry.dart';
 import '../../../settings/presentation/providers/settings_provider.dart';
 import '../../../settings/domain/entities/farm_config.dart';
+import '../../../map/presentation/pages/map_page.dart';
 
 class TreeDetail extends ConsumerStatefulWidget {
   // ... (start of class remains same)
@@ -1061,34 +1062,55 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
               Container(
                 width: double.infinity,
                 margin: const EdgeInsets.only(bottom: 24),
-                padding: const EdgeInsets.symmetric(vertical: 16),
                 decoration: BoxDecoration(
                   color: Colors.indigo.shade50,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.indigo.shade100),
                 ),
-                child: Column(
-                  children: [
-                    Text(
-                      'REFERÈNCIA',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.indigo.shade300,
-                        letterSpacing: 1.5,
+                child: InkWell(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => MapPage(initialTreeId: widget.tree.id),
                       ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Column(
+                      children: [
+                        Text(
+                          'REFERÈNCIA',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.indigo.shade300,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          widget.tree.reference!,
+                          style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.indigo.shade900,
+                            letterSpacing: 2.0,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '(Veure al Mapa)',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.indigo.shade400,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      widget.tree.reference!,
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.indigo.shade900,
-                        letterSpacing: 2.0,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             _buildBotanicalInfo(),

@@ -5,6 +5,7 @@ import '../../../settings/presentation/providers/settings_provider.dart';
 import '../../../trees/presentation/providers/trees_provider.dart';
 import '../providers/map_layers_provider.dart';
 import '../providers/species_filter_provider.dart';
+import '../providers/map_filter_provider.dart';
 
 class LayerControllerSheet extends ConsumerWidget {
   const LayerControllerSheet({super.key});
@@ -20,6 +21,10 @@ class LayerControllerSheet extends ConsumerWidget {
     final trees = treesAsync.value ?? [];
     final speciesCounts = <String, int>{};
 
+    // Get Date Filter
+    final mapFilterState = ref.watch(mapFilterProvider);
+    final dateRange = mapFilterState.plantingDateRange;
+
     // Filter trees based on active layers BEFORE counting
     final showPlanted = layers[MapLayer.plantedTrees] ?? true;
     final showPlanned = layers[MapLayer.provisionalTrees] ?? false;
@@ -30,7 +35,30 @@ class LayerControllerSheet extends ConsumerWidget {
       if (isPlanned && !showPlanned) continue;
       if (!isPlanned && !showPlanted) continue;
 
-      // 2. Count species
+      // 2. Check Date Range
+      if (dateRange != null) {
+        final start = DateTime(
+          dateRange.start.year,
+          dateRange.start.month,
+          dateRange.start.day,
+        );
+        final end = DateTime(
+          dateRange.end.year,
+          dateRange.end.month,
+          dateRange.end.day,
+          23,
+          59,
+          59,
+        );
+        final date = tree.plantingDate;
+        final isInRange =
+            date.isAfter(start.subtract(const Duration(seconds: 1))) &&
+            date.isBefore(end);
+
+        if (!isInRange) continue;
+      }
+
+      // 3. Count species
       if (tree.species.isNotEmpty) {
         speciesCounts[tree.species] = (speciesCounts[tree.species] ?? 0) + 1;
       }
@@ -203,6 +231,90 @@ class LayerControllerSheet extends ConsumerWidget {
               onChanged: (val) => notifier.toggleLayer(MapLayer.satellite),
             ),
             const SizedBox(height: 24),
+            const Divider(),
+            const SizedBox(height: 8),
+            Text(
+              'Filtrar per Data de Plantació',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Consumer(
+              builder: (context, ref, child) {
+                final mapFilterState = ref.watch(mapFilterProvider);
+                final range = mapFilterState.plantingDateRange;
+
+                String dateText = 'Totes les dates';
+                if (range != null) {
+                  dateText =
+                      '${range.start.day}/${range.start.month}/${range.start.year} - ${range.end.day}/${range.end.month}/${range.end.year}';
+                }
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Text(
+                        dateText,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: range == null
+                              ? Colors.grey[600]
+                              : Colors.green[800],
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        TextButton.icon(
+                          onPressed: () async {
+                            final picked = await showDateRangePicker(
+                              context: context,
+                              firstDate: DateTime(2000),
+                              lastDate: DateTime.now().add(
+                                const Duration(days: 365 * 5),
+                              ), // Future proof
+                              initialDateRange: range,
+                              builder: (context, child) {
+                                return Theme(
+                                  data: Theme.of(context).copyWith(
+                                    colorScheme: ColorScheme.light(
+                                      primary: Colors.green,
+                                      onPrimary: Colors.white,
+                                      onSurface: Colors.black,
+                                    ),
+                                  ),
+                                  child: child!,
+                                );
+                              },
+                            );
+                            if (picked != null) {
+                              ref
+                                  .read(mapFilterProvider.notifier)
+                                  .setPlantingDateRange(picked);
+                            }
+                          },
+                          icon: const Icon(Icons.calendar_today, size: 18),
+                          label: const Text('Seleccionar dates'),
+                        ),
+                        if (range != null)
+                          IconButton(
+                            onPressed: () {
+                              ref
+                                  .read(mapFilterProvider.notifier)
+                                  .setPlantingDateRange(null);
+                            },
+                            icon: const Icon(Icons.close, size: 18),
+                            tooltip: 'Esborrar filtre',
+                            color: Colors.red,
+                          ),
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+
             if (allSpecies.isNotEmpty) ...[
               const Divider(),
               const SizedBox(height: 8),

@@ -55,7 +55,34 @@ class TreesRepository {
   }
 
   Future<void> deleteTree(String treeId) async {
-    await _treesCollection.doc(treeId).delete();
+    final treeRef = _treesCollection.doc(treeId);
+
+    // 1. Delete 'regs' (Watering Events)
+    final regsSnapshot = await treeRef.collection('regs').get();
+    for (var doc in regsSnapshot.docs) {
+      await doc.reference.delete();
+    }
+
+    // 2. Delete 'seguiment' (Growth Entries)
+    final seguimentSnapshot = await treeRef.collection('seguiment').get();
+    for (var doc in seguimentSnapshot.docs) {
+      await doc.reference.delete();
+    }
+
+    // 3. Delete 'historic_ia' (AI Analysis)
+    final historicIASnapshot = await treeRef.collection('historic_ia').get();
+    for (var doc in historicIASnapshot.docs) {
+      await doc.reference.delete();
+    }
+
+    // 4. Delete 'evolucio' (Legacy Evolution Entries - if any exist)
+    final evolucioSnapshot = await treeRef.collection('evolucio').get();
+    for (var doc in evolucioSnapshot.docs) {
+      await doc.reference.delete();
+    }
+
+    // 5. Finally, delete the tree document itself
+    await treeRef.delete();
   }
 
   Future<String?> uploadTreeImage(XFile imageFile, String treeId) async {

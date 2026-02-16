@@ -25,6 +25,7 @@ import '../../../tasks/domain/entities/bucket.dart';
 import '../../../tasks/presentation/widgets/task_edit_sheet.dart';
 
 import '../providers/map_layers_provider.dart';
+import '../providers/map_filter_provider.dart';
 import '../widgets/layer_controller_sheet.dart';
 import '../widgets/composite_marker.dart';
 import '../providers/species_filter_provider.dart';
@@ -33,20 +34,44 @@ import '../../../trees/domain/entities/species.dart';
 import '../../../settings/presentation/providers/settings_provider.dart';
 import '../providers/sandbox_provider.dart';
 
+// Provider to check if a specific tree has been watered today
+final treeWateringStatusProvider = StreamProvider.family
+    .autoDispose<List<WateringEvent>, String>((ref, treeId) {
+      final repository = ref.watch(treesRepositoryProvider);
+      final now = DateTime.now();
+      final startOfDay = DateTime(now.year, now.month, now.day);
+      final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+      return repository.getGlobalWateringEvents(
+        startDate: startOfDay,
+        endDate: endOfDay,
+        treeId: treeId,
+      );
+    });
+
 enum MapFollowMode { none, centered, compass }
 
 class MapPage extends ConsumerStatefulWidget {
-  const MapPage({super.key});
+  final String? initialTreeId;
+
+  const MapPage({super.key, this.initialTreeId});
 
   @override
   ConsumerState<MapPage> createState() => _MapPageState();
 }
 
-class _MapPageState extends ConsumerState<MapPage> {
+class _MapPageState extends ConsumerState<MapPage>
+    with SingleTickerProviderStateMixin {
   final MapController _mapController = MapController();
   MapFollowMode _followMode = MapFollowMode.none;
   StreamSubscription<MapEvent>? _mapEventSubscription;
   LatLng? _selectedLocation;
+  bool _hasHandledInitialTree = false;
+
+  // Highlight Animation
+  late AnimationController _highlightController;
+  late Animation<double> _highlightAnimation;
+  String? _highlightedTreeId;
 
   // Tree Relocation State
   Tree? _movingTree;
@@ -61,6 +86,15 @@ class _MapPageState extends ConsumerState<MapPage> {
   @override
   void initState() {
     super.initState();
+    _highlightController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    // Pulse scale from 1.0 to 1.5
+    _highlightAnimation = Tween<double>(begin: 1.0, end: 1.5).animate(
+      CurvedAnimation(parent: _highlightController, curve: Curves.easeInOut),
+    );
+
     _mapEventSubscription = _mapController.mapEventStream.listen((event) {
       if (event.source == MapEventSource.onDrag ||
           event.source == MapEventSource.onMultiFinger) {
@@ -75,6 +109,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   @override
   void dispose() {
+    _highlightController.dispose();
     _mapEventSubscription?.cancel();
     super.dispose();
   }
@@ -488,6 +523,29 @@ class _MapPageState extends ConsumerState<MapPage> {
                           final hiddenSpecies = ref.watch(
                             hiddenSpeciesProvider,
                           );
+                          final mapFilterState = ref.watch(mapFilterProvider);
+                          final dateRange = mapFilterState.plantingDateRange;
+
+                          bool isDateInRange(DateTime date) {
+                            if (dateRange == null) return true;
+                            final start = DateTime(
+                              dateRange.start.year,
+                              dateRange.start.month,
+                              dateRange.start.day,
+                            );
+                            final end = DateTime(
+                              dateRange.end.year,
+                              dateRange.end.month,
+                              dateRange.end.day,
+                              23,
+                              59,
+                              59,
+                            );
+                            return date.isAfter(
+                                  start.subtract(const Duration(seconds: 1)),
+                                ) &&
+                                date.isBefore(end);
+                          }
 
                           // We need species data. Let's assume a provider exists or fetch it.
                           // Since we don't have a stream provider for ALL species handy in the context (maybe),
@@ -525,6 +583,80 @@ class _MapPageState extends ConsumerState<MapPage> {
                                 for (var s in speciesList) s.id: s,
                               };
 
+                              // Handle Initial Tree Logic (Navigation + Sheet)
+                              if (widget.initialTreeId != null &&
+                                  !_hasHandledInitialTree) {
+                                try {
+                                  final initialTree = treesAsyncValue.value!
+                                      .firstWhere(
+                                        (t) => t.id == widget.initialTreeId,
+                                      );
+
+                                  // Find Species
+                                  final initialSpecies =
+                                      speciesMap[initialTree.speciesId];
+
+                                  // Schedule Move and Sheet
+                                  WidgetsBinding.instance.addPostFrameCallback((
+                                    _,
+                                  ) {
+                                    if (mounted && !_hasHandledInitialTree) {
+                                      _mapController.move(
+                                        LatLng(
+                                          initialTree.latitude,
+                                          initialTree.longitude,
+                                        ),
+                                        20.0,
+                                      );
+                                      _showTreeOptions(
+                                        context,
+                                        ref,
+                                        initialTree,
+                                        initialSpecies,
+                                      );
+                                      setState(() {
+                                        _hasHandledInitialTree = true;
+                                        _highlightedTreeId = initialTree.id;
+                                      });
+
+                                      // Start pulsing animation
+                                      _highlightController.repeat(
+                                        reverse: true,
+                                      );
+
+                                      // Stop after 5 seconds
+                                      Future.delayed(
+                                        const Duration(seconds: 5),
+                                        () {
+                                          if (mounted) {
+                                            _highlightController.stop();
+                                            _highlightController.reset();
+                                            setState(() {
+                                              _highlightedTreeId = null;
+                                            });
+                                          }
+                                        },
+                                      );
+                                    }
+                                  });
+                                } catch (e) {
+                                  // Tree not found
+                                  debugPrint(
+                                    'Initial tree not found: ${widget.initialTreeId}',
+                                  );
+                                  // Prevent infinite loop if tree missing
+                                  WidgetsBinding.instance.addPostFrameCallback((
+                                    _,
+                                  ) {
+                                    if (mounted) {
+                                      setState(
+                                        () => _hasHandledInitialTree = true,
+                                      );
+                                    }
+                                  });
+                                }
+                              }
+
                               // Check if Planned Trees layer is enabled
                               final showPlanned =
                                   layers[MapLayer.provisionalTrees] ?? false;
@@ -552,6 +684,9 @@ class _MapPageState extends ConsumerState<MapPage> {
                                         return false;
                                       }
                                       if (!isPlanned && !showPlanted) {
+                                        return false;
+                                      }
+                                      if (!isDateInRange(t.plantingDate)) {
                                         return false;
                                       }
                                       return true;
@@ -734,6 +869,9 @@ class _MapPageState extends ConsumerState<MapPage> {
                                           if (!isPlanned && !showPlanted) {
                                             return false;
                                           }
+                                          if (!isDateInRange(t.plantingDate)) {
+                                            return false;
+                                          }
                                           return true;
                                         })
                                         .map((t) {
@@ -776,6 +914,9 @@ class _MapPageState extends ConsumerState<MapPage> {
                                                   .mapMarkerSize ??
                                               20.0;
 
+                                          final isHighlighted =
+                                              t.id == _highlightedTreeId;
+
                                           return Marker(
                                             point: LatLng(
                                               t.latitude,
@@ -792,14 +933,27 @@ class _MapPageState extends ConsumerState<MapPage> {
                                                   t,
                                                   species,
                                                 ),
-                                                child: CompositeMarker(
-                                                  color: color,
-                                                  iconData: iconData,
-                                                  label: label,
-                                                  size: markerSize,
-                                                  showLabel: showLabels,
-                                                  isPlanned: isPlanned,
-                                                ),
+                                                child: isHighlighted
+                                                    ? ScaleTransition(
+                                                        scale:
+                                                            _highlightAnimation,
+                                                        child: CompositeMarker(
+                                                          color: color,
+                                                          iconData: iconData,
+                                                          label: label,
+                                                          size: markerSize,
+                                                          showLabel: showLabels,
+                                                          isPlanned: isPlanned,
+                                                        ),
+                                                      )
+                                                    : CompositeMarker(
+                                                        color: color,
+                                                        iconData: iconData,
+                                                        label: label,
+                                                        size: markerSize,
+                                                        showLabel: showLabels,
+                                                        isPlanned: isPlanned,
+                                                      ),
                                               ),
                                             ),
                                           );
@@ -1689,279 +1843,350 @@ class _MapPageState extends ConsumerState<MapPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    image: tree.photoUrl != null
-                        ? DecorationImage(
-                            image: NetworkImage(tree.photoUrl!),
-                            fit: BoxFit.cover,
-                          )
-                        : null,
-                    color: Colors.grey[200],
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: tree.photoUrl == null
-                      ? Icon(
-                          IconUtils.resolveIcon(
-                            species?.iconCode ?? Icons.park.codePoint,
-                            species?.iconFamily,
-                          ),
-                          color: Colors.green.shade700,
-                          size: 30,
-                        )
-                      : null,
-                ),
-                title: Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        tree.commonName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+      builder: (context) => Consumer(
+        builder: (context, ref, _) {
+          final wateringAsync = ref.watch(treeWateringStatusProvider(tree.id));
+          final wateringData = wateringAsync.maybeWhen(
+            data: (events) => events,
+            orElse: () => <WateringEvent>[],
+          );
+          final isWateredToday = wateringData.isNotEmpty;
+          final totalLiters = wateringData.fold<double>(
+            0,
+            (sum, event) => sum + event.liters,
+          );
+
+          return SafeArea(
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    leading: Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        image: tree.photoUrl != null
+                            ? DecorationImage(
+                                image: NetworkImage(tree.photoUrl!),
+                                fit: BoxFit.cover,
+                              )
+                            : null,
+                        color: Colors.grey[200],
+                        border: Border.all(color: Colors.grey.shade300),
                       ),
+                      child: tree.photoUrl == null
+                          ? Icon(
+                              IconUtils.resolveIcon(
+                                species?.iconCode ?? Icons.park.codePoint,
+                                species?.iconFamily,
+                              ),
+                              color: Colors.green.shade700,
+                              size: 30,
+                            )
+                          : null,
                     ),
-                  ],
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 4),
-                    Text(
-                      '${tree.species}${tree.reference != null ? ' • ${tree.reference}' : ''}',
-                      style: TextStyle(color: Colors.grey[800], fontSize: 14),
-                    ),
-                    const SizedBox(height: 8),
-                    // Metrics Row
-                    Row(
+                    title: Row(
                       children: [
-                        Icon(Icons.cake, size: 14, color: Colors.grey[600]),
+                        Flexible(
+                          child: Text(
+                            tree.commonName,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 4),
+                        Text(
+                          '${tree.species}${tree.reference != null ? ' • ${tree.reference}' : ''}',
+                          style: TextStyle(
+                            color: Colors.grey[800],
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        // Metrics Row
+                        Row(
+                          children: [
+                            Icon(Icons.cake, size: 14, color: Colors.grey[600]),
+                            const SizedBox(width: 4),
+                            Text(
+                              ageText,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey[800],
+                              ),
+                            ),
+                            if (tree.height != null && tree.height! > 0) ...[
+                              const SizedBox(width: 12),
+                              Icon(
+                                Icons.height,
+                                size: 14,
+                                color: Colors.grey[600],
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${(tree.height! / 100).toStringAsFixed(1)}m',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey[800],
+                                ),
+                              ),
+                            ],
+                            if (tree.trunkDiameter != null &&
+                                tree.trunkDiameter! > 0) ...[
+                              const SizedBox(width: 12),
+                              Icon(
+                                Icons.circle_outlined,
+                                size: 14,
+                                color: Colors.grey[600],
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Ø ${tree.trunkDiameter!.toStringAsFixed(1)}cm',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey[800],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        const SizedBox(height: 8),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              _buildStatusBadge(tree.status),
+                              const SizedBox(width: 8),
+                              if (tree.vigor != null) ...[
+                                _buildVigorBadge(tree.vigor!),
+                                const SizedBox(width: 8),
+                              ],
+                              if (isPruning)
+                                _buildTaskBadge(
+                                  'Poda',
+                                  Icons.cut,
+                                  Colors.orange,
+                                ),
+                              if (isHarvest)
+                                _buildTaskBadge(
+                                  'Collita',
+                                  Icons.agriculture,
+                                  Colors.purple,
+                                ),
+                              if (isPlanting)
+                                _buildTaskBadge(
+                                  'Plantació',
+                                  Icons.spa,
+                                  Colors.lightGreen,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.info_outline),
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        final result = await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => TreeDetail(tree: tree),
+                          ),
+                        );
+
+                        if (result == 'MOVE') {
+                          setState(() {
+                            _movingTree = tree;
+                            _crosshairLocation = LatLng(
+                              tree.latitude,
+                              tree.longitude,
+                            );
+                            _mapController.move(
+                              _crosshairLocation!,
+                              _currentZoom,
+                            );
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  const Divider(),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        const Text(
+                          'Reg Ràpid',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(width: 12),
+                        // Water Status
+                        Icon(
+                          Icons.water_drop,
+                          size: 16,
+                          color: tree.waterStatusColor,
+                        ),
                         const SizedBox(width: 4),
                         Text(
-                          ageText,
+                          tree.waterStatusText,
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey[800],
+                            fontWeight: FontWeight.bold,
+                            color: tree.waterStatusColor,
                           ),
                         ),
-                        if (tree.height != null && tree.height! > 0) ...[
-                          const SizedBox(width: 12),
-                          Icon(Icons.height, size: 14, color: Colors.grey[600]),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${(tree.height! / 100).toStringAsFixed(1)}m',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.grey[800],
+                        if (species != null) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.blue.shade200),
+                            ),
+                            child: Text(
+                              'Kc: ${species.kc}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.blue.shade800,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ),
                         ],
-                        if (tree.trunkDiameter != null &&
-                            tree.trunkDiameter! > 0) ...[
-                          const SizedBox(width: 12),
-                          Icon(
-                            Icons.circle_outlined,
-                            size: 14,
-                            color: Colors.grey[600],
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Ø ${tree.trunkDiameter!.toStringAsFixed(1)}cm',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.grey[800],
+                        if (isWateredToday) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.blue.shade300),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.check_circle,
+                                  size: 14,
+                                  color: Colors.blue.shade800,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Regat avui: ${totalLiters.toStringAsFixed(0)}L',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue.shade800,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    const SizedBox(height: 8),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _buildStatusBadge(tree.status),
-                          const SizedBox(width: 8),
-                          if (tree.vigor != null) ...[
-                            _buildVigorBadge(tree.vigor!),
-                            const SizedBox(width: 8),
-                          ],
-                          if (isPruning)
-                            _buildTaskBadge('Poda', Icons.cut, Colors.orange),
-                          if (isHarvest)
-                            _buildTaskBadge(
-                              'Collita',
-                              Icons.agriculture,
-                              Colors.purple,
-                            ),
-                          if (isPlanting)
-                            _buildTaskBadge(
-                              'Plantació',
-                              Icons.spa,
-                              Colors.lightGreen,
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                trailing: IconButton(
-                  icon: const Icon(Icons.info_outline),
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    final result = await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => TreeDetail(tree: tree),
-                      ),
-                    );
-
-                    if (result == 'MOVE') {
-                      setState(() {
-                        _movingTree = tree;
-                        _crosshairLocation = LatLng(
-                          tree.latitude,
-                          tree.longitude,
-                        );
-                        _mapController.move(_crosshairLocation!, _currentZoom);
-                      });
-                    }
-                  },
-                ),
-              ),
-              const Divider(),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Row(
-                  children: [
-                    const Text(
-                      'Reg Ràpid',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(width: 12),
-                    // Water Status
-                    Icon(
-                      Icons.water_drop,
-                      size: 16,
-                      color: tree.waterStatusColor,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      tree.waterStatusText,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: tree.waterStatusColor,
-                      ),
-                    ),
-                    if (species != null) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.blue.shade200),
-                        ),
-                        child: Text(
-                          'Kc: ${species.kc}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.blue.shade800,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildWaterOption(context, ref, tree, 2),
-                    _buildWaterOption(context, ref, tree, 5),
-                    _buildWaterOption(context, ref, tree, 8),
-                    _buildCustomWaterOption(context, ref, tree),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Move button for planned trees (Sandbox Mode only)
-              if (tree.status == 'Planned' &&
-                  ref.read(sandboxProvider).isEnabled)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      // Enter moving mode
-                      setState(() {
-                        _movingTree = tree;
-                        _crosshairLocation = LatLng(
-                          tree.latitude,
-                          tree.longitude,
-                        );
-                        _mapController.move(_crosshairLocation!, _currentZoom);
-                      });
-                    },
-                    icon: const Icon(Icons.open_with, color: Colors.deepPurple),
-                    label: const Text('MOURE ARBRE'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.deepPurple,
-                      side: const BorderSide(color: Colors.deepPurple),
-                      minimumSize: const Size(double.infinity, 48),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildWaterOption(context, ref, tree, 2),
+                        _buildWaterOption(context, ref, tree, 5),
+                        _buildWaterOption(context, ref, tree, 8),
+                        _buildCustomWaterOption(context, ref, tree),
+                      ],
                     ),
                   ),
-                ),
+                  const SizedBox(height: 16),
 
-              // Delete button for planned trees
-              if (tree.status == 'Planned')
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _confirmDeletePlanned(context, ref, tree);
-                    },
-                    icon: const Icon(Icons.delete_outline, color: Colors.white),
-                    label: const Text('ELIMINAR ARBRE PLANIFICAT'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(double.infinity, 48),
+                  // Move button for planned trees (Sandbox Mode only)
+                  if (tree.status == 'Planned' &&
+                      ref.read(sandboxProvider).isEnabled)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          // Enter moving mode
+                          setState(() {
+                            _movingTree = tree;
+                            _crosshairLocation = LatLng(
+                              tree.latitude,
+                              tree.longitude,
+                            );
+                            _mapController.move(
+                              _crosshairLocation!,
+                              _currentZoom,
+                            );
+                          });
+                        },
+                        icon: const Icon(
+                          Icons.open_with,
+                          color: Colors.deepPurple,
+                        ),
+                        label: const Text('MOURE ARBRE'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.deepPurple,
+                          side: const BorderSide(color: Colors.deepPurple),
+                          minimumSize: const Size(double.infinity, 48),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-            ],
-          ),
-        ),
+
+                  // Delete button for planned trees
+                  if (tree.status == 'Planned')
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _confirmDeletePlanned(context, ref, tree);
+                        },
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: Colors.white,
+                        ),
+                        label: const Text('ELIMINAR ARBRE PLANIFICAT'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 48),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
