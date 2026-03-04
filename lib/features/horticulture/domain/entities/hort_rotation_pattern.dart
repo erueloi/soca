@@ -4,15 +4,19 @@ class HortRotationStage {
   final int stageIndex; // 0 to 3 (2 years cycle)
   final String label; // e.g. "Year 1 - Spring"
   final HortExigenciaNutrients exigency;
-  final List<String> suggestedSpeciesIds; // IDs from Hort Library
+  final String? mainCropId;
+  final List<String> auxiliaryCropIds;
   final int durationMonths; // Default 6
+  final int? durationWeeks;
 
   const HortRotationStage({
     required this.stageIndex,
     required this.label,
     required this.exigency,
-    this.suggestedSpeciesIds = const [],
+    this.mainCropId,
+    this.auxiliaryCropIds = const [],
     this.durationMonths = 6,
+    this.durationWeeks,
   });
 
   Map<String, dynamic> toMap() {
@@ -20,8 +24,10 @@ class HortRotationStage {
       'stageIndex': stageIndex,
       'label': label,
       'exigency': exigency.name, // Enum to string
-      'suggestedSpeciesIds': suggestedSpeciesIds,
+      'mainCropId': mainCropId,
+      'auxiliaryCropIds': auxiliaryCropIds,
       'durationMonths': durationMonths,
+      'durationWeeks': durationWeeks,
     };
   }
 
@@ -33,8 +39,30 @@ class HortRotationStage {
         (e) => e.name == map['exigency'],
         orElse: () => HortExigenciaNutrients.mitjanamentExigent,
       ),
-      suggestedSpeciesIds: List<String>.from(map['suggestedSpeciesIds'] ?? []),
+      mainCropId: map['mainCropId'],
+      auxiliaryCropIds: List<String>.from(map['auxiliaryCropIds'] ?? []),
       durationMonths: map['durationMonths'] ?? 6,
+      durationWeeks: map['durationWeeks'],
+    );
+  }
+
+  HortRotationStage copyWith({
+    int? stageIndex,
+    String? label,
+    HortExigenciaNutrients? exigency,
+    String? mainCropId,
+    List<String>? auxiliaryCropIds,
+    int? durationMonths,
+    int? durationWeeks,
+  }) {
+    return HortRotationStage(
+      stageIndex: stageIndex ?? this.stageIndex,
+      label: label ?? this.label,
+      exigency: exigency ?? this.exigency,
+      mainCropId: mainCropId ?? this.mainCropId,
+      auxiliaryCropIds: auxiliaryCropIds ?? this.auxiliaryCropIds,
+      durationMonths: durationMonths ?? this.durationMonths,
+      durationWeeks: durationWeeks ?? this.durationWeeks,
     );
   }
 }
@@ -77,6 +105,22 @@ class HortRotationPattern {
               ),
             )
           : [],
+    );
+  }
+
+  HortRotationPattern copyWith({
+    String? id,
+    String? name,
+    String? description,
+    String? fincaId,
+    List<HortRotationStage>? stages,
+  }) {
+    return HortRotationPattern(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      fincaId: fincaId ?? this.fincaId,
+      stages: stages ?? this.stages,
     );
   }
 }

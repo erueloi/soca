@@ -4,6 +4,8 @@ import 'package:latlong2/latlong.dart';
 
 import '../../domain/entities/planta_hort.dart';
 import '../../domain/entities/placed_plant.dart';
+import '../../domain/entities/plantacio_historica.dart';
+import '../../domain/services/assistent_hort_service.dart';
 import '../../../trees/presentation/pages/location_picker_page.dart';
 
 import '../../data/repositories/hort_repository.dart';
@@ -51,6 +53,9 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
   // Undo Stack
   final List<List<PlacedPlant>> _undoStack = [];
 
+  // Tooltip Overlay
+  OverlayEntry? _tooltipOverlay;
+
   void _pushUndo() {
     // Limit stack size? e.g. 20
     if (_undoStack.length >= 20) {
@@ -83,6 +88,7 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
 
   @override
   void dispose() {
+    _hidePlantTooltip();
     _transformationController.dispose();
     super.dispose();
   }
@@ -109,12 +115,155 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
 
   // --- Coordinate System Logic ---
 
-  void _handleTapOnCanvas(
+  /// Finds the PlacedPlant under the given canvas-local position.
+  PlacedPlant? _findPlantAtPos(
+    Offset localPos,
+    double extraPadding,
+    double scale,
+  ) {
+    double dx = localPos.dx - extraPadding;
+    double dy = localPos.dy - extraPadding;
+    double xCm = (dx / scale) * 100;
+    double yCm = (dy / scale) * 100;
+
+    for (int i = _placedPlants.length - 1; i >= 0; i--) {
+      final p = _placedPlants[i];
+      final r = Rect.fromLTWH(p.x, p.y, p.width, p.height);
+      if (r.inflate(3).contains(Offset(xCm, yCm))) return p;
+    }
+    return null;
+  }
+
+  /// Shows a floating tooltip overlay near the given screen position.
+  void _showPlantTooltip(PlacedPlant placed, Offset globalPos) {
+    _hidePlantTooltip();
+
+    PlantaHort? plant;
+    try {
+      plant = _currentPlantsList.firstWhere((p) => p.id == placed.speciesId);
+    } catch (_) {
+      return;
+    }
+
+    _tooltipOverlay = OverlayEntry(
+      builder: (ctx) {
+        // Position the tooltip above and to the right of the touch point
+        final screenSize = MediaQuery.of(ctx).size;
+        double left = globalPos.dx + 12;
+        double top = globalPos.dy - 120;
+
+        // Keep on screen
+        if (left + 220 > screenSize.width) left = globalPos.dx - 232;
+        if (top < 40) top = globalPos.dy + 20;
+
+        return Positioned(
+          left: left,
+          top: top,
+          child: Material(
+            elevation: 8,
+            borderRadius: BorderRadius.circular(12),
+            color: Colors.grey[900],
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              width: 220,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: plant!.color.withValues(alpha: 0.5),
+                  width: 2,
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        plant.partComestible.icon,
+                        color: plant.color,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          plant.nomComu,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (plant.nomCientific != null &&
+                      plant.nomCientific!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      plant.nomCientific!,
+                      style: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                  const Divider(color: Colors.white24, height: 12),
+                  _tooltipRow(
+                    'Família',
+                    plant.familiaBotanica.isNotEmpty
+                        ? plant.familiaBotanica
+                        : '—',
+                  ),
+                  _tooltipRow('Part', plant.partComestible.label),
+                  _tooltipRow('Exigència', plant.exigenciaNutrients.label),
+                  _tooltipRow(
+                    'Marcs',
+                    '${plant.distanciaLinies}×${plant.distanciaPlantacio} cm',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    Overlay.of(context).insert(_tooltipOverlay!);
+  }
+
+  Widget _tooltipRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+          Flexible(
+            child: Text(
+              value,
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+              textAlign: TextAlign.end,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _hidePlantTooltip() {
+    _tooltipOverlay?.remove();
+    _tooltipOverlay = null;
+  }
+
+  Future<void> _handleTapOnCanvas(
     Offset localPos,
     double extraPadding,
     double scale,
     List<PlantaHort> plants,
-  ) {
+  ) async {
     // 1. Convert to CM (Relative coordinates in the canvas space)
     // localPos includes padding? The detector is around the Painter?
     // If the detector wraps custom paint, localPos is relative to the paint.
@@ -211,8 +360,13 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
       return;
     }
 
+    // 7. Check Rotation History Alerts
+    final bedIdx = _getBedIndexFromX(finalX / 100.0);
+    final rotationOk = await _checkRotationAlert(selected, bedIdx);
+    if (!rotationOk) return; // User cancelled
+
     // Save State for Undo
-    _pushUndo(); // <--- ADDED
+    _pushUndo();
 
     setState(() {
       _placedPlants.add(
@@ -226,6 +380,136 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
       );
       _hasChanges = true;
     });
+  }
+
+  /// Checks historic rotation and shows a warning dialog if conflicts exist.
+  /// Returns true if the user wants to proceed, false to cancel.
+  Future<bool> _checkRotationAlert(PlantaHort plant, int? bedIndex) async {
+    if (bedIndex == null) return true; // Outside any bed, no check needed
+
+    // Find last archived record for this bed
+    final bedRecords =
+        _espai.historic.where((h) => h.bedIndex == bedIndex).toList()
+          ..sort((a, b) => b.dataFinalitzacio.compareTo(a.dataFinalitzacio));
+
+    if (bedRecords.isEmpty) return true; // No history
+
+    final lastRecord = bedRecords.first;
+    if (lastRecord.mainCropId == null) return true;
+
+    // Resolve last main crop plant
+    PlantaHort? lastPlant;
+    try {
+      lastPlant = _currentPlantsList.firstWhere(
+        (p) => p.id == lastRecord.mainCropId,
+      );
+    } catch (_) {
+      return true; // Can't resolve, skip check
+    }
+
+    final alertes = AssistentHort.validarRotacio(
+      novaPlanta: plant,
+      ultimaPlanta: lastPlant,
+      ultimRegistre: lastRecord,
+    );
+
+    if (alertes.isEmpty) return true;
+
+    // In paint mode (rapid painting), show a brief snackbar instead of a dialog
+    if (_isPaintMode) {
+      final worst = alertes.any((a) => a.nivell == RotacioNivell.alt)
+          ? RotacioNivell.alt
+          : RotacioNivell.mitja;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                worst == RotacioNivell.alt ? Icons.warning : Icons.info_outline,
+                color: worst == RotacioNivell.alt ? Colors.red : Colors.orange,
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: Text(alertes.first.titol)),
+            ],
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return true; // Allow in paint mode but warn
+    }
+
+    // Show dialog in normal mode
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              alertes.any((a) => a.nivell == RotacioNivell.alt)
+                  ? Icons.warning_amber_rounded
+                  : Icons.info_outline,
+              color: alertes.any((a) => a.nivell == RotacioNivell.alt)
+                  ? Colors.red
+                  : Colors.orange,
+              size: 28,
+            ),
+            const SizedBox(width: 8),
+            const Expanded(child: Text('Alerta de Rotació')),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: alertes.map((a) {
+              final color = a.nivell == RotacioNivell.alt
+                  ? Colors.red
+                  : Colors.orange;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: color.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      a.titol,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(a.missatge, style: const TextStyle(fontSize: 13)),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel·lar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Plantar Igualment'),
+          ),
+        ],
+      ),
+    );
+
+    return result ?? false;
   }
 
   void _handleDragInCanvas(
@@ -408,20 +692,13 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
     if (_espai.layoutConfig == null) return xMeters;
     final config = _espai.layoutConfig!;
 
-    double currentX = 0.0;
-
-    // We want to find the BEST bed for this xMeters.
-    // If inside a bed, use that bed.
-    // If in path, use closest bed.
-
     int closestBedIndex = -1;
     double minDistToBe = double.infinity;
 
     // 1. Identify Target Bed
     for (int i = 0; i < config.numberOfBeds; i++) {
-      double pathEnd = currentX + config.pathWidth;
-      double bedStart = pathEnd;
-      double bedEnd = bedStart + config.bedWidth;
+      double bedStart = config.getBedStartX(i);
+      double bedEnd = bedStart + config.getBedWidth(i);
 
       // Check containment (relaxed)
       if (xMeters >= bedStart && xMeters <= bedEnd) {
@@ -441,21 +718,13 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
         minDistToBe = dist;
         closestBedIndex = i;
       }
-
-      currentX = bedEnd;
     }
 
     if (closestBedIndex == -1) return xMeters; // Should not happen
 
     // 2. Clamp to THAT Bed
-    currentX = 0.0;
-    // Fast forward to that bed
-    for (int i = 0; i < closestBedIndex; i++) {
-      currentX += config.pathWidth + config.bedWidth;
-    }
-
-    double bedStart = currentX + config.pathWidth;
-    double bedEnd = bedStart + config.bedWidth;
+    double bedStart = config.getBedStartX(closestBedIndex);
+    double bedEnd = bedStart + config.getBedWidth(closestBedIndex);
 
     // STRICT CLAMP
     // x must be >= bedStart
@@ -467,7 +736,7 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
     if (maxX < minX) {
       // Plant is wider than bed!
       // Center it in the bed
-      double bedCenter = bedStart + config.bedWidth / 2;
+      double bedCenter = bedStart + config.getBedWidth(closestBedIndex) / 2;
       return bedCenter - widthMeters / 2;
     }
 
@@ -481,16 +750,10 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
     if (_espai.layoutConfig == null) return true;
     final config = _espai.layoutConfig!;
 
-    // Similar legacy logic
-    double x = xMeters;
-    double currentX = 0.0;
     for (int i = 0; i < config.numberOfBeds; i++) {
-      // Path
-      if (x >= currentX && x < currentX + config.pathWidth) return false;
-      currentX += config.pathWidth;
-      // Bed
-      if (x >= currentX && x < currentX + config.bedWidth) return true;
-      currentX += config.bedWidth;
+      double bedStart = config.getBedStartX(i);
+      double bedEnd = bedStart + config.getBedWidth(i);
+      if (xMeters >= bedStart && xMeters < bedEnd) return true;
     }
     return false;
   }
@@ -1004,6 +1267,9 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                 case 'clear':
                   _clearPlants();
                   break;
+                case 'archive':
+                  _archiveCycle();
+                  break;
                 case 'library':
                   Navigator.push(
                     context,
@@ -1033,6 +1299,20 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                 child: const ListTile(
                   leading: Icon(Icons.delete_forever),
                   title: Text('Netejar Tot'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'archive',
+                enabled: _placedPlants.isNotEmpty,
+                child: const ListTile(
+                  leading: Icon(
+                    Icons.archive_outlined,
+                    color: Colors.deepPurple,
+                  ),
+                  title: Text(
+                    'Finalitzar Cicle / Arxivar',
+                    style: TextStyle(color: Colors.deepPurple),
+                  ),
                 ),
               ),
               const PopupMenuItem(
@@ -1148,7 +1428,7 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                                 ),
                                 child: GestureDetector(
                                   onTapUp: (details) {
-                                    // Local Position relative to the Container (Canvas)
+                                    _hidePlantTooltip();
                                     final localPos = details.localPosition;
 
                                     if (_isPaintMode) {
@@ -1164,18 +1444,30 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                                         );
                                       } else if (_selectedTool ==
                                           DesignerTool.patterns) {
-                                        // Pattern assignment: check if we tapped a bed
                                         double dx = localPos.dx - gridPadding;
                                         double xMeters = dx / pixelsPerMeter;
                                         _onBedTap(xMeters);
                                       }
                                     } else {
-                                      // Move/View Mode -> Open Config
                                       double dx = localPos.dx - gridPadding;
                                       double xMeters = dx / pixelsPerMeter;
                                       _onBedTap(xMeters);
                                     }
                                   },
+                                  onLongPressStart: (details) {
+                                    final placed = _findPlantAtPos(
+                                      details.localPosition,
+                                      gridPadding,
+                                      pixelsPerMeter,
+                                    );
+                                    if (placed != null) {
+                                      _showPlantTooltip(
+                                        placed,
+                                        details.globalPosition,
+                                      );
+                                    }
+                                  },
+                                  onLongPressEnd: (_) => _hidePlantTooltip(),
                                   onPanUpdate:
                                       (_isPaintMode &&
                                           (_selectedTool ==
@@ -1191,34 +1483,54 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                                           );
                                         }
                                       : null,
-                                  child: Consumer(
-                                    builder: (context, ref, child) {
-                                      final patterns =
-                                          ref
-                                              .watch(
-                                                rotationPatternsStreamProvider,
-                                              )
-                                              .asData
-                                              ?.value ??
-                                          [];
-                                      return CustomPaint(
-                                        size: Size(
-                                          cols * cellPixelSize,
-                                          rows * cellPixelSize,
-                                        ),
-                                        painter: GardenGridPainter(
-                                          rows: rows,
-                                          cols: cols,
-                                          cellPixelSize: cellPixelSize,
-                                          placedPlants: _placedPlants,
-                                          plants: plants,
-                                          isBedAt: _isBedAt,
-                                          layoutConfig: _espai.layoutConfig,
-                                          patterns: patterns,
-                                          padding: gridPadding,
-                                        ),
+                                  child: MouseRegion(
+                                    onHover: (event) {
+                                      final placed = _findPlantAtPos(
+                                        event.localPosition,
+                                        gridPadding,
+                                        pixelsPerMeter,
                                       );
+                                      if (placed != null) {
+                                        _showPlantTooltip(
+                                          placed,
+                                          event.position,
+                                        );
+                                      } else {
+                                        _hidePlantTooltip();
+                                      }
                                     },
+                                    onExit: (_) => _hidePlantTooltip(),
+                                    child: Consumer(
+                                      builder: (context, ref, child) {
+                                        final patterns =
+                                            ref
+                                                .watch(
+                                                  rotationPatternsStreamProvider,
+                                                )
+                                                .asData
+                                                ?.value ??
+                                            [];
+                                        return CustomPaint(
+                                          size: Size(
+                                            cols * cellPixelSize,
+                                            rows * cellPixelSize,
+                                          ),
+                                          painter: GardenGridPainter(
+                                            rows: rows,
+                                            cols: cols,
+                                            cellPixelSize: cellPixelSize,
+                                            placedPlants: _placedPlants,
+                                            plants: plants,
+                                            isBedAt: _isBedAt,
+                                            layoutConfig: _espai.layoutConfig,
+                                            patterns: patterns,
+                                            padding: gridPadding,
+                                            historic: _espai.historic,
+                                            getBedIndexFromX: _getBedIndexFromX,
+                                          ),
+                                        );
+                                      },
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1423,11 +1735,6 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
       context,
     ).showSnackBar(const SnackBar(content: Text('Aplicant patrons...')));
 
-    // Proper Logic (requires Ref to fetch patterns? Or use cached patterns if available?)
-    // Ideally we need the list of Patterns to map IDs.
-    // Since `_buildPatternsList` uses `ref.watch`, we can't easily access patterns here unless we access provider.
-    // But `ConsumerState` allows `ref.read`.
-
     final patterns = await ref.read(rotationPatternsStreamProvider.future);
     if (!mounted) return;
     final config = _espai.layoutConfig;
@@ -1435,7 +1742,6 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
 
     int changesCount = 0;
 
-    // For each bed
     for (int i = 0; i < config.numberOfBeds; i++) {
       final bedData = config.beds[i];
       if (bedData == null || bedData.rotationPatternId == null) continue;
@@ -1446,9 +1752,8 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
       );
       if (bedData.rotationPatternId != pattern.id) continue;
 
-      // Start Date
+      // Find current stage by date
       final start = bedData.rotationStartDate ?? DateTime.now();
-      // Calc Current Plant ID
       final now = DateTime.now();
       int monthsDiff = (now.year - start.year) * 12 + now.month - start.month;
       int totalDuration = pattern.stages.fold(
@@ -1460,114 +1765,27 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
       int currentMonth = monthsDiff % totalDuration;
       if (monthsDiff < 0) currentMonth = 0;
 
-      String? suggestedId;
+      HortRotationStage? currentStage;
       int accumulated = 0;
       for (final stage in pattern.stages) {
         if (currentMonth < accumulated + stage.durationMonths) {
-          if (stage.suggestedSpeciesIds.isNotEmpty) {
-            suggestedId = stage.suggestedSpeciesIds.first;
-          }
+          currentStage = stage;
           break;
         }
         accumulated += stage.durationMonths;
       }
 
-      if (suggestedId != null) {
-        // Find plant dimensions
-        // Strategy:
-        // 1. Try Exact ID Match
-        // 2. Try Case-Insensitive Name Match
-        PlantaHort? plant;
-        try {
-          plant = _currentPlantsList.firstWhere((p) => p.id == suggestedId);
-        } catch (e) {
-          // Not found by ID, try Common Name
-          try {
-            plant = _currentPlantsList.firstWhere(
-              (p) => p.nomComu.toLowerCase() == suggestedId!.toLowerCase(),
-            );
-          } catch (e2) {
-            // Still not found
-            continue;
-          }
-        }
-
-        // Fill Bed with Smart Tiling
-        // Calculate Bed Bounds in CM
-        final p = config.pathWidth;
-        final b = config.bedWidth;
-        final bedStartM = p + i * (b + p);
-
-        // Start from top of bed (y=0) to bottom (totalLength)
-        // Iterate Y by plantingDistance
-        // Iterate X by linesDistance (centered in bed?)
-
-        double bedWidthCm = b * 100;
-        double bedLengthCm = config.totalLength * 100;
-        double bedStartXCm = bedStartM * 100;
-
-        double plantWCm = plant.distanciaLinies.toDouble();
-        double plantHCm = plant.distanciaPlantacio.toDouble();
-
-        // Safety check to avoid infinite loops
-        if (plantWCm <= 0) plantWCm = 30;
-        if (plantHCm <= 0) plantHCm = 30;
-
-        // Calculate Grid Dimensions
-        // Rows (Y) and Cols (X) based on spacing
-        // Standard formula: floor(BedDim / Spacing)
-        int numCols = (bedWidthCm / plantWCm).floor();
-        int numRows = (bedLengthCm / plantHCm).floor();
-
-        // Ensure at least 1 if it fits loosely (or strict?)
-        // User asked for floor logic, so if width 113 and spacing 120, result 0.
-        // But usually we can fit 1. Let's strictly follow floor for multi-row logic,
-        // but if 0 and bed > 20cm, maybe force 1?
-        // Let's stick to floor for strict standard density.
-        if (numCols == 0 && bedWidthCm > plantWCm * 0.5) numCols = 1;
-        if (numRows == 0 && bedLengthCm > plantHCm * 0.5) numRows = 1;
-
-        // Calculate Centering Offsets
-        double usedWidth = numCols * plantWCm;
-        double usedHeight = numRows * plantHCm;
-
-        double offsetX = (bedWidthCm - usedWidth) / 2;
-        double offsetY = (bedLengthCm - usedHeight) / 2;
-
-        // Fill Grid
-        for (int r = 0; r < numRows; r++) {
-          for (int c = 0; c < numCols; c++) {
-            // Absolute placement
-            double relX = offsetX + c * plantWCm;
-            double relY = offsetY + r * plantHCm;
-
-            double absX = bedStartXCm + relX;
-            double absY = relY;
-
-            // Add Plant
-            _placedPlants.add(
-              PlacedPlant.create(
-                speciesId: suggestedId,
-                x: absX,
-                y: absY,
-                width: plantWCm,
-                height: plantHCm,
-              ),
-            );
-            changesCount++;
-          }
-        }
+      if (currentStage != null) {
+        changesCount += _fillBedWithStage(i, currentStage);
       }
     }
 
     if (changesCount > 0) {
-      setState(() {
-        _hasChanges = true;
-      });
+      setState(() => _hasChanges = true);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Auto-omplert completat: $changesCount cel·les.'),
+            content: Text('Gremi aplicat: $changesCount plantes col·locades.'),
           ),
         );
       }
@@ -1581,6 +1799,338 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
           ),
         );
       }
+    }
+  }
+
+  /// Core polyculture tiling algorithm.
+  /// Fills bed [bedIndex] with the crops from [stage], interleaving
+  /// auxiliary crops on the edges and main crop in the centre.
+  /// Returns the number of plants placed.
+  int _fillBedWithStage(int bedIndex, HortRotationStage stage) {
+    final config = _espai.layoutConfig;
+    if (config == null) return 0;
+
+    // Collect all species to plant: build a list of (speciesId, PlantaHort)
+    final List<PlantaHort> cropSequence = [];
+
+    // Resolve main crop
+    PlantaHort? mainPlant;
+    if (stage.mainCropId != null) {
+      try {
+        mainPlant = _currentPlantsList.firstWhere(
+          (p) => p.id == stage.mainCropId,
+        );
+      } catch (_) {
+        try {
+          mainPlant = _currentPlantsList.firstWhere(
+            (p) => p.nomComu.toLowerCase() == stage.mainCropId!.toLowerCase(),
+          );
+        } catch (_) {}
+      }
+    }
+
+    // Resolve auxiliary crops
+    final List<PlantaHort> auxPlants = [];
+    for (final auxId in stage.auxiliaryCropIds) {
+      try {
+        auxPlants.add(_currentPlantsList.firstWhere((p) => p.id == auxId));
+      } catch (_) {
+        try {
+          auxPlants.add(
+            _currentPlantsList.firstWhere(
+              (p) => p.nomComu.toLowerCase() == auxId.toLowerCase(),
+            ),
+          );
+        } catch (_) {}
+      }
+    }
+
+    if (mainPlant == null && auxPlants.isEmpty) return 0;
+
+    // Bed geometry
+    final bedStartM = config.getBedStartX(bedIndex);
+    final bedWidthCm = config.getBedWidth(bedIndex) * 100;
+    double bedLengthCm = config.totalLength * 100;
+    double bedStartXCm = bedStartM * 100;
+
+    // Determine the reference plant width to calculate number of columns
+    double refWidth = mainPlant?.distanciaLinies.toDouble() ?? 30;
+    if (refWidth <= 0) refWidth = 30;
+
+    int numCols = (bedWidthCm / refWidth).floor();
+    if (numCols == 0 && bedWidthCm > refWidth * 0.5) numCols = 1;
+    if (numCols == 0) return 0;
+
+    // Build column assignment: which plant goes in each column.
+    // Strategy: auxiliary crops on the edge columns, main in the centre.
+    for (int c = 0; c < numCols; c++) {
+      if (numCols == 1) {
+        // If only space for 1 line, prioritize the main crop
+        cropSequence.add(mainPlant ?? auxPlants.first);
+      } else if (numCols == 2) {
+        // If space for 2 lines, try to mix [Aux, Main]
+        if (c == 0 && auxPlants.isNotEmpty) {
+          cropSequence.add(auxPlants.first);
+        } else {
+          cropSequence.add(mainPlant ?? auxPlants[c % auxPlants.length]);
+        }
+      } else {
+        // 3 or more lines: Aux on edges, Main in the middle
+        if (auxPlants.isNotEmpty && c == 0) {
+          cropSequence.add(auxPlants[0]);
+        } else if (auxPlants.length > 1 && c == numCols - 1) {
+          cropSequence.add(auxPlants[1 % auxPlants.length]);
+        } else if (auxPlants.isNotEmpty &&
+            c == numCols - 1 &&
+            mainPlant == null) {
+          cropSequence.add(auxPlants[0]);
+        } else if (mainPlant != null) {
+          cropSequence.add(mainPlant);
+        } else if (auxPlants.isNotEmpty) {
+          cropSequence.add(auxPlants[c % auxPlants.length]);
+        }
+      }
+    }
+
+    if (cropSequence.isEmpty) return 0;
+
+    // Now tile each column independently with its own plant dimensions
+    int placedCount = 0;
+    double usedWidth = numCols * refWidth;
+    double offsetX = (bedWidthCm - usedWidth) / 2.0;
+
+    for (int c = 0; c < cropSequence.length; c++) {
+      final plant = cropSequence[c];
+      double plantWCm = plant.distanciaLinies.toDouble();
+      double plantHCm = plant.distanciaPlantacio.toDouble();
+      if (plantWCm <= 0) plantWCm = 30;
+      if (plantHCm <= 0) plantHCm = 30;
+
+      int numRows = (bedLengthCm / plantHCm).floor();
+      if (numRows == 0 && bedLengthCm > plantHCm * 0.5) numRows = 1;
+
+      double usedHeight = numRows * plantHCm;
+      double offsetY = (bedLengthCm - usedHeight) / 2.0;
+
+      // Local Centering: if this specific crop is narrower than the column
+      double columnLocalOffsetX = (refWidth - plantWCm) / 2.0;
+      // In case plant is wider than ref, we might want to let it overflow or cap at 0
+      if (columnLocalOffsetX < 0) columnLocalOffsetX = 0;
+
+      for (int r = 0; r < numRows; r++) {
+        double relX = offsetX + c * refWidth + columnLocalOffsetX;
+        double relY = offsetY + r * plantHCm;
+
+        // Y-axis clamp: don't exceed bed length
+        if (relY + plantHCm > bedLengthCm) break;
+
+        double absX = bedStartXCm + relX;
+
+        _placedPlants.add(
+          PlacedPlant.create(
+            speciesId: plant.id,
+            x: absX,
+            y: relY,
+            width: plantWCm,
+            height: plantHCm,
+          ),
+        );
+        placedCount++;
+      }
+    }
+
+    return placedCount;
+  }
+
+  /// Shows a dialog to manually choose a Pattern + Stage and apply it to a bed.
+  void _showApplyGremiDialog(int bedIndex) async {
+    final patterns = await ref.read(rotationPatternsStreamProvider.future);
+    if (!mounted || patterns.isEmpty) return;
+
+    HortRotationPattern? selectedPattern = patterns.first;
+    HortRotationStage? selectedStage = selectedPattern.stages.isNotEmpty
+        ? selectedPattern.stages.first
+        : null;
+
+    final result = await showDialog<HortRotationStage>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Aplicar Gremi al Bancal'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Selecciona un Patró:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedPattern?.id,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'Patró',
+                      ),
+                      items: patterns
+                          .map(
+                            (p) => DropdownMenuItem(
+                              value: p.id,
+                              child: Text(p.name),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setDialogState(() {
+                            selectedPattern = patterns.firstWhere(
+                              (p) => p.id == val,
+                            );
+                            selectedStage = selectedPattern!.stages.isNotEmpty
+                                ? selectedPattern!.stages.first
+                                : null;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Selecciona una Fase:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    if (selectedPattern != null &&
+                        selectedPattern!.stages.isNotEmpty)
+                      ...selectedPattern!.stages.map((stage) {
+                        final isSelected =
+                            selectedStage?.stageIndex == stage.stageIndex;
+                        // Resolve names for display
+                        String mainName = 'Cap';
+                        if (stage.mainCropId != null) {
+                          try {
+                            mainName = _currentPlantsList
+                                .firstWhere((p) => p.id == stage.mainCropId)
+                                .nomComu;
+                          } catch (_) {
+                            mainName = stage.mainCropId!;
+                          }
+                        }
+                        final auxCount = stage.auxiliaryCropIds.length;
+
+                        return GestureDetector(
+                          onTap: () =>
+                              setDialogState(() => selectedStage = stage),
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 6),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? Colors.green.withValues(alpha: 0.1)
+                                  : Colors.grey.withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: isSelected
+                                    ? Colors.green
+                                    : Colors.grey.shade300,
+                                width: isSelected ? 2 : 1,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  isSelected
+                                      ? Icons.check_circle
+                                      : Icons.circle_outlined,
+                                  color: isSelected
+                                      ? Colors.green
+                                      : Colors.grey,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        stage.label,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Principal: $mainName · $auxCount auxiliar(s)',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                    if (selectedPattern == null ||
+                        selectedPattern!.stages.isEmpty)
+                      const Text(
+                        'Aquest patró no té fases.',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, null),
+                  child: const Text('Cancel·lar'),
+                ),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.auto_awesome),
+                  label: const Text('Aplicar Gremi'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: selectedStage != null
+                      ? () => Navigator.pop(ctx, selectedStage)
+                      : null,
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (result == null || !mounted) return;
+
+    _pushUndo();
+    final count = _fillBedWithStage(bedIndex, result);
+
+    if (count > 0) {
+      setState(() => _hasChanges = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Gremi aplicat: $count plantes al bancal ${bedIndex + 1}.',
+          ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No s\'han pogut resoldre les plantes d\'aquesta fase.',
+          ),
+        ),
+      );
     }
   }
 
@@ -1616,6 +2166,110 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
           context,
         ).showSnackBar(const SnackBar(content: Text('Disseny netejat.')));
       }
+    }
+  }
+
+  Future<void> _archiveCycle() async {
+    if (_placedPlants.isEmpty) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Finalitzar Cicle?'),
+        content: const Text(
+          'Totes les plantes actuals passaran a l\'arxiu històric d\'aquest espai i el llenç quedarà buit per al proper cicle.\n\nAquesta acció no es pot desfer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel·lar'),
+          ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.archive_outlined),
+            label: const Text('Arxivar'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurple,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    // Determine the earliest placedAt date from current plants
+    DateTime earliestDate = DateTime.now();
+    for (var p in _placedPlants) {
+      if (p.placedAt.isBefore(earliestDate)) {
+        earliestDate = p.placedAt;
+      }
+    }
+
+    // Group placed plants by bed index for richer history
+    // Build a map: bedIndex -> list of speciesIds
+    final Map<int, Set<String>> bedSpecies = {};
+    final config = _espai.layoutConfig;
+
+    for (var p in _placedPlants) {
+      if (config != null) {
+        double centerXCm = p.x + p.width / 2;
+        double centerXM = centerXCm / 100.0;
+        int? bedIdx = _getBedIndexFromX(centerXM);
+        if (bedIdx != null) {
+          bedSpecies.putIfAbsent(bedIdx, () => {});
+          bedSpecies[bedIdx]!.add(p.speciesId);
+        }
+      }
+    }
+
+    // Create history entries: one per bed that had plants
+    final List<PlantacioHistorica> newEntries = [];
+    if (bedSpecies.isNotEmpty) {
+      for (var entry in bedSpecies.entries) {
+        final speciesList = entry.value.toList();
+        newEntries.add(
+          PlantacioHistorica.create(
+            mainCropId: speciesList.isNotEmpty ? speciesList.first : null,
+            auxiliaryCropIds: speciesList.length > 1
+                ? speciesList.sublist(1)
+                : [],
+            dataPlantacio: earliestDate,
+            bedIndex: entry.key,
+          ),
+        );
+      }
+    } else {
+      // No layout config – archive all as a single entry
+      final allSpecies = _placedPlants.map((p) => p.speciesId).toSet().toList();
+      newEntries.add(
+        PlantacioHistorica.create(
+          mainCropId: allSpecies.isNotEmpty ? allSpecies.first : null,
+          auxiliaryCropIds: allSpecies.length > 1 ? allSpecies.sublist(1) : [],
+          dataPlantacio: earliestDate,
+        ),
+      );
+    }
+
+    // Merge with existing historic
+    final updatedHistoric = List<PlantacioHistorica>.from(_espai.historic)
+      ..addAll(newEntries);
+
+    setState(() {
+      _espai = _espai.copyWith(placedPlants: [], historic: updatedHistoric);
+      _placedPlants.clear();
+      _hasChanges = true;
+    });
+
+    await _saveChanges();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Cicle arxivat amb ${newEntries.length} registre(s).'),
+        ),
+      );
     }
   }
 
@@ -1957,12 +2611,9 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
     final config = _espai.layoutConfig;
     if (config == null) return null;
 
-    final p = config.pathWidth;
-    final b = config.bedWidth;
-
     for (int i = 0; i < config.numberOfBeds; i++) {
-      final start = p + i * (b + p);
-      final end = start + b;
+      final start = config.getBedStartX(i);
+      final end = start + config.getBedWidth(i);
       if (xMeters >= start && xMeters < end) {
         return i;
       }
@@ -1974,135 +2625,382 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
     // Current Data
     final bedData = _espai.layoutConfig!.beds[bedIndex];
 
+    // Filter historic for this bed
+    final bedHistoric =
+        _espai.historic
+            .where((h) => h.bedIndex == bedIndex || h.bedIndex == null)
+            .toList()
+          ..sort((a, b) => b.dataFinalitzacio.compareTo(a.dataFinalitzacio));
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (context) {
         String? selectedPattern = bedData?.rotationPatternId;
         DateTime startDate = bedData?.rotationStartDate ?? DateTime.now();
+        double widthOverride =
+            bedData?.widthOverride ?? _espai.layoutConfig!.bedWidth;
+        int tabIndex = 0;
 
         return StatefulBuilder(
           builder: (context, setState) {
             return Container(
               padding: const EdgeInsets.all(16),
-              height: 500,
+              height: MediaQuery.of(context).size.height * 0.65,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Configuració Bancal ${bedIndex + 1}',
+                    'Bancal ${bedIndex + 1}',
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  const Text('Assignar Patró de Rotació:'),
                   const SizedBox(height: 8),
-                  Consumer(
-                    builder: (context, ref, _) {
-                      final patternsAsync = ref.watch(
-                        rotationPatternsStreamProvider,
-                      );
-                      return patternsAsync.when(
-                        data: (patterns) => DropdownButtonFormField<String>(
-                          initialValue: selectedPattern,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            labelText: 'Selecciona un Patró',
-                          ),
-                          items: [
-                            const DropdownMenuItem(
-                              value: null,
-                              child: Text('Cap (Manual)'),
-                            ),
-                            ...patterns.map(
-                              (p) => DropdownMenuItem(
-                                value: p.id,
-                                child: Text(p.name),
+                  // Tab bar: Configuració | Històric
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => tabIndex = 0),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: tabIndex == 0
+                                      ? Colors.deepPurple
+                                      : Colors.grey.shade300,
+                                  width: tabIndex == 0 ? 3 : 1,
+                                ),
                               ),
                             ),
-                          ],
-                          onChanged: (val) {
-                            setState(() {
-                              selectedPattern = val;
-                            });
-                          },
+                            child: Text(
+                              'Configuració',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontWeight: tabIndex == 0
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                color: tabIndex == 0
+                                    ? Colors.deepPurple
+                                    : Colors.grey,
+                              ),
+                            ),
+                          ),
                         ),
-                        loading: () => const LinearProgressIndicator(),
-                        error: (e, s) => Text('Error loading patterns: $e'),
-                      );
-                    },
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => tabIndex = 1),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: tabIndex == 1
+                                      ? Colors.deepPurple
+                                      : Colors.grey.shade300,
+                                  width: tabIndex == 1 ? 3 : 1,
+                                ),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'Històric',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontWeight: tabIndex == 1
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                    color: tabIndex == 1
+                                        ? Colors.deepPurple
+                                        : Colors.grey,
+                                  ),
+                                ),
+                                if (bedHistoric.isNotEmpty) ...[
+                                  const SizedBox(width: 4),
+                                  CircleAvatar(
+                                    radius: 10,
+                                    backgroundColor: Colors.deepPurple,
+                                    child: Text(
+                                      '${bedHistoric.length}',
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
-                  const Text('Data d\'Inici de la Rotació:'),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      '${startDate.day}/${startDate.month}/${startDate.year}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    trailing: const Icon(Icons.calendar_today),
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: startDate,
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2030),
-                      );
-                      if (picked != null) {
-                        setState(() {
-                          startDate = picked;
-                        });
-                      }
-                    },
-                  ),
-                  const Spacer(),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        // Save
-                        final newBedData = (bedData ?? BedData()).copyWith(
-                          rotationPatternId: selectedPattern,
-                          rotationStartDate: startDate,
-                        );
+                  // Tab content
+                  Expanded(
+                    child: tabIndex == 0
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Assignar Patró de Rotació:'),
+                              const SizedBox(height: 8),
+                              Consumer(
+                                builder: (context, ref, _) {
+                                  final patternsAsync = ref.watch(
+                                    rotationPatternsStreamProvider,
+                                  );
+                                  return patternsAsync.when(
+                                    data: (patterns) =>
+                                        DropdownButtonFormField<String>(
+                                          initialValue: selectedPattern,
+                                          decoration: const InputDecoration(
+                                            border: OutlineInputBorder(),
+                                            labelText: 'Selecciona un Patró',
+                                          ),
+                                          items: [
+                                            const DropdownMenuItem(
+                                              value: null,
+                                              child: Text('Cap (Manual)'),
+                                            ),
+                                            ...patterns.map(
+                                              (p) => DropdownMenuItem(
+                                                value: p.id,
+                                                child: Text(p.name),
+                                              ),
+                                            ),
+                                          ],
+                                          onChanged: (val) {
+                                            setState(() {
+                                              selectedPattern = val;
+                                            });
+                                          },
+                                        ),
+                                    loading: () =>
+                                        const LinearProgressIndicator(),
+                                    error: (e, s) =>
+                                        Text('Error loading patterns: $e'),
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              const Text('Data d\'Inici de la Rotació:'),
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(
+                                  '${startDate.day}/${startDate.month}/${startDate.year}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                trailing: const Icon(Icons.calendar_today),
+                                onTap: () async {
+                                  final picked = await showDatePicker(
+                                    context: context,
+                                    initialDate: startDate,
+                                    firstDate: DateTime(2020),
+                                    lastDate: DateTime(2030),
+                                  );
+                                  if (picked != null) {
+                                    setState(() {
+                                      startDate = picked;
+                                    });
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('Amplada d\'aquest bancal:'),
+                                  Text(
+                                    '${(widthOverride * 100).toInt()} cm',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Slider(
+                                value: widthOverride,
+                                min: 0.2, // 20cm
+                                max: 2.0, // 200cm
+                                divisions: 36, // steps of 5cm
+                                label: '${(widthOverride * 100).toInt()} cm',
+                                activeColor: Colors.deepPurple,
+                                onChanged: (val) {
+                                  setState(() {
+                                    widthOverride = val;
+                                  });
+                                },
+                              ),
+                              const Spacer(),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  icon: const Icon(Icons.auto_awesome),
+                                  label: const Text('Aplicar Gremi / Patró'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    _showApplyGremiDialog(bedIndex);
+                                  },
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  onPressed: () async {
+                                    final newBedData = (bedData ?? BedData())
+                                        .copyWith(
+                                          rotationPatternId: selectedPattern,
+                                          rotationStartDate: startDate,
+                                          widthOverride:
+                                              widthOverride ==
+                                                  _espai.layoutConfig!.bedWidth
+                                              ? null
+                                              : widthOverride,
+                                        );
 
-                        final newBeds = Map<int, BedData>.from(
-                          _espai.layoutConfig!.beds,
-                        );
-                        newBeds[bedIndex] = newBedData;
+                                    final newBeds = Map<int, BedData>.from(
+                                      _espai.layoutConfig!.beds,
+                                    );
+                                    newBeds[bedIndex] = newBedData;
 
-                        final newConfig = GardenLayoutConfig(
-                          totalWidth: _espai.layoutConfig!.totalWidth,
-                          totalLength: _espai.layoutConfig!.totalLength,
-                          numberOfBeds: _espai.layoutConfig!.numberOfBeds,
-                          bedWidth: _espai.layoutConfig!.bedWidth,
-                          pathWidth: _espai.layoutConfig!.pathWidth,
-                          cellSize: _espai.layoutConfig!.cellSize,
-                          beds: newBeds,
-                        );
+                                    final newConfig = GardenLayoutConfig(
+                                      totalWidth:
+                                          _espai.layoutConfig!.totalWidth,
+                                      totalLength:
+                                          _espai.layoutConfig!.totalLength,
+                                      numberOfBeds:
+                                          _espai.layoutConfig!.numberOfBeds,
+                                      bedWidth: _espai.layoutConfig!.bedWidth,
+                                      pathWidth: _espai.layoutConfig!.pathWidth,
+                                      cellSize: _espai.layoutConfig!.cellSize,
+                                      beds: newBeds,
+                                    );
 
-                        // Update outer state
-                        // We are inside StatefulBuilder, so 'setState' here updates Dialog.
-                        // We need to update page state.
-                        // 'this.setState' refers to Page State if we use arrow function or access 'this'.
-                        // But we shadowed 'setState'.
-                        // We can use a method or access via 'this.setState' (which might be ambiguous).
-                        // Better: Use a dedicated method in PageState class `_updateConfig(newConfig)`.
-                        // Or just reference the PageState's setState?
-                        // `_GardenDesignerPageState` methods are accessible.
-                        // But `setState` is shadowed.
-                        // We can store a reference to pageSetState?
-                        // Or just call `_saveBedData(newConfig)`.
-
-                        _saveBedData(newConfig);
-                        if (context.mounted) Navigator.pop(context);
-                      },
-                      child: const Text('Guardar Configuració Bancal'),
-                    ),
+                                    _saveBedData(newConfig);
+                                    if (context.mounted) Navigator.pop(context);
+                                  },
+                                  child: const Text(
+                                    'Guardar Configuració Bancal',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        : _buildBedHistoricTab(bedHistoric),
                   ),
                 ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildBedHistoricTab(List<PlantacioHistorica> bedHistoric) {
+    if (bedHistoric.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.history, size: 48, color: Colors.grey),
+            SizedBox(height: 8),
+            Text(
+              'Cap registre històric encara.',
+              style: TextStyle(color: Colors.grey, fontSize: 16),
+            ),
+            SizedBox(height: 4),
+            Text(
+              'Arxiva un cicle per veure-ho aquí.',
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return StreamBuilder<List<PlantaHort>>(
+      stream: ref.read(hortRepositoryProvider).getPlantsStream(),
+      builder: (context, snapshot) {
+        final plants = snapshot.data ?? [];
+        return ListView.builder(
+          itemCount: bedHistoric.length,
+          itemBuilder: (context, index) {
+            final h = bedHistoric[index];
+
+            String mainName = 'Desconegut';
+            if (h.mainCropId != null && plants.isNotEmpty) {
+              try {
+                mainName = plants
+                    .firstWhere((p) => p.id == h.mainCropId)
+                    .nomComu;
+              } catch (_) {
+                mainName = h.mainCropId!;
+              }
+            }
+
+            final auxNames = h.auxiliaryCropIds
+                .map((id) {
+                  try {
+                    return plants.firstWhere((p) => p.id == id).nomComu;
+                  } catch (_) {
+                    return id;
+                  }
+                })
+                .join(', ');
+
+            final startStr =
+                '${h.dataPlantacio.day}/${h.dataPlantacio.month}/${h.dataPlantacio.year}';
+            final endStr =
+                '${h.dataFinalitzacio.day}/${h.dataFinalitzacio.month}/${h.dataFinalitzacio.year}';
+            final durationDays = h.dataFinalitzacio
+                .difference(h.dataPlantacio)
+                .inDays;
+
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.deepPurple.shade100,
+                  child: Text(
+                    '${index + 1}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                title: Text(
+                  mainName,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (auxNames.isNotEmpty)
+                      Text(
+                        'Auxiliars: $auxNames',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    Text(
+                      '$startStr → $endStr ($durationDays dies)',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+                isThreeLine: auxNames.isNotEmpty,
               ),
             );
           },
@@ -2128,6 +3026,8 @@ class GardenGridPainter extends CustomPainter {
   final bool Function(double xMeters) isBedAt;
   final GardenLayoutConfig? layoutConfig;
   final List<HortRotationPattern> patterns;
+  final List<PlantacioHistorica> historic;
+  final int? Function(double xMeters)? getBedIndexFromX;
 
   final double padding;
 
@@ -2141,6 +3041,8 @@ class GardenGridPainter extends CustomPainter {
     this.layoutConfig,
     this.patterns = const [],
     this.padding = 0.0,
+    this.historic = const [],
+    this.getBedIndexFromX,
   });
 
   @override
@@ -2181,7 +3083,7 @@ class GardenGridPainter extends CustomPainter {
         currentX += pathW;
 
         // Bed
-        double bedW = layoutConfig!.bedWidth;
+        double bedW = layoutConfig!.getBedWidth(i);
         canvas.drawRect(
           Rect.fromLTWH(currentX * ppm, 0, bedW * ppm, totalHeightM * ppm),
           paint..color = const Color(0xFF8D6E63), // Bed Color
@@ -2192,6 +3094,74 @@ class GardenGridPainter extends CustomPainter {
         currentX += bedW;
       }
       // Final Path?
+
+      // Draw bed health badges
+      double badgeX = 0.0;
+      for (int i = 0; i < layoutConfig!.numberOfBeds; i++) {
+        double pathW = layoutConfig!.pathWidth;
+        badgeX += pathW;
+        double bedW = layoutConfig!.getBedWidth(i);
+
+        // Compute health for this bed
+        final bedHealth = AssistentHort.saludBancal(
+          historic: historic,
+          bedIndex: i,
+          plants: plants,
+          currentPlants: placedPlants,
+          getBedStartCm: (m) => m * 100,
+          getBedEndCm: (m) => m * 100,
+          getBedIndexFromX: getBedIndexFromX,
+        );
+
+        // Draw badge at top center of bed
+        final badgeCenterX = (badgeX + bedW / 2) * ppm;
+        const badgeY = 6.0; // Top offset
+        const badgeRadius = 12.0;
+
+        Color badgeColor;
+        String badgeText;
+        switch (bedHealth) {
+          case RotacioNivell.optim:
+            badgeColor = const Color(0xFF4CAF50);
+            badgeText = '✓';
+            break;
+          case RotacioNivell.mitja:
+            badgeColor = const Color(0xFFF9A825);
+            badgeText = '!';
+            break;
+          case RotacioNivell.alt:
+            badgeColor = const Color(0xFFE53935);
+            badgeText = '⚠';
+            break;
+        }
+
+        final badgePaint = Paint()..color = badgeColor;
+        canvas.drawCircle(
+          Offset(badgeCenterX, badgeY),
+          badgeRadius,
+          badgePaint,
+        );
+
+        // Draw text in badge
+        final tp = TextPainter(
+          text: TextSpan(
+            text: badgeText,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        );
+        tp.layout();
+        tp.paint(
+          canvas,
+          Offset(badgeCenterX - tp.width / 2, badgeY - tp.height / 2),
+        );
+
+        badgeX += bedW;
+      }
     } else {
       // No layout, just one big bed? or grid
       // paint..color = const Color(0xFF8D6E63);

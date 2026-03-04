@@ -1,5 +1,10 @@
 ﻿# Release Notes
 
+## v1.9.6
+Hort: Gestió de Patrons.
+Aplicació de patrons a bancals.
+Toolip de informació de plantes.
+Guardar les fases i rotació de patrons.
 ## v1.9.5
 Mapa: Filtre per dates.
 Marca si has regat avui.
@@ -171,6 +176,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/repositories/hort_repository.dart';
+import 'edit_rotation_pattern_page.dart';
 
 // Stream Provider for Patterns
 final rotationPatternsStreamProvider = StreamProvider((ref) {
@@ -39,8 +40,11 @@ class RotationPatternsPage extends ConsumerWidget {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Crear patrò properament')),
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (ctx) => const EditRotationPatternPage(),
+            ),
           );
         },
         child: const Icon(Icons.add),
@@ -89,20 +93,35 @@ class RotationPatternsPage extends ConsumerWidget {
                       ),
                       children: [
                         ...pattern.stages.map((stage) {
-                          // Resolve IDs to Names
-                          final names = stage.suggestedSpeciesIds
+                          String mainCropName = 'Cap';
+                          if (stage.mainCropId != null) {
+                            try {
+                              mainCropName = plants
+                                  .firstWhere((p) => p.id == stage.mainCropId)
+                                  .nomComu;
+                            } catch (_) {
+                              mainCropName = stage.mainCropId!;
+                            }
+                          }
+
+                          final auxNames = stage.auxiliaryCropIds
                               .map((id) {
                                 try {
-                                  final plant = plants.firstWhere(
-                                    (p) => p.id == id,
-                                  );
-                                  return plant.nomComu;
-                                } catch (e) {
-                                  // If finding by ID fails, fallback to ID itself
+                                  return plants
+                                      .firstWhere((p) => p.id == id)
+                                      .nomComu;
+                                } catch (_) {
                                   return id;
                                 }
                               })
                               .join(", ");
+
+                          String auxText = auxNames.isNotEmpty
+                              ? ' | Aux: $auxNames'
+                              : '';
+                          String durationText = stage.durationWeeks != null
+                              ? ' (${stage.durationWeeks} setm.)'
+                              : ' (${stage.durationMonths} mesos)';
 
                           return ListTile(
                             leading: Chip(
@@ -111,13 +130,34 @@ class RotationPatternsPage extends ConsumerWidget {
                                 alpha: 0.2,
                               ),
                             ),
-                            title: Text(stage.label), // "Any 1 - Tardor"
+                            title: Text('${stage.label}$durationText'),
                             subtitle: Text(
-                              '${stage.exigency.label}\nSugerències: $names',
+                              '${stage.exigency.label}\nPrincipal: $mainCropName$auxText',
                             ),
                             isThreeLine: true,
                           );
                         }),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton.icon(
+                              icon: const Icon(Icons.edit),
+                              label: const Text('Editar Patró'),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (ctx) => EditRotationPatternPage(
+                                      pattern: pattern,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(width: 16),
+                          ],
+                        ),
                         const SizedBox(height: 8),
                       ],
                     ),

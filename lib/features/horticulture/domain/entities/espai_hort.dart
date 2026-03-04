@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'garden_layout_config.dart';
 import 'package:latlong2/latlong.dart';
 import 'placed_plant.dart';
+import 'plantacio_historica.dart';
 
 class EspaiHort {
   final String id;
@@ -25,6 +26,9 @@ class EspaiHort {
   // Layout Configuration (Beds/Paths)
   final GardenLayoutConfig? layoutConfig;
 
+  // Historical planting archive
+  final List<PlantacioHistorica> historic;
+
   EspaiHort({
     required this.id,
     required this.nom,
@@ -37,6 +41,7 @@ class EspaiHort {
     this.gridState = const {},
     this.placedPlants = const [],
     this.layoutConfig,
+    this.historic = const [],
   });
 
   Map<String, dynamic> toMap() {
@@ -51,6 +56,7 @@ class EspaiHort {
       'gridState': gridState,
       'placedPlants': placedPlants.map((e) => e.toMap()).toList(),
       'layoutConfig': layoutConfig?.toMap(),
+      'historic': historic.map((e) => e.toMap()).toList(),
     };
   }
 
@@ -67,6 +73,7 @@ class EspaiHort {
       'gridState': gridState,
       'placedPlants': placedPlants.map((e) => e.toMap()).toList(),
       'layoutConfig': layoutConfig?.toMap(),
+      'historic': historic.map((e) => e.toMap()).toList(),
     };
   }
 
@@ -107,6 +114,14 @@ class EspaiHort {
               Map<String, dynamic>.from(map['layoutConfig']),
             )
           : null,
+      historic: map['historic'] != null
+          ? (map['historic'] as List)
+                .map(
+                  (e) =>
+                      PlantacioHistorica.fromMap(Map<String, dynamic>.from(e)),
+                )
+                .toList()
+          : [],
     );
   }
 
@@ -121,6 +136,7 @@ class EspaiHort {
     Map<String, String>? gridState,
     List<PlacedPlant>? placedPlants,
     GardenLayoutConfig? layoutConfig,
+    List<PlantacioHistorica>? historic,
   }) {
     return EspaiHort(
       id: id, // ID cannot change
@@ -134,6 +150,7 @@ class EspaiHort {
       gridState: gridState ?? this.gridState,
       placedPlants: placedPlants ?? this.placedPlants,
       layoutConfig: layoutConfig ?? this.layoutConfig,
+      historic: historic ?? this.historic,
     );
   }
 }

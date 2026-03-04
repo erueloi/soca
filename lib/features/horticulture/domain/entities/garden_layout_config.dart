@@ -21,10 +21,26 @@ class GardenLayoutConfig {
   // Per-Bed Configuration (Bed Index -> Bed Data)
   final Map<int, BedData> beds;
 
+  // Helper to get actual width of a bed
+  double getBedWidth(int bedIndex) {
+    return beds[bedIndex]?.widthOverride ?? bedWidth;
+  }
+
+  // Helper to get the starting X coordinate of a bed
+  double getBedStartX(int bedIndex) {
+    double x = pathWidth;
+    for (int i = 0; i < bedIndex; i++) {
+      x += getBedWidth(i) + pathWidth;
+    }
+    return x;
+  }
+
   // Helper to validate if beds fit in width
   bool get isValid {
-    double requiredWidth =
-        (numberOfBeds * bedWidth) + ((numberOfBeds - 1) * pathWidth);
+    double requiredWidth = pathWidth;
+    for (int i = 0; i < numberOfBeds; i++) {
+      requiredWidth += getBedWidth(i) + pathWidth;
+    }
     return requiredWidth <= totalWidth;
   }
 
@@ -64,14 +80,21 @@ class BedData {
   final String? rotationPatternId;
   final DateTime? rotationStartDate;
   final String? name;
+  final double? widthOverride;
 
-  BedData({this.rotationPatternId, this.rotationStartDate, this.name});
+  BedData({
+    this.rotationPatternId,
+    this.rotationStartDate,
+    this.name,
+    this.widthOverride,
+  });
 
   Map<String, dynamic> toMap() {
     return {
       'rotationPatternId': rotationPatternId,
       'rotationStartDate': rotationStartDate?.toIso8601String(),
       'name': name,
+      'widthOverride': widthOverride,
     };
   }
 
@@ -82,6 +105,7 @@ class BedData {
           ? DateTime.parse(map['rotationStartDate'])
           : null,
       name: map['name'],
+      widthOverride: (map['widthOverride'] as num?)?.toDouble(),
     );
   }
 
@@ -89,14 +113,13 @@ class BedData {
     String? rotationPatternId,
     DateTime? rotationStartDate,
     String? name,
+    double? widthOverride,
   }) {
     return BedData(
       rotationPatternId: rotationPatternId ?? this.rotationPatternId,
       rotationStartDate: rotationStartDate ?? this.rotationStartDate,
       name: name ?? this.name,
+      widthOverride: widthOverride ?? this.widthOverride,
     );
   }
-
-  // Allow clearing values by passing explicit nulls (logic helper)
-  // Or just rely on replacing the object
 }
