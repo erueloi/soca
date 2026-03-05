@@ -4,8 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 enum MapLayer {
   tasks,
   pendingTasksOnly, // New: Filter to show only pending tasks
-  irrigationZones,
-  healthStatus,
+  espaisHort,
+  wateredToday,
   treeLabels,
   satellite,
   useOpenStreetMap,
@@ -22,8 +22,9 @@ class MapLayersNotifier extends Notifier<Map<MapLayer, bool>> {
     return {
       MapLayer.tasks: true,
       MapLayer.pendingTasksOnly: true, // Default: show only pending
-      MapLayer.irrigationZones: false,
-      MapLayer.healthStatus: false,
+      MapLayer.espaisHort: true, // Default: show hort spaces
+      MapLayer.wateredToday:
+          true, // Default: show all trees (including watered today)
       MapLayer.treeLabels: false,
       MapLayer.satellite: true,
       MapLayer.useOpenStreetMap: false,
@@ -41,9 +42,8 @@ class MapLayersNotifier extends Notifier<Map<MapLayer, bool>> {
         MapLayer.tasks: prefs.getBool('layer_tasks') ?? true,
         MapLayer.pendingTasksOnly:
             prefs.getBool('layer_pendingTasksOnly') ?? true,
-        MapLayer.irrigationZones:
-            prefs.getBool('layer_irrigationZones') ?? false,
-        MapLayer.healthStatus: prefs.getBool('layer_healthStatus') ?? false,
+        MapLayer.espaisHort: prefs.getBool('layer_espaisHort') ?? true,
+        MapLayer.wateredToday: prefs.getBool('layer_wateredToday') ?? true,
         MapLayer.treeLabels: prefs.getBool('layer_treeLabels') ?? false,
         MapLayer.satellite: prefs.getBool('layer_satellite') ?? true,
         MapLayer.useOpenStreetMap:

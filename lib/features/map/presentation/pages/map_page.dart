@@ -33,6 +33,8 @@ import '../../../trees/data/repositories/species_repository.dart';
 import '../../../trees/domain/entities/species.dart';
 import '../../../settings/presentation/providers/settings_provider.dart';
 import '../providers/sandbox_provider.dart';
+import '../../../horticulture/data/repositories/hort_repository.dart';
+import '../../../horticulture/domain/entities/espai_hort.dart';
 
 // Provider to check if a specific tree has been watered today
 final treeWateringStatusProvider = StreamProvider.family
@@ -359,48 +361,77 @@ class _MapPageState extends ConsumerState<MapPage>
                           accuracyCircleColor: Color(0x332E7D32),
                         ),
                       ),
-                      // Irrigation Zones Layer (Dynamic from FarmConfig)
-                      if (layers[MapLayer.irrigationZones] == true)
-                        PolygonLayer(
-                          polygons: [
-                            // For now, only mock zones that have real points or rely on matching
-                            // If we want to use the config zones, we would need points in FarmZone
-                            // Since we don't have them yet, keeping the Demo polygons if name matches, or just Demo polygons.
-                            // Given the user request was Metadata-focused, I'll keep the Demo polygons for "Zona A" and "Zona B".
-                            // In future, we can add `points` to FarmZone and map `config.zones`.
-                            Polygon(
-                              points: [
-                                LatLng(41.512800, 0.918400),
-                                LatLng(41.512800, 0.918800),
-                                LatLng(41.512500, 0.918800),
-                                LatLng(41.512500, 0.918400),
-                              ],
-                              color: Colors.blue.withValues(alpha: 0.3),
-                              borderStrokeWidth: 2,
-                              borderColor: Colors.blue,
-                              label: 'Zona A',
-                              labelStyle: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Polygon(
-                              points: [
-                                LatLng(41.512500, 0.918800),
-                                LatLng(41.512500, 0.919200),
-                                LatLng(41.512200, 0.919200),
-                                LatLng(41.512200, 0.918800),
-                              ],
-                              color: Colors.teal.withValues(alpha: 0.3),
-                              borderStrokeWidth: 2,
-                              borderColor: Colors.teal,
-                              label: 'Zona B',
-                              labelStyle: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
+                      // Espais d'Hort Layer
+                      if (layers[MapLayer.espaisHort] == true)
+                        Consumer(
+                          builder: (context, ref, child) {
+                            final espaisAsync = ref
+                                .watch(hortRepositoryProvider)
+                                .getEspaisStream();
+                            return StreamBuilder<List<EspaiHort>>(
+                              stream: espaisAsync,
+                              builder: (context, snapshot) {
+                                if (!snapshot.hasData ||
+                                    snapshot.data!.isEmpty) {
+                                  return const SizedBox.shrink();
+                                }
+
+                                final polygons = snapshot.data!.map((espai) {
+                                  final center = espai.center;
+                                  // Simple estimation: 1 degree latitude ~ 111km.
+                                  // We have length/width in meters.
+                                  final latOffset =
+                                      (espai.length / 2) / 111111.0;
+                                  // Longitude depends on latitude, roughly 111km * cos(lat). Assuming avg lat ~ 41
+                                  final lonOffset =
+                                      (espai.width / 2) /
+                                      (111111.0 *
+                                          math.cos(
+                                            center.latitude * math.pi / 180,
+                                          ));
+
+                                  return Polygon(
+                                    points: [
+                                      LatLng(
+                                        center.latitude - latOffset,
+                                        center.longitude - lonOffset,
+                                      ),
+                                      LatLng(
+                                        center.latitude + latOffset,
+                                        center.longitude - lonOffset,
+                                      ),
+                                      LatLng(
+                                        center.latitude + latOffset,
+                                        center.longitude + lonOffset,
+                                      ),
+                                      LatLng(
+                                        center.latitude - latOffset,
+                                        center.longitude + lonOffset,
+                                      ),
+                                    ],
+                                    color: const Color(
+                                      0xFF556B2F,
+                                    ).withValues(alpha: 0.2), // Soca green
+                                    borderStrokeWidth: 2,
+                                    borderColor: const Color(0xFF556B2F),
+                                    label: espai.nom,
+                                    labelStyle: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      shadows: [
+                                        Shadow(
+                                          blurRadius: 2,
+                                          color: Colors.black,
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }).toList();
+
+                                return PolygonLayer(polygons: polygons);
+                              },
+                            );
+                          },
                         ),
 
                       // Permaculture Zones Layer
@@ -567,6 +598,34 @@ class _MapPageState extends ConsumerState<MapPage>
                               .watch(speciesRepositoryProvider)
                               .getSpecies();
 
+                          // Fetch today's watering events globally to check which trees have been watered today
+                          final now = DateTime.now();
+                          final startOfDay = DateTime(
+                            now.year,
+                            now.month,
+                            now.day,
+                          );
+                          final endOfDay = DateTime(
+                            now.year,
+                            now.month,
+                            now.day,
+                            23,
+                            59,
+                            59,
+                          );
+                          final wateringEventsAsync = ref.watch(
+                            StreamProvider.autoDispose<List<WateringEvent>>((
+                              ref,
+                            ) {
+                              return ref
+                                  .watch(treesRepositoryProvider)
+                                  .getGlobalWateringEvents(
+                                    startDate: startOfDay,
+                                    endDate: endOfDay,
+                                  );
+                            }),
+                          );
+
                           if (!treesAsyncValue.hasValue) {
                             return const SizedBox.shrink();
                           }
@@ -666,12 +725,22 @@ class _MapPageState extends ConsumerState<MapPage>
                               // Build adult canopy circles for planned trees
                               final canopyCircles = <CircleMarker>[];
 
+                              final showWateredToday =
+                                  layers[MapLayer.wateredToday] ?? true;
+                              final wateredTreeIds = <String>{};
+                              if (!showWateredToday &&
+                                  wateringEventsAsync.hasValue) {
+                                for (final event
+                                    in wateringEventsAsync.value!) {
+                                  if (event.treeId != null) {
+                                    wateredTreeIds.add(event.treeId!);
+                                  }
+                                }
+                              }
+
                               if (showPlanned) {
                                 final years = ref.watch(sandboxProvider).years;
 
-                                // --- PRE-CALCULATE SIMULATED RADII ---
-                                // We need to know the radius of EVERY visible tree (active or planned)
-                                // to check for collisions.
                                 final treeRadii =
                                     <String, double>{}; // treeId -> radius
                                 final visibleTrees = treesAsyncValue.value!
@@ -687,6 +756,10 @@ class _MapPageState extends ConsumerState<MapPage>
                                         return false;
                                       }
                                       if (!isDateInRange(t.plantingDate)) {
+                                        return false;
+                                      }
+                                      if (!showWateredToday &&
+                                          wateredTreeIds.contains(t.id)) {
                                         return false;
                                       }
                                       return true;
@@ -870,6 +943,10 @@ class _MapPageState extends ConsumerState<MapPage>
                                             return false;
                                           }
                                           if (!isDateInRange(t.plantingDate)) {
+                                            return false;
+                                          }
+                                          if (!showWateredToday &&
+                                              wateredTreeIds.contains(t.id)) {
                                             return false;
                                           }
                                           return true;

@@ -56,6 +56,16 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
   // Tooltip Overlay
   OverlayEntry? _tooltipOverlay;
 
+  // Drag state: push undo only once per stroke
+  bool _dragUndoPushed = false;
+  bool _pointerDown = false; // Track if pointer is pressed for drag
+
+  // Track last placed position during paint drag to space plants correctly
+  Offset? _lastPaintPos;
+
+  // Lightweight repaint notifier to avoid full setState during eraser drag
+  final ValueNotifier<int> _canvasRepaint = ValueNotifier<int>(0);
+
   void _pushUndo() {
     // Limit stack size? e.g. 20
     if (_undoStack.length >= 20) {
@@ -90,6 +100,7 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
   void dispose() {
     _hidePlantTooltip();
     _transformationController.dispose();
+    _canvasRepaint.dispose();
     super.dispose();
   }
 
@@ -534,12 +545,14 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
       });
 
       if (index != -1) {
-        _pushUndo();
-        setState(() {
-          _placedPlants.removeAt(index);
-          _hasChanges = true;
-        });
-        // Haptic feedback?
+        if (!_dragUndoPushed) {
+          _pushUndo();
+          _dragUndoPushed = true;
+        }
+        // DON'T call setState here — just mutate and repaint the canvas
+        _placedPlants.removeAt(index);
+        _hasChanges = true;
+        _canvasRepaint.value++;
       }
       return;
     }
@@ -585,6 +598,96 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
     }
   }
 
+  /// Lightweight paint-by-drag: places plants at regular intervals
+  /// along the drag path. Uses _canvasRepaint to avoid full widget rebuild.
+  void _handlePaintDrag(
+    Offset localPos,
+    double extraPadding,
+    double scale,
+    List<PlantaHort> plants,
+  ) {
+    if (_selectedSpeciesId == null) return;
+
+    final selected = plants.firstWhere(
+      (p) => p.id == _selectedSpeciesId,
+      orElse: () => plants.first,
+    );
+
+    double pW = selected.distanciaLinies.toDouble();
+    double pH = selected.distanciaPlantacio.toDouble();
+    if (pW <= 0) pW = 30;
+    if (pH <= 0) pH = 30;
+
+    double dx = localPos.dx - extraPadding;
+    double dy = localPos.dy - extraPadding;
+    double xCm = (dx / scale) * 100;
+    double yCm = (dy / scale) * 100;
+
+    if (xCm < 0 || yCm < 0) return;
+
+    // Check spacing from last placed position
+    if (_lastPaintPos != null) {
+      double distSq =
+          (xCm - _lastPaintPos!.dx) * (xCm - _lastPaintPos!.dx) +
+          (yCm - _lastPaintPos!.dy) * (yCm - _lastPaintPos!.dy);
+      // Must move at least one planting distance before placing next
+      if (distSq < pH * pH * 0.8) return;
+    }
+
+    double plantX;
+    double plantY;
+
+    if (_lastPaintPos == null) {
+      // First plant in stroke: place at cursor, snapped to bed
+      plantX = xCm - (pW / 2);
+      double xMeters = plantX / 100.0;
+      double clampedMeters = _clampToBed(xMeters, pW / 100.0);
+      plantX = clampedMeters * 100.0;
+      plantY = yCm - (pH / 2);
+    } else {
+      // Subsequent plants: lock X to first plant, place Y exactly below last
+      plantX = _lastPaintPos!.dx - (pW / 2);
+      // Determine drag direction (down or up)
+      double lastCenterY = _lastPaintPos!.dy;
+      if (yCm >= lastCenterY) {
+        // Dragging downward: place exactly one spacing below
+        plantY = lastCenterY + (pH / 2);
+      } else {
+        // Dragging upward: place exactly one spacing above
+        plantY = lastCenterY - pH - (pH / 2);
+      }
+    }
+
+    // Clamp Y to bed length
+    double bedLengthCm = _espai.length * 100;
+    if (plantY < 0) plantY = 0;
+    if (plantY + pH > bedLengthCm) plantY = bedLengthCm - pH;
+
+    // Check collision
+    final candidateRect = Rect.fromLTWH(plantX, plantY, pW, pH);
+    if (_checkCollision(candidateRect)) return;
+
+    // Push undo once per stroke
+    if (!_dragUndoPushed) {
+      _pushUndo();
+      _dragUndoPushed = true;
+    }
+
+    // Place plant without setState — use repaint notifier
+    _placedPlants.add(
+      PlacedPlant.create(
+        speciesId: selected.id,
+        x: plantX,
+        y: plantY,
+        width: pW,
+        height: pH,
+      ),
+    );
+    _hasChanges = true;
+    _lastPaintPos = Offset(plantX + pW / 2, plantY + pH / 2);
+    _canvasRepaint.value++;
+  }
+
   Offset _applySnapping(double tapX, double tapY, double width, double height) {
     double bestX = tapX - (width / 2);
     double bestY = tapY - (height / 2);
@@ -619,19 +722,15 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
       for (final cx in candidatesX) {
         double dist = (bestX - cx).abs();
         if (dist < thresholdX && dist < minDistX) {
-          // Only snap if significantly better or close enough
           if (dist < 15.0) {
-            // Hard snap distance
-            bestX = cx;
-            minDistX = dist;
-
-            // Validate Collision for this candidate?
-            // If the snap causes collision but original TAP didn't...
-            // But we don't have TAP valid status here easily.
-            // Better to verify AFTER all bestX found, or during selection.
-            // For now, let's select best geometric match.
-            // _checkCollision at the end will block if invalid.
-            // Improvement: If 'bestX' collides, revert to tapX?
+            // Check this candidate wouldn't place us on top of existing plant
+            final testRect = Rect.fromLTWH(cx, bestY, width, height);
+            if (!testRect
+                .deflate(2.0)
+                .overlaps(Rect.fromLTWH(ox, oy, other.width, other.height))) {
+              bestX = cx;
+              minDistX = dist;
+            }
           }
         }
       }
@@ -644,8 +743,14 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
         double dist = (bestY - cy).abs();
         if (dist < thresholdY && dist < minDistY) {
           if (dist < 15.0) {
-            bestY = cy;
-            minDistY = dist;
+            // Check this candidate wouldn't place us on top of existing plant
+            final testRect = Rect.fromLTWH(bestX, cy, width, height);
+            if (!testRect
+                .deflate(2.0)
+                .overlaps(Rect.fromLTWH(ox, oy, other.width, other.height))) {
+              bestY = cy;
+              minDistY = dist;
+            }
           }
         }
       }
@@ -759,10 +864,9 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
   }
 
   bool _checkCollision(Rect candidate) {
-    // Tweak: allow microscopic overlap?
-    // Rect.overlaps is strict.
-    // Let's shrink candidate slightly to ignore edge-touching.
-    final shrunken = candidate.deflate(0.1); // 1mm margin
+    // Allow edge-touching and slight overlap (2cm tolerance)
+    // This matches how the pattern tiler places plants directly adjacent.
+    final shrunken = candidate.deflate(2.0); // 2cm margin
 
     for (final p in _placedPlants) {
       final existing = Rect.fromLTWH(p.x, p.y, p.width, p.height);
@@ -1310,7 +1414,7 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                     color: Colors.deepPurple,
                   ),
                   title: Text(
-                    'Finalitzar Cicle / Arxivar',
+                    'Arxivar Bancal Sencer (Rotació completa)',
                     style: TextStyle(color: Colors.deepPurple),
                   ),
                 ),
@@ -1468,68 +1572,151 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                                     }
                                   },
                                   onLongPressEnd: (_) => _hidePlantTooltip(),
-                                  onPanUpdate:
-                                      (_isPaintMode &&
-                                          (_selectedTool ==
-                                                  DesignerTool.plants ||
-                                              _selectedTool ==
-                                                  DesignerTool.eraser))
-                                      ? (details) {
-                                          _handleDragInCanvas(
-                                            details.localPosition,
-                                            gridPadding,
-                                            pixelsPerMeter,
-                                            plants,
-                                          );
+                                  child: Listener(
+                                    onPointerDown:
+                                        _isPaintMode &&
+                                            (_selectedTool ==
+                                                    DesignerTool.eraser ||
+                                                _selectedTool ==
+                                                    DesignerTool.plants)
+                                        ? (event) {
+                                            _pointerDown = true;
+                                            _dragUndoPushed = false;
+                                            _lastPaintPos = null;
+                                            _hidePlantTooltip();
+                                            if (_selectedTool ==
+                                                DesignerTool.eraser) {
+                                              _handleDragInCanvas(
+                                                event.localPosition,
+                                                gridPadding,
+                                                pixelsPerMeter,
+                                                plants,
+                                              );
+                                            } else if (_selectedTool ==
+                                                    DesignerTool.plants &&
+                                                _selectedSpeciesId != null) {
+                                              _handlePaintDrag(
+                                                event.localPosition,
+                                                gridPadding,
+                                                pixelsPerMeter,
+                                                plants,
+                                              );
+                                            }
+                                          }
+                                        : null,
+                                    onPointerMove:
+                                        _isPaintMode &&
+                                            (_selectedTool ==
+                                                    DesignerTool.eraser ||
+                                                _selectedTool ==
+                                                    DesignerTool.plants)
+                                        ? (event) {
+                                            if (!_pointerDown) return;
+                                            if (_selectedTool ==
+                                                DesignerTool.eraser) {
+                                              _handleDragInCanvas(
+                                                event.localPosition,
+                                                gridPadding,
+                                                pixelsPerMeter,
+                                                plants,
+                                              );
+                                            } else if (_selectedTool ==
+                                                    DesignerTool.plants &&
+                                                _selectedSpeciesId != null) {
+                                              _handlePaintDrag(
+                                                event.localPosition,
+                                                gridPadding,
+                                                pixelsPerMeter,
+                                                plants,
+                                              );
+                                            }
+                                          }
+                                        : null,
+                                    onPointerUp:
+                                        _isPaintMode &&
+                                            (_selectedTool ==
+                                                    DesignerTool.eraser ||
+                                                _selectedTool ==
+                                                    DesignerTool.plants)
+                                        ? (event) {
+                                            _pointerDown = false;
+                                            _lastPaintPos = null;
+                                            if (_dragUndoPushed) {
+                                              setState(() {});
+                                            }
+                                          }
+                                        : null,
+                                    onPointerCancel:
+                                        _isPaintMode &&
+                                            (_selectedTool ==
+                                                    DesignerTool.eraser ||
+                                                _selectedTool ==
+                                                    DesignerTool.plants)
+                                        ? (event) {
+                                            _pointerDown = false;
+                                            _lastPaintPos = null;
+                                            if (_dragUndoPushed) {
+                                              setState(() {});
+                                            }
+                                          }
+                                        : null,
+                                    child: MouseRegion(
+                                      onHover: (event) {
+                                        // Suppress tooltips during active eraser drag
+                                        if (_isPaintMode &&
+                                            _selectedTool ==
+                                                DesignerTool.eraser &&
+                                            _dragUndoPushed) {
+                                          return;
                                         }
-                                      : null,
-                                  child: MouseRegion(
-                                    onHover: (event) {
-                                      final placed = _findPlantAtPos(
-                                        event.localPosition,
-                                        gridPadding,
-                                        pixelsPerMeter,
-                                      );
-                                      if (placed != null) {
-                                        _showPlantTooltip(
-                                          placed,
-                                          event.position,
+                                        final placed = _findPlantAtPos(
+                                          event.localPosition,
+                                          gridPadding,
+                                          pixelsPerMeter,
                                         );
-                                      } else {
-                                        _hidePlantTooltip();
-                                      }
-                                    },
-                                    onExit: (_) => _hidePlantTooltip(),
-                                    child: Consumer(
-                                      builder: (context, ref, child) {
-                                        final patterns =
-                                            ref
-                                                .watch(
-                                                  rotationPatternsStreamProvider,
-                                                )
-                                                .asData
-                                                ?.value ??
-                                            [];
-                                        return CustomPaint(
-                                          size: Size(
-                                            cols * cellPixelSize,
-                                            rows * cellPixelSize,
-                                          ),
-                                          painter: GardenGridPainter(
-                                            rows: rows,
-                                            cols: cols,
-                                            cellPixelSize: cellPixelSize,
-                                            placedPlants: _placedPlants,
-                                            plants: plants,
-                                            isBedAt: _isBedAt,
-                                            layoutConfig: _espai.layoutConfig,
-                                            patterns: patterns,
-                                            padding: gridPadding,
-                                            historic: _espai.historic,
-                                            getBedIndexFromX: _getBedIndexFromX,
-                                          ),
-                                        );
+                                        if (placed != null) {
+                                          _showPlantTooltip(
+                                            placed,
+                                            event.position,
+                                          );
+                                        } else {
+                                          _hidePlantTooltip();
+                                        }
                                       },
+                                      onExit: (_) => _hidePlantTooltip(),
+                                      child: Consumer(
+                                        builder: (context, ref, child) {
+                                          final patterns =
+                                              ref
+                                                  .watch(
+                                                    rotationPatternsStreamProvider,
+                                                  )
+                                                  .asData
+                                                  ?.value ??
+                                              [];
+                                          return CustomPaint(
+                                            size: Size(
+                                              cols * cellPixelSize,
+                                              rows * cellPixelSize,
+                                            ),
+                                            painter: GardenGridPainter(
+                                              rows: rows,
+                                              cols: cols,
+                                              cellPixelSize: cellPixelSize,
+                                              placedPlants: _placedPlants,
+                                              plants: plants,
+                                              isBedAt: _isBedAt,
+                                              layoutConfig: _espai.layoutConfig,
+                                              patterns: patterns,
+                                              padding: gridPadding,
+                                              historic: _espai.historic,
+                                              getBedIndexFromX:
+                                                  _getBedIndexFromX,
+                                              repaintNotifier: _canvasRepaint,
+                                            ),
+                                          );
+                                        },
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -2273,6 +2460,95 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
     }
   }
 
+  Future<void> _archiveSpeciesInBed(int bedIndex, String speciesId) async {
+    String plantName = speciesId;
+    try {
+      plantName = _currentPlantsList
+          .firstWhere((p) => p.id == speciesId)
+          .nomComu;
+    } catch (_) {}
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Arxivar línia?'),
+        content: Text(
+          'Estàs segur que vols arxivar i finalitzar el cicle de $plantName d\'aquest bancal?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel·lar'),
+          ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.archive_outlined),
+            label: const Text('Arxivar'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurple,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    // Find all plants of this species in this bed
+    final List<PlacedPlant> remainingPlants = [];
+    final List<PlacedPlant> archivedPlants = [];
+    DateTime earliestDate = DateTime.now();
+
+    for (var p in _placedPlants) {
+      double centerXCm = p.x + p.width / 2;
+      double centerXM = centerXCm / 100.0;
+      int? currentBedIdx = _getBedIndexFromX(centerXM);
+
+      if (currentBedIdx == bedIndex && p.speciesId == speciesId) {
+        archivedPlants.add(p);
+        if (p.placedAt.isBefore(earliestDate)) {
+          earliestDate = p.placedAt;
+        }
+      } else {
+        remainingPlants.add(p);
+      }
+    }
+
+    if (archivedPlants.isEmpty) return;
+
+    _pushUndo();
+
+    // Create history entry
+    final newEntry = PlantacioHistorica.create(
+      mainCropId: speciesId,
+      auxiliaryCropIds: [],
+      dataPlantacio: earliestDate,
+      bedIndex: bedIndex,
+    );
+
+    // Update history
+    final updatedHistoric = List<PlantacioHistorica>.from(_espai.historic)
+      ..add(newEntry);
+
+    setState(() {
+      _espai = _espai.copyWith(
+        placedPlants: remainingPlants,
+        historic: updatedHistoric,
+      );
+      _placedPlants = List.from(remainingPlants);
+      _hasChanges = true;
+    });
+
+    await _saveChanges();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Línia arxivada correctament.')),
+      );
+    }
+  }
+
   void _onBedTap(double xMeters) {
     if (_espai.layoutConfig == null) return;
     final bedIndex = _getBedIndexFromX(xMeters);
@@ -2568,13 +2844,28 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                                         Text(plant.nomComu),
                                       ],
                                     ),
-                                    Text(
-                                      type == 'harvest'
-                                          ? '${(e.value as double).toStringAsFixed(1)} kg'
-                                          : type == 'plants'
-                                          ? '${e.value} u.'
-                                          : '${e.value} dies',
-                                    ),
+                                    if (type == 'plants') ...[
+                                      Text('${e.value} u.'),
+                                      const SizedBox(width: 8),
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.archive,
+                                          size: 20,
+                                          color: Colors.deepPurple,
+                                        ),
+                                        tooltip: 'Arxivar només aquesta planta',
+                                        onPressed: () {
+                                          Navigator.pop(context); // Close stats
+                                          _archiveSpeciesInBed(bIndex, e.key);
+                                        },
+                                      ),
+                                    ] else if (type == 'harvest') ...[
+                                      Text(
+                                        '${(e.value as double).toStringAsFixed(1)} kg',
+                                      ),
+                                    ] else ...[
+                                      Text('${e.value} dies'),
+                                    ],
                                   ],
                                 ),
                               );
@@ -3043,7 +3334,8 @@ class GardenGridPainter extends CustomPainter {
     this.padding = 0.0,
     this.historic = const [],
     this.getBedIndexFromX,
-  });
+    Listenable? repaintNotifier,
+  }) : super(repaint: repaintNotifier);
 
   @override
   void paint(Canvas canvas, Size size) {

@@ -1,5 +1,9 @@
 ﻿# Release Notes
 
+## v1.9.7
+Hort: Es poden pintar i esborrar lliscant el dit o ratolí.
+Widget a la pantalla inicial.
+Mapa: filtres de reg i de espais de hort.
 ## v1.9.6
 Hort: Gestió de Patrons.
 Aplicació de patrons a bancals.
@@ -176,6 +180,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

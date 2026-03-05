@@ -147,12 +147,11 @@ class LayerControllerSheet extends ConsumerWidget {
                 ),
               ),
             SwitchListTile(
-              title: const Text('Zones de Reg'),
-              subtitle: const Text('Mostra les àrees de reg (A/B)'),
-              secondary: const Icon(Icons.grass, color: Colors.blue),
-              value: layers[MapLayer.irrigationZones] ?? false,
-              onChanged: (val) =>
-                  notifier.toggleLayer(MapLayer.irrigationZones),
+              title: const Text('Espais d\'Hort'),
+              subtitle: const Text('Mostra les zones de cultiu (horts)'),
+              secondary: const Icon(Icons.grass, color: Color(0xFF556B2F)),
+              value: layers[MapLayer.espaisHort] ?? true,
+              onChanged: (val) => notifier.toggleLayer(MapLayer.espaisHort),
             ),
             SwitchListTile(
               title: const Text('Zones Permacultura (PDC)'),
@@ -197,13 +196,13 @@ class LayerControllerSheet extends ConsumerWidget {
                 ),
               ),
             SwitchListTile(
-              title: const Text('Salut dels Arbres'),
-              subtitle: const Text(
-                'Codifica els arbres per color segons salut',
-              ),
-              secondary: const Icon(Icons.health_and_safety, color: Colors.red),
-              value: layers[MapLayer.healthStatus] ?? false,
-              onChanged: (val) => notifier.toggleLayer(MapLayer.healthStatus),
+              title: const Text('Ocultar Regats Avui'),
+              subtitle: const Text('Amaga els arbres que ja has regat avui'),
+              secondary: const Icon(Icons.water_drop, color: Colors.blue),
+              value:
+                  !(layers[MapLayer.wateredToday] ??
+                      true), // Inverted logic for UI ("Hide" vs "Show")
+              onChanged: (val) => notifier.toggleLayer(MapLayer.wateredToday),
             ),
             SwitchListTile(
               title: const Text('IDs dels Arbres'),
