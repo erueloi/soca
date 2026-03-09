@@ -86,7 +86,7 @@ try {
 
     # --- Step 6: Build Web ---
     Write-Step "Step 6: Building Web PWA"
-    cmd /c "flutter build web --release --no-tree-shake-icons"
+    cmd /c "flutter build web --release --no-tree-shake-icons --no-wasm-dry-run"
     if ($LASTEXITCODE -ne 0) { throw "Web build failed" }
     Write-Success "Web Built."
     

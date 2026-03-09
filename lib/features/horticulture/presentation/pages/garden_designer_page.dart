@@ -6,6 +6,7 @@ import '../../domain/entities/planta_hort.dart';
 import '../../domain/entities/placed_plant.dart';
 import '../../domain/entities/plantacio_historica.dart';
 import '../../domain/services/assistent_hort_service.dart';
+import '../../domain/services/garden_irrigation_service.dart';
 import '../../../trees/presentation/pages/location_picker_page.dart';
 
 import '../../data/repositories/hort_repository.dart';
@@ -2389,8 +2390,8 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
     // Determine the earliest placedAt date from current plants
     DateTime earliestDate = DateTime.now();
     for (var p in _placedPlants) {
-      if (p.placedAt.isBefore(earliestDate)) {
-        earliestDate = p.placedAt;
+      if (p.placedAt != null && p.placedAt!.isBefore(earliestDate)) {
+        earliestDate = p.placedAt!;
       }
     }
 
@@ -2507,8 +2508,8 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
 
       if (currentBedIdx == bedIndex && p.speciesId == speciesId) {
         archivedPlants.add(p);
-        if (p.placedAt.isBefore(earliestDate)) {
-          earliestDate = p.placedAt;
+        if (p.placedAt != null && p.placedAt!.isBefore(earliestDate)) {
+          earliestDate = p.placedAt!;
         }
       } else {
         remainingPlants.add(p);
@@ -2706,11 +2707,6 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
 
     // Assign Plants to Beds
     for (var p in _placedPlants) {
-      // Find Bed
-      // p.x is center? NO, Left.
-      // Bed check logic uses meters. p.x is cm.
-      // Logic assumes plant is inside bed?
-      // Use center of plant for more robust 'belonging' check
       double centerXCm = p.x + p.width / 2;
       double centerXM = centerXCm / 100.0;
       int? bedIndex = _getBedIndexFromX(centerXM);
@@ -2723,19 +2719,37 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
 
         final items = bedStats[bedIndex]!['items'] as Map<String, dynamic>;
 
+        // Create a normalized date string (YYYY-MM-DD) for grouping or "planned"
+        final dateStr = p.placedAt != null
+            ? '${p.placedAt!.year}-${p.placedAt!.month.toString().padLeft(2, '0')}-${p.placedAt!.day.toString().padLeft(2, '0')}'
+            : 'planned';
+        final groupKey = '${p.speciesId}_$dateStr';
+
+        if (!items.containsKey(groupKey)) {
+          items[groupKey] = {
+            'speciesId': p.speciesId,
+            'placedAt': p.placedAt != null
+                ? DateTime(p.placedAt!.year, p.placedAt!.month, p.placedAt!.day)
+                : null,
+            'value': 0.0, // used for kg or count or maxDays
+          };
+        }
+
+        final groupData = items[groupKey] as Map<String, dynamic>;
+
         if (type == 'harvest') {
           // Add Kg
           double areaM2 = (p.width * p.height) / 10000.0;
           double kg = areaM2 * plantDef.rendiment;
-          items[p.speciesId] = (items[p.speciesId] ?? 0.0) + kg;
+          groupData['value'] = (groupData['value'] as double) + kg;
         } else if (type == 'plants') {
           // Add Count
-          items[p.speciesId] = (items[p.speciesId] ?? 0) + 1;
+          groupData['value'] = (groupData['value'] as double) + 1.0;
         } else if (type == 'cycle') {
           // Max Cycle
-          int currentMax = items[p.speciesId] ?? 0;
+          double currentMax = groupData['value'] as double;
           if (plantDef.diesEnCamp > currentMax) {
-            items[p.speciesId] = plantDef.diesEnCamp;
+            groupData['value'] = plantDef.diesEnCamp.toDouble();
           }
         }
       }
@@ -2775,14 +2789,19 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
 
                     double totalBedValue = 0;
                     if (type == 'harvest' || type == 'plants') {
-                      for (var v in items.values) {
-                        totalBedValue += (v as num).toDouble();
+                      for (var groupData in items.values) {
+                        totalBedValue +=
+                            (groupData as Map<String, dynamic>)['value']
+                                as double;
                       }
                     } else {
                       // Max of bed
-                      for (var v in items.values) {
-                        if ((v as num) > totalBedValue) {
-                          totalBedValue = (v).toDouble();
+                      for (var groupData in items.values) {
+                        final val =
+                            (groupData as Map<String, dynamic>)['value']
+                                as double;
+                        if (val > totalBedValue) {
+                          totalBedValue = val;
                         }
                       }
                     }
@@ -2821,53 +2840,224 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                             ),
                             const Divider(),
                             ...items.entries.map((e) {
+                              final groupData = e.value as Map<String, dynamic>;
+                              final speciesId =
+                                  groupData['speciesId'] as String;
+                              final placedAt =
+                                  groupData['placedAt'] as DateTime?;
+
+                              final val = groupData['value'] as double;
+
                               final plant = startPlants.firstWhere(
-                                (sp) => sp.id == e.key,
+                                (sp) => sp.id == speciesId,
                                 orElse: () => startPlants.first,
                               );
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 4,
-                                ),
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Row(
+
+                              // Calculate harvest progress
+                              final now = DateTime.now();
+                              final cycleDays = plant.diesEnCamp;
+                              double progress = 0.0;
+                              DateTime? estimatedHarvest;
+
+                              if (placedAt != null && cycleDays > 0) {
+                                final daysSincePlaced = now
+                                    .difference(placedAt)
+                                    .inDays;
+                                progress = daysSincePlaced / cycleDays;
+                                if (progress < 0) progress = 0;
+                                if (progress > 1) progress = 1;
+                                estimatedHarvest = placedAt.add(
+                                  Duration(days: cycleDays),
+                                );
+                              }
+
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 4,
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
-                                        Icon(
-                                          plant.partComestible.icon,
-                                          size: 16,
-                                          color: plant.color,
+                                        Expanded(
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                plant.partComestible.icon,
+                                                size: 16,
+                                                color: plant.color,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      plant.nomComu,
+                                                      style: const TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
+                                                    Row(
+                                                      children: [
+                                                        Text(
+                                                          placedAt != null
+                                                              ? 'Sembrats: ${placedAt.day}/${placedAt.month}/${placedAt.year}'
+                                                              : 'Estat: Planificat',
+                                                          style:
+                                                              const TextStyle(
+                                                                fontSize: 12,
+                                                                color: Colors
+                                                                    .black54,
+                                                              ),
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 4,
+                                                        ),
+                                                        InkWell(
+                                                          onTap: () {
+                                                            Navigator.pop(
+                                                              context,
+                                                            ); // Close stats
+                                                            _editGroupDate(
+                                                              bIndex,
+                                                              speciesId,
+                                                              placedAt,
+                                                            );
+                                                          },
+                                                          child: const Icon(
+                                                            Icons.edit_calendar,
+                                                            size: 14,
+                                                            color: Colors.blue,
+                                                          ),
+                                                        ),
+                                                        if (placedAt !=
+                                                            null) ...[
+                                                          const SizedBox(
+                                                            width: 8,
+                                                          ),
+                                                          InkWell(
+                                                            onTap: () {
+                                                              Navigator.pop(
+                                                                context,
+                                                              );
+                                                              _clearGroupDate(
+                                                                bIndex,
+                                                                speciesId,
+                                                                placedAt,
+                                                              );
+                                                            },
+                                                            child: const Icon(
+                                                              Icons
+                                                                  .layers_clear,
+                                                              size: 14,
+                                                              color:
+                                                                  Colors.orange,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ],
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                        const SizedBox(width: 8),
-                                        Text(plant.nomComu),
+                                        if (type == 'plants') ...[
+                                          Text('${val.toInt()} u.'),
+                                          const SizedBox(width: 8),
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.archive,
+                                              size: 20,
+                                              color: Colors.deepPurple,
+                                            ),
+                                            tooltip:
+                                                'Arxivar només aquesta planta',
+                                            onPressed: () {
+                                              Navigator.pop(context);
+                                              _archiveSpeciesInBed(
+                                                bIndex,
+                                                speciesId,
+                                              );
+                                            },
+                                          ),
+                                        ] else if (type == 'harvest') ...[
+                                          Text('${val.toStringAsFixed(1)} kg'),
+                                        ] else ...[
+                                          Text('${val.toInt()} dies'),
+                                        ],
                                       ],
                                     ),
-                                    if (type == 'plants') ...[
-                                      Text('${e.value} u.'),
-                                      const SizedBox(width: 8),
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.archive,
-                                          size: 20,
-                                          color: Colors.deepPurple,
-                                        ),
-                                        tooltip: 'Arxivar només aquesta planta',
-                                        onPressed: () {
-                                          Navigator.pop(context); // Close stats
-                                          _archiveSpeciesInBed(bIndex, e.key);
-                                        },
+                                  ),
+                                  if (type == 'plants' &&
+                                      cycleDays > 0 &&
+                                      placedAt != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                        left: 24,
+                                        bottom: 8,
+                                        right: 8,
                                       ),
-                                    ] else if (type == 'harvest') ...[
-                                      Text(
-                                        '${(e.value as double).toStringAsFixed(1)} kg',
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Stack(
+                                            children: [
+                                              Container(
+                                                height: 8,
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey[300],
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                ),
+                                              ),
+                                              FractionallySizedBox(
+                                                widthFactor: progress,
+                                                child: Container(
+                                                  height: 8,
+                                                  decoration: BoxDecoration(
+                                                    color: progress >= 1.0
+                                                        ? Colors.green
+                                                        : Colors.lightGreen,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          4,
+                                                        ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            progress >= 1.0
+                                                ? '🟢 Llest per collir'
+                                                : '⌛ Collita est: ${estimatedHarvest!.day}/${estimatedHarvest.month}/${estimatedHarvest.year}',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: progress >= 1.0
+                                                  ? Colors.green[700]
+                                                  : Colors.black54,
+                                              fontWeight: progress >= 1.0
+                                                  ? FontWeight.bold
+                                                  : FontWeight.normal,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                    ] else ...[
-                                      Text('${e.value} dies'),
-                                    ],
-                                  ],
-                                ),
+                                    ),
+                                ],
                               );
                             }),
                           ],
@@ -2882,6 +3072,111 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
         );
       },
     );
+  }
+
+  Future<void> _editGroupDate(
+    int bedIndex,
+    String speciesId,
+    DateTime? oldDate,
+  ) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: oldDate ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2050),
+      helpText: 'Selecciona la data de sembra/trasplantament',
+      confirmText: 'GUARDAR',
+      cancelText: 'CANCEL·LAR',
+    );
+
+    if (picked != null && picked != oldDate) {
+      _pushUndo();
+      setState(() {
+        for (int i = 0; i < _placedPlants.length; i++) {
+          final p = _placedPlants[i];
+          if (p.speciesId == speciesId) {
+            double centerXCm = p.x + p.width / 2;
+            double centerXM = centerXCm / 100.0;
+            int? currentBedIdx = _getBedIndexFromX(centerXM);
+
+            if (currentBedIdx == bedIndex) {
+              // Check if original date matches (normalized) or both are null
+              bool matches = false;
+              if (oldDate == null && p.placedAt == null) {
+                matches = true;
+              } else if (oldDate != null && p.placedAt != null) {
+                if (p.placedAt!.year == oldDate.year &&
+                    p.placedAt!.month == oldDate.month &&
+                    p.placedAt!.day == oldDate.day) {
+                  matches = true;
+                }
+              }
+
+              if (matches) {
+                // Keep time of day if it existed, otherwise set default time (e.g., noon)
+                int hour = p.placedAt?.hour ?? 12;
+                int minute = p.placedAt?.minute ?? 0;
+
+                final newDate = DateTime(
+                  picked.year,
+                  picked.month,
+                  picked.day,
+                  hour,
+                  minute,
+                );
+                _placedPlants[i] = p.copyWith(placedAt: newDate);
+                _hasChanges = true;
+              }
+            }
+          }
+        }
+        _espai = _espai.copyWith(placedPlants: _placedPlants);
+      });
+      await _saveChanges();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Data de sembra actualitzada correctament.'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _clearGroupDate(
+    int bedIndex,
+    String speciesId,
+    DateTime oldDate,
+  ) async {
+    _pushUndo();
+    setState(() {
+      for (int i = 0; i < _placedPlants.length; i++) {
+        final p = _placedPlants[i];
+        if (p.speciesId == speciesId && p.placedAt != null) {
+          double centerXCm = p.x + p.width / 2;
+          double centerXM = centerXCm / 100.0;
+          int? currentBedIdx = _getBedIndexFromX(centerXM);
+
+          if (currentBedIdx == bedIndex) {
+            if (p.placedAt!.year == oldDate.year &&
+                p.placedAt!.month == oldDate.month &&
+                p.placedAt!.day == oldDate.day) {
+              _placedPlants[i] = p.copyWith(clearDate: true);
+              _hasChanges = true;
+            }
+          }
+        }
+      }
+      _espai = _espai.copyWith(placedPlants: _placedPlants);
+    });
+    await _saveChanges();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('S\'ha tornat a l\'estat "Planificat".')),
+      );
+    }
   }
 
   void _showModeSnackBar() {
@@ -2931,10 +3226,26 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
         DateTime startDate = bedData?.rotationStartDate ?? DateTime.now();
         double widthOverride =
             bedData?.widthOverride ?? _espai.layoutConfig!.bedWidth;
+        double cabalOverride = bedData?.cabalSistemaLitersHora ?? 10.0;
+        IrrigationMethod irrigationMethod =
+            bedData?.irrigationMethod ?? IrrigationMethod.manual;
         int tabIndex = 0;
 
         return StatefulBuilder(
           builder: (context, setState) {
+            final irrigationService = ref.read(gardenIrrigationServiceProvider);
+            final currentBedData =
+                _espai.layoutConfig?.beds[bedIndex] ?? bedData;
+            final bedAreaSqm =
+                _espai.layoutConfig!.getBedWidth(bedIndex) *
+                _espai.layoutConfig!.totalLength;
+            final bedName = currentBedData?.name ?? 'B\${bedIndex + 1}';
+            final bedDataSafe = currentBedData ?? BedData(name: bedName);
+            final wateringReq = irrigationService.getWateringRecommendation(
+              bedDataSafe,
+              bedAreaSqm,
+            );
+
             return Container(
               padding: const EdgeInsets.all(16),
               height: MediaQuery.of(context).size.height * 0.65,
@@ -2960,9 +3271,10 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                             decoration: BoxDecoration(
                               border: Border(
                                 bottom: BorderSide(
-                                  color: tabIndex == 0
-                                      ? Colors.deepPurple
-                                      : Colors.grey.shade300,
+                                  color:
+                                      tabIndex == 0
+                                          ? Colors.deepPurple
+                                          : Colors.grey.shade300,
                                   width: tabIndex == 0 ? 3 : 1,
                                 ),
                               ),
@@ -2971,12 +3283,15 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                               'Configuració',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                fontWeight: tabIndex == 0
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                                color: tabIndex == 0
-                                    ? Colors.deepPurple
-                                    : Colors.grey,
+                                fontWeight:
+                                    tabIndex == 0
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                color:
+                                    tabIndex == 0
+                                        ? Colors.deepPurple
+                                        : Colors.grey,
+                                fontSize: 13,
                               ),
                             ),
                           ),
@@ -2990,9 +3305,10 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                             decoration: BoxDecoration(
                               border: Border(
                                 bottom: BorderSide(
-                                  color: tabIndex == 1
-                                      ? Colors.deepPurple
-                                      : Colors.grey.shade300,
+                                  color:
+                                      tabIndex == 1
+                                          ? Colors.deepPurple
+                                          : Colors.grey.shade300,
                                   width: tabIndex == 1 ? 3 : 1,
                                 ),
                               ),
@@ -3004,12 +3320,15 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                                   'Històric',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
-                                    fontWeight: tabIndex == 1
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                    color: tabIndex == 1
-                                        ? Colors.deepPurple
-                                        : Colors.grey,
+                                    fontWeight:
+                                        tabIndex == 1
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                    color:
+                                        tabIndex == 1
+                                            ? Colors.deepPurple
+                                            : Colors.grey,
+                                    fontSize: 13,
                                   ),
                                 ),
                                 if (bedHistoric.isNotEmpty) ...[
@@ -3036,163 +3355,326 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                   const SizedBox(height: 16),
                   // Tab content
                   Expanded(
-                    child: tabIndex == 0
-                        ? Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Assignar Patró de Rotació:'),
-                              const SizedBox(height: 8),
-                              Consumer(
-                                builder: (context, ref, _) {
-                                  final patternsAsync = ref.watch(
-                                    rotationPatternsStreamProvider,
-                                  );
-                                  return patternsAsync.when(
-                                    data: (patterns) =>
-                                        DropdownButtonFormField<String>(
-                                          initialValue: selectedPattern,
-                                          decoration: const InputDecoration(
-                                            border: OutlineInputBorder(),
-                                            labelText: 'Selecciona un Patró',
-                                          ),
-                                          items: [
-                                            const DropdownMenuItem(
-                                              value: null,
-                                              child: Text('Cap (Manual)'),
-                                            ),
-                                            ...patterns.map(
-                                              (p) => DropdownMenuItem(
-                                                value: p.id,
-                                                child: Text(p.name),
-                                              ),
-                                            ),
-                                          ],
-                                          onChanged: (val) {
-                                            setState(() {
-                                              selectedPattern = val;
-                                            });
-                                          },
-                                        ),
-                                    loading: () =>
-                                        const LinearProgressIndicator(),
-                                    error: (e, s) =>
-                                        Text('Error loading patterns: $e'),
-                                  );
-                                },
-                              ),
-                              const SizedBox(height: 16),
-                              const Text('Data d\'Inici de la Rotació:'),
-                              ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                title: Text(
-                                  '${startDate.day}/${startDate.month}/${startDate.year}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                trailing: const Icon(Icons.calendar_today),
-                                onTap: () async {
-                                  final picked = await showDatePicker(
-                                    context: context,
-                                    initialDate: startDate,
-                                    firstDate: DateTime(2020),
-                                    lastDate: DateTime(2030),
-                                  );
-                                  if (picked != null) {
-                                    setState(() {
-                                      startDate = picked;
-                                    });
-                                  }
-                                },
-                              ),
-                              const SizedBox(height: 16),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
+                    child:
+                        tabIndex == 0
+                            ? SingleChildScrollView(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text('Amplada d\'aquest bancal:'),
-                                  Text(
-                                    '${(widthOverride * 100).toInt()} cm',
-                                    style: const TextStyle(
+                                  // Irrigation Banner
+                                  Container(
+                                    margin: const EdgeInsets.only(bottom: 16),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          wateringReq.needsWater
+                                              ? Colors.blue.withValues(
+                                                alpha: 0.1,
+                                              )
+                                              : Colors.green.withValues(
+                                                alpha: 0.1,
+                                              ),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color:
+                                            wateringReq.needsWater
+                                                ? Colors.blue.withValues(
+                                                  alpha: 0.3,
+                                                )
+                                                : Colors.green.withValues(
+                                                  alpha: 0.3,
+                                                ),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            wateringReq.needsWater
+                                                ? wateringReq.actionText
+                                                    .replaceFirst('🔴 ', '')
+                                                : '🟢 Sòl humit. No cal regar',
+                                            style: TextStyle(
+                                              color:
+                                                  wateringReq.needsWater
+                                                      ? Colors.blue.shade900
+                                                      : Colors.green.shade900,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                        if (wateringReq.needsWater)
+                                          TextButton(
+                                            onPressed: () async {
+                                              final newBedData = (currentBedData ??
+                                                      BedData())
+                                                  .copyWith(
+                                                    soilBalance: 0.0,
+                                                    lastBalanceUpdate:
+                                                        DateTime.now(),
+                                                  );
+                                              final newBeds =
+                                                  Map<int, BedData>.from(
+                                                    _espai.layoutConfig!.beds,
+                                                  );
+                                              newBeds[bedIndex] = newBedData;
+                                              final newConfig = _espai
+                                                  .layoutConfig!
+                                                  .copyWith(beds: newBeds);
+
+                                              _saveBedData(newConfig);
+                                              setState(() {});
+                                            },
+                                            child: const Text(
+                                              'Marcar com a Regat',
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Text('Assignar Patró de Rotació:'),
+                                  const SizedBox(height: 8),
+                                  Consumer(
+                                    builder: (context, ref, _) {
+                                      final patternsAsync = ref.watch(
+                                        rotationPatternsStreamProvider,
+                                      );
+                                      return patternsAsync.when(
+                                        data:
+                                            (patterns) =>
+                                                DropdownButtonFormField<String>(
+                                                  initialValue: selectedPattern,
+                                                  decoration:
+                                                      const InputDecoration(
+                                                        border:
+                                                            OutlineInputBorder(),
+                                                        labelText:
+                                                            'Selecciona un Patró',
+                                                      ),
+                                                  items: [
+                                                    const DropdownMenuItem(
+                                                      value: null,
+                                                      child: Text(
+                                                        'Cap (Manual)',
+                                                      ),
+                                                    ),
+                                                    ...patterns.map(
+                                                      (p) => DropdownMenuItem(
+                                                        value: p.id,
+                                                        child: Text(p.name),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                  onChanged: (val) {
+                                                    setState(() {
+                                                      selectedPattern = val;
+                                                    });
+                                                  },
+                                                ),
+                                        loading:
+                                            () =>
+                                                const LinearProgressIndicator(),
+                                        error:
+                                            (e, s) => Text(
+                                              'Error loading patterns: $e',
+                                            ),
+                                      );
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+                                  const Text('Data d\'Inici de la Rotació:'),
+                                  ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    title: Text(
+                                      '${startDate.day}/${startDate.month}/${startDate.year}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    trailing: const Icon(Icons.calendar_today),
+                                    onTap: () async {
+                                      final picked = await showDatePicker(
+                                        context: context,
+                                        initialDate: startDate,
+                                        firstDate: DateTime(2020),
+                                        lastDate: DateTime(2030),
+                                      );
+                                      if (picked != null) {
+                                        setState(() {
+                                          startDate = picked;
+                                        });
+                                      }
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text('Amplada d\'aquest bancal:'),
+                                      Text(
+                                        '${(widthOverride * 100).toInt()} cm',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Slider(
+                                    value: widthOverride,
+                                    min: 0.2, // 20cm
+                                    max: 2.0, // 200cm
+                                    divisions: 36, // steps of 5cm
+                                    label:
+                                        '${(widthOverride * 100).toInt()} cm',
+                                    activeColor: Colors.deepPurple,
+                                    onChanged: (val) {
+                                      setState(() {
+                                        widthOverride = val;
+                                      });
+                                    },
+                                  ),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'Mètode de Reg:',
+                                    style: TextStyle(
                                       fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  SegmentedButton<IrrigationMethod>(
+                                    segments: const [
+                                      ButtonSegment(
+                                        value: IrrigationMethod.manual,
+                                        label: Text('Manual'),
+                                        icon: Icon(Icons.water_drop_outlined),
+                                      ),
+                                      ButtonSegment(
+                                        value: IrrigationMethod.drip,
+                                        label: Text('Gota a Gota'),
+                                        icon: Icon(Icons.water),
+                                      ),
+                                    ],
+                                    selected: {irrigationMethod},
+                                    onSelectionChanged: (
+                                      Set<IrrigationMethod> newSelection,
+                                    ) {
+                                      setState(() {
+                                        irrigationMethod = newSelection.first;
+                                      });
+                                    },
+                                  ),
+                                  if (irrigationMethod ==
+                                      IrrigationMethod.drip) ...[
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        const Text('Cabal reg m² (L/h):'),
+                                        Text(
+                                          '${cabalOverride.toStringAsFixed(1)} L/h',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    Slider(
+                                      value: cabalOverride,
+                                      min: 2.0,
+                                      max: 30.0,
+                                      divisions: 56, // steps of 0.5
+                                      label:
+                                          '${cabalOverride.toStringAsFixed(1)} L/h',
+                                      activeColor: Colors.blue,
+                                      onChanged: (val) {
+                                        setState(() {
+                                          cabalOverride = val;
+                                        });
+                                      },
+                                    ),
+                                  ],
+                                  const SizedBox(height: 16),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      icon: const Icon(Icons.auto_awesome),
+                                      label: const Text(
+                                        'Aplicar Gremi / Patró',
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      onPressed: () {
+                                        Navigator.pop(context);
+                                        _showApplyGremiDialog(bedIndex);
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton(
+                                      onPressed: () async {
+                                        final newBedData = (bedData ??
+                                                BedData())
+                                            .copyWith(
+                                              rotationPatternId:
+                                                  selectedPattern,
+                                              rotationStartDate: startDate,
+                                              widthOverride:
+                                                  widthOverride ==
+                                                          _espai.layoutConfig!
+                                                              .bedWidth
+                                                      ? null
+                                                      : widthOverride,
+                                              irrigationMethod:
+                                                  irrigationMethod,
+                                              cabalSistemaLitersHora:
+                                                  cabalOverride,
+                                            );
+
+                                        final newBeds = Map<int, BedData>.from(
+                                          _espai.layoutConfig!.beds,
+                                        );
+                                        newBeds[bedIndex] = newBedData;
+
+                                        final newConfig = GardenLayoutConfig(
+                                          totalWidth:
+                                              _espai.layoutConfig!.totalWidth,
+                                          totalLength:
+                                              _espai.layoutConfig!.totalLength,
+                                          numberOfBeds:
+                                              _espai.layoutConfig!.numberOfBeds,
+                                          bedWidth:
+                                              _espai.layoutConfig!.bedWidth,
+                                          pathWidth:
+                                              _espai.layoutConfig!.pathWidth,
+                                          cellSize:
+                                              _espai.layoutConfig!.cellSize,
+                                          beds: newBeds,
+                                        );
+
+                                        _saveBedData(newConfig);
+                                        if (context.mounted) {
+                                          Navigator.pop(context);
+                                        }
+                                      },
+                                      child: const Text(
+                                        'Guardar Configuració Bancal',
+                                      ),
                                     ),
                                   ),
                                 ],
                               ),
-                              Slider(
-                                value: widthOverride,
-                                min: 0.2, // 20cm
-                                max: 2.0, // 200cm
-                                divisions: 36, // steps of 5cm
-                                label: '${(widthOverride * 100).toInt()} cm',
-                                activeColor: Colors.deepPurple,
-                                onChanged: (val) {
-                                  setState(() {
-                                    widthOverride = val;
-                                  });
-                                },
-                              ),
-                              const Spacer(),
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  icon: const Icon(Icons.auto_awesome),
-                                  label: const Text('Aplicar Gremi / Patró'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.green,
-                                    foregroundColor: Colors.white,
-                                  ),
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                    _showApplyGremiDialog(bedIndex);
-                                  },
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton(
-                                  onPressed: () async {
-                                    final newBedData = (bedData ?? BedData())
-                                        .copyWith(
-                                          rotationPatternId: selectedPattern,
-                                          rotationStartDate: startDate,
-                                          widthOverride:
-                                              widthOverride ==
-                                                  _espai.layoutConfig!.bedWidth
-                                              ? null
-                                              : widthOverride,
-                                        );
-
-                                    final newBeds = Map<int, BedData>.from(
-                                      _espai.layoutConfig!.beds,
-                                    );
-                                    newBeds[bedIndex] = newBedData;
-
-                                    final newConfig = GardenLayoutConfig(
-                                      totalWidth:
-                                          _espai.layoutConfig!.totalWidth,
-                                      totalLength:
-                                          _espai.layoutConfig!.totalLength,
-                                      numberOfBeds:
-                                          _espai.layoutConfig!.numberOfBeds,
-                                      bedWidth: _espai.layoutConfig!.bedWidth,
-                                      pathWidth: _espai.layoutConfig!.pathWidth,
-                                      cellSize: _espai.layoutConfig!.cellSize,
-                                      beds: newBeds,
-                                    );
-
-                                    _saveBedData(newConfig);
-                                    if (context.mounted) Navigator.pop(context);
-                                  },
-                                  child: const Text(
-                                    'Guardar Configuració Bancal',
-                                  ),
-                                ),
-                              ),
-                            ],
-                          )
-                        : _buildBedHistoricTab(bedHistoric),
+                            )
+                            : _buildBedHistoricTab(bedHistoric),
                   ),
                 ],
               ),
@@ -3451,6 +3933,25 @@ class GardenGridPainter extends CustomPainter {
           canvas,
           Offset(badgeCenterX - tp.width / 2, badgeY - tp.height / 2),
         );
+
+        // EXTRA: Water Drop Icon if deficit
+        final bedData = layoutConfig!.beds[i];
+        if (bedData != null &&
+            bedData.soilBalance != null &&
+            bedData.soilBalance! <= -2.0) {
+          final dropTp = TextPainter(
+            text: const TextSpan(
+              text: '💧',
+              style: TextStyle(fontSize: 14),
+            ),
+            textDirection: TextDirection.ltr,
+          );
+          dropTp.layout();
+          dropTp.paint(
+            canvas,
+            Offset(badgeCenterX + badgeRadius + 2, badgeY - dropTp.height / 2),
+          );
+        }
 
         badgeX += bedW;
       }

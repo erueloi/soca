@@ -1,5 +1,8 @@
 ﻿# Release Notes
 
+## v1.9.8
+Hort: Es mostra l'estat del temps estimat que falta per collir cada tipus de llavor plantada.
+Per cada bancal i segons les llavors plantades es mostra si s'ha de regar i quina quantitat.
 ## v1.9.7
 Hort: Es poden pintar i esborrar lliscant el dit o ratolí.
 Widget a la pantalla inicial.
@@ -180,6 +183,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

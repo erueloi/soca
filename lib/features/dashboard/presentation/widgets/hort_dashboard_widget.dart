@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../horticulture/data/repositories/hort_repository.dart';
 import '../../../horticulture/domain/entities/espai_hort.dart';
+import '../../../horticulture/domain/entities/garden_layout_config.dart';
 import '../../../horticulture/domain/entities/planta_hort.dart';
 import '../../../horticulture/domain/services/assistent_hort_service.dart';
+import '../../../horticulture/domain/services/garden_irrigation_service.dart';
 import '../../../horticulture/presentation/pages/garden_designer_page.dart';
 import '../../../horticulture/presentation/pages/horticulture_page.dart';
 
@@ -18,6 +20,22 @@ class HortDashboardCarousel extends ConsumerStatefulWidget {
 
 class _HortDashboardCarouselState extends ConsumerState<HortDashboardCarousel> {
   int _currentPage = 0;
+
+  Future<void> _syncEspais(List<EspaiHort> espais) async {
+    final irrigationService = ref.read(gardenIrrigationServiceProvider);
+    final repo = ref.read(hortRepositoryProvider);
+
+    for (final espai in espais) {
+      try {
+        final updatedEspai = await irrigationService.syncSoilBalance(espai);
+        if (updatedEspai != espai) {
+          await repo.saveEspai(updatedEspai);
+        }
+      } catch (e) {
+        debugPrint('Error syncing soil balance for ${espai.nom}: $e');
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +56,10 @@ class _HortDashboardCarouselState extends ConsumerState<HortDashboardCarousel> {
           }
 
           final espais = espaisSnap.data ?? [];
+
+          if (espais.isNotEmpty) {
+            _syncEspais(espais);
+          }
 
           if (espais.isEmpty) {
             return _buildEmptyState(context);
@@ -219,7 +241,7 @@ class _HortDashboardCarouselState extends ConsumerState<HortDashboardCarousel> {
                     crossAxisCount: 2,
                     mainAxisSpacing: 8,
                     crossAxisSpacing: 8,
-                    childAspectRatio: 2.8,
+                    childAspectRatio: 2.0,
                   ),
                   itemCount: numBeds > 6 ? 6 : numBeds, // Cap at 6
                   itemBuilder: (context, bedIdx) {
@@ -278,8 +300,18 @@ class _HortDashboardCarouselState extends ConsumerState<HortDashboardCarousel> {
       RotacioNivell.alt => '🔴',
     };
 
+    final bedDataSafe = (bedData ?? BedData()).copyWith(name: bedName);
+
+    // Watering logic
+    final irrigationService = ref.read(gardenIrrigationServiceProvider);
+    final bedAreaSqm = config.getBedWidth(bedIndex) * config.totalLength;
+    final wateringReq = irrigationService.getWateringRecommendation(
+      bedDataSafe,
+      bedAreaSqm,
+    );
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: mainCropColor.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(10),
@@ -298,13 +330,30 @@ class _HortDashboardCarouselState extends ConsumerState<HortDashboardCarousel> {
                   bedName,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 12,
+                    fontSize: 11,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   mainCropName,
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                  style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  wateringReq.needsWater
+                      ? (wateringReq.actionText.contains('min')
+                          ? '🔴 💧 ${wateringReq.amountValue.round()} min'
+                          : '🔴 💧 ${wateringReq.amountValue.round()} L')
+                      : '🟢 Sòl Humit',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color:
+                        wateringReq.needsWater
+                            ? Colors.red.shade900
+                            : Colors.green.shade900,
+                    fontWeight: FontWeight.bold,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ],

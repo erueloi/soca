@@ -74,19 +74,50 @@ class GardenLayoutConfig {
           {},
     );
   }
+
+  GardenLayoutConfig copyWith({
+    double? totalWidth,
+    double? totalLength,
+    int? numberOfBeds,
+    double? bedWidth,
+    double? pathWidth,
+    double? cellSize,
+    Map<int, BedData>? beds,
+  }) {
+    return GardenLayoutConfig(
+      totalWidth: totalWidth ?? this.totalWidth,
+      totalLength: totalLength ?? this.totalLength,
+      numberOfBeds: numberOfBeds ?? this.numberOfBeds,
+      bedWidth: bedWidth ?? this.bedWidth,
+      pathWidth: pathWidth ?? this.pathWidth,
+      cellSize: cellSize ?? this.cellSize,
+      beds: beds ?? this.beds,
+    );
+  }
 }
+
+enum IrrigationMethod { manual, drip }
 
 class BedData {
   final String? rotationPatternId;
   final DateTime? rotationStartDate;
   final String? name;
   final double? widthOverride;
+  // Irrigation Config
+  final IrrigationMethod irrigationMethod;
+  final double? cabalSistemaLitersHora; // L/h/m2
+  final double? soilBalance; // mm
+  final DateTime? lastBalanceUpdate;
 
   BedData({
     this.rotationPatternId,
     this.rotationStartDate,
     this.name,
     this.widthOverride,
+    this.irrigationMethod = IrrigationMethod.manual,
+    this.cabalSistemaLitersHora,
+    this.soilBalance,
+    this.lastBalanceUpdate,
   });
 
   Map<String, dynamic> toMap() {
@@ -95,6 +126,10 @@ class BedData {
       'rotationStartDate': rotationStartDate?.toIso8601String(),
       'name': name,
       'widthOverride': widthOverride,
+      'irrigationMethod': irrigationMethod.name,
+      'cabalSistemaLitersHora': cabalSistemaLitersHora,
+      'soilBalance': soilBalance,
+      'lastBalanceUpdate': lastBalanceUpdate?.toIso8601String(),
     };
   }
 
@@ -106,6 +141,18 @@ class BedData {
           : null,
       name: map['name'],
       widthOverride: (map['widthOverride'] as num?)?.toDouble(),
+      irrigationMethod: map['irrigationMethod'] != null
+          ? IrrigationMethod.values.firstWhere(
+              (e) => e.name == map['irrigationMethod'],
+              orElse: () => IrrigationMethod.manual,
+            )
+          : IrrigationMethod.manual,
+      cabalSistemaLitersHora: (map['cabalSistemaLitersHora'] as num?)
+          ?.toDouble(),
+      soilBalance: (map['soilBalance'] as num?)?.toDouble(),
+      lastBalanceUpdate: map['lastBalanceUpdate'] != null
+          ? DateTime.parse(map['lastBalanceUpdate'])
+          : null,
     );
   }
 
@@ -114,12 +161,21 @@ class BedData {
     DateTime? rotationStartDate,
     String? name,
     double? widthOverride,
+    IrrigationMethod? irrigationMethod,
+    double? cabalSistemaLitersHora,
+    double? soilBalance,
+    DateTime? lastBalanceUpdate,
   }) {
     return BedData(
       rotationPatternId: rotationPatternId ?? this.rotationPatternId,
       rotationStartDate: rotationStartDate ?? this.rotationStartDate,
       name: name ?? this.name,
       widthOverride: widthOverride ?? this.widthOverride,
+      irrigationMethod: irrigationMethod ?? this.irrigationMethod,
+      cabalSistemaLitersHora:
+          cabalSistemaLitersHora ?? this.cabalSistemaLitersHora,
+      soilBalance: soilBalance ?? this.soilBalance,
+      lastBalanceUpdate: lastBalanceUpdate ?? this.lastBalanceUpdate,
     );
   }
 }

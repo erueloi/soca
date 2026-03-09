@@ -7,7 +7,7 @@ class PlacedPlant {
   final double y; // cm (from top)
   final double width; // cm (vital space width)
   final double height; // cm (vital space height)
-  final DateTime placedAt;
+  final DateTime? placedAt;
 
   const PlacedPlant({
     required this.id,
@@ -16,7 +16,7 @@ class PlacedPlant {
     required this.y,
     required this.width,
     required this.height,
-    required this.placedAt,
+    this.placedAt,
   });
 
   factory PlacedPlant.create({
@@ -33,7 +33,7 @@ class PlacedPlant {
       y: y,
       width: width,
       height: height,
-      placedAt: DateTime.now(),
+      placedAt: null, // Initial state is planned (null)
     );
   }
 
@@ -45,6 +45,7 @@ class PlacedPlant {
     double? width,
     double? height,
     DateTime? placedAt,
+    bool clearDate = false,
   }) {
     return PlacedPlant(
       id: id ?? this.id,
@@ -53,7 +54,7 @@ class PlacedPlant {
       y: y ?? this.y,
       width: width ?? this.width,
       height: height ?? this.height,
-      placedAt: placedAt ?? this.placedAt,
+      placedAt: clearDate ? null : (placedAt ?? this.placedAt),
     );
   }
 
@@ -65,7 +66,7 @@ class PlacedPlant {
       'y': y,
       'width': width,
       'height': height,
-      'placedAt': placedAt.millisecondsSinceEpoch,
+      if (placedAt != null) 'placedAt': placedAt!.millisecondsSinceEpoch,
     };
   }
 
@@ -79,7 +80,7 @@ class PlacedPlant {
       height: (map['height'] as num?)?.toDouble() ?? 30.0,
       placedAt: map['placedAt'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['placedAt'])
-          : DateTime.now(),
+          : null,
     );
   }
 }
