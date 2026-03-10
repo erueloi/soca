@@ -660,6 +660,12 @@ class TreesRepository {
         currentBalance = raw;
       }
 
+      // If tree is mature, we force balance to 0 (or some positive value)
+      // so it never appears as needing water in logs/history.
+      if (tree.isMature) {
+        currentBalance = 0.0;
+      }
+
       // 4. Queue Update
       final treeRef = _treesCollection.doc(tree.id);
       batch.update(treeRef, {

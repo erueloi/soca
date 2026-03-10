@@ -646,6 +646,7 @@ final weatherProvider = FutureProvider<WeatherModel>((ref) async {
     stationName: municipalityName.isNotEmpty
         ? municipalityName
         : (stationCode ?? '?'),
+    stationCode: stationCode,
     windSpeed: windSpeed,
     et0: et0,
     forecast: parsedForecast,

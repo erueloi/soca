@@ -9,6 +9,7 @@ class WeatherModel {
   final double et0;
   final List<DailyForecast> forecast;
   final List<SafetyAlert> alerts;
+  final String? stationCode;
   final DateTime? lastUpdated;
 
   WeatherModel({
@@ -22,6 +23,7 @@ class WeatherModel {
     this.et0 = 0.0,
     this.forecast = const [],
     this.alerts = const [],
+    this.stationCode,
     this.lastUpdated,
   });
 
@@ -35,6 +37,7 @@ class WeatherModel {
       stationName: '',
       windSpeed: 0,
       et0: 0,
+      stationCode: '',
       forecast: [],
       alerts: [],
     );

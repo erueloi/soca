@@ -52,13 +52,14 @@ class ContactsRepository {
     await batch.commit();
   }
 
-  Future<void> addContact(Contact contact) async {
+  Future<Contact> addContact(Contact contact) async {
     if (fincaId == null) throw Exception('FincaId not set');
 
     final data = contact.toMap();
     data['fincaId'] = fincaId;
 
-    await _collection.add(data);
+    final docRef = await _collection.add(data);
+    return Contact.fromMap(data, docRef.id);
   }
 
   Future<void> updateContact(Contact contact) async {

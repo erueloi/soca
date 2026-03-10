@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../widgets/resources_view.dart';
 import '../../../contacts/presentation/widgets/contacts_view.dart';
-import '../../../contacts/domain/entities/contact.dart';
-import '../../../directory/presentation/providers/directory_provider.dart';
-
+import '../widgets/contact_form_dialog.dart';
 import '../widgets/resource_form_dialog.dart';
 
 class DirectoryPage extends ConsumerStatefulWidget {
@@ -39,95 +37,11 @@ class _DirectoryPageState extends ConsumerState<DirectoryPage>
   void _addNewItem() {
     if (_tabController.index == 0) {
       // Add Contact
-      _showContactDialog(context);
+      showContactFormDialog(context, ref);
     } else {
       // Add Resource
       showResourceFormDialog(context, ref);
     }
-  }
-
-  Future<void> _showContactDialog(
-    BuildContext context, [
-    Contact? existingContact,
-  ]) async {
-    final nameController = TextEditingController(
-      text: existingContact?.name ?? '',
-    );
-    final roleController = TextEditingController(
-      text: existingContact?.role ?? '',
-    );
-    final phoneController = TextEditingController(
-      text: existingContact?.phone ?? '',
-    );
-    final emailController = TextEditingController(
-      text: existingContact?.email ?? '',
-    );
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          existingContact == null ? 'Nou Contacte' : 'Editar Contacte',
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: 'Nom'),
-                textCapitalization: TextCapitalization.words,
-              ),
-              TextField(
-                controller: roleController,
-                decoration: const InputDecoration(labelText: 'Rol / Professió'),
-                textCapitalization: TextCapitalization.sentences,
-              ),
-              TextField(
-                controller: phoneController,
-                decoration: const InputDecoration(labelText: 'Telèfon'),
-                keyboardType: TextInputType.phone,
-              ),
-              TextField(
-                controller: emailController,
-                decoration: const InputDecoration(labelText: 'Email'),
-                keyboardType: TextInputType.emailAddress,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel·lar'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final contact = Contact(
-                id:
-                    existingContact?.id ??
-                    '', // ID handled by repo if empty/new logic needed?
-                // Actually Repo.add auto-generates ID. So we need to handle that.
-                // If repo uses .add, ID in object is ignored.
-                name: nameController.text,
-                role: roleController.text,
-                phone: phoneController.text,
-                email: emailController.text,
-              );
-
-              final repo = ref.read(contactsRepositoryProvider);
-              if (existingContact == null) {
-                repo.addContact(contact);
-              } else {
-                repo.updateContact(contact);
-              }
-              Navigator.pop(ctx);
-            },
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
-    );
   }
 
   String _searchQuery = '';
@@ -195,7 +109,7 @@ class _DirectoryPageState extends ConsumerState<DirectoryPage>
         children: [
           ContactsView(
             searchQuery: _searchQuery,
-            onEdit: (c) => _showContactDialog(context, c),
+            onEdit: (c) => showContactFormDialog(context, ref, c),
           ),
           ResourcesView(
             searchQuery: _searchQuery,

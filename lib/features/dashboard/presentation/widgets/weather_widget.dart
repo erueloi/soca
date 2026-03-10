@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:soca/core/services/meteocat_service.dart';
 import 'package:soca/features/dashboard/presentation/providers/weather_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../climate/presentation/pages/clima_page.dart';
 
 class WeatherWidget extends ConsumerWidget {
@@ -171,6 +172,29 @@ class WeatherWidget extends ConsumerWidget {
                                   constraints: const BoxConstraints(),
                                   splashRadius: 20,
                                 ),
+                                if (weather.stationCode != null &&
+                                    weather.stationCode!.isNotEmpty)
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.open_in_new,
+                                      size: 16,
+                                      color: Colors.blue,
+                                    ),
+                                    onPressed: () async {
+                                      final url = Uri.parse(
+                                        'https://www.meteo.cat/observacions/xema/dades?codi=${weather.stationCode}',
+                                      );
+                                      if (await canLaunchUrl(url)) {
+                                        await launchUrl(
+                                          url,
+                                          mode: LaunchMode.externalApplication,
+                                        );
+                                      }
+                                    },
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    tooltip: 'Veure Estació (Meteocat)',
+                                  ),
                               ],
                             ),
                             if (weather.alerts.isNotEmpty)

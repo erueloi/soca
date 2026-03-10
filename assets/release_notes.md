@@ -1,5 +1,9 @@
 ﻿# Release Notes
 
+## v1.9.9
+Widget Clima: Acces a l'estació XEMA.
+Reg: No mostrar reg per arbres existents o madurs.
+Tasques: Afegir contacte nou directament a la nova o editar tasca.
 ## v1.9.8
 Hort: Es mostra l'estat del temps estimat que falta per collir cada tipus de llavor plantada.
 Per cada bancal i segons les llavors plantades es mostra si s'ha de regar i quina quantitat.
@@ -183,6 +187,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

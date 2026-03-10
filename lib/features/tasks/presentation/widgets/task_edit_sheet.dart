@@ -15,6 +15,7 @@ import '../../../construction/presentation/pages/pathology_detail_page.dart';
 import '../../../directory/presentation/providers/directory_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../directory/presentation/widgets/resource_form_dialog.dart';
+import '../../../directory/presentation/widgets/contact_form_dialog.dart';
 
 class TaskEditSheet extends ConsumerStatefulWidget {
   final Task? task;
@@ -1284,45 +1285,77 @@ class _TaskEditSheetState extends ConsumerState<TaskEditSheet> {
                       ),
                       content: SizedBox(
                         width: double.maxFinite,
-                        child: filteredContacts.isEmpty
-                            ? const Center(
-                                child: Padding(
-                                  padding: EdgeInsets.all(16.0),
-                                  child: Text('No s\'han trobat resultats'),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (!_isReadOnly)
+                              ListTile(
+                                leading: const Icon(
+                                  Icons.person_add,
+                                  color: Colors.blue,
                                 ),
-                              )
-                            : ListView.builder(
-                                shrinkWrap: true,
-                                itemCount: filteredContacts.length,
-                                itemBuilder: (ctx, i) {
-                                  final contact = filteredContacts[i];
-                                  final isSelected = _contactIds.contains(
-                                    contact.id,
-                                  );
-                                  return CheckboxListTile(
-                                    title: Text(contact.name),
-                                    subtitle: Text(contact.role),
-                                    secondary: CircleAvatar(
-                                      child: Text(
-                                        contact.name.isNotEmpty
-                                            ? contact.name[0]
-                                            : '?',
-                                      ),
-                                    ),
-                                    value: isSelected,
-                                    onChanged: (val) {
-                                      setStateDialog(() {
-                                        if (val == true) {
-                                          _contactIds.add(contact.id);
-                                        } else {
-                                          _contactIds.remove(contact.id);
-                                        }
-                                      });
-                                      setState(() {});
-                                    },
-                                  );
+                                title: const Text(
+                                  'Afegir nou contacte',
+                                  style: TextStyle(
+                                    color: Colors.blue,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                onTap: () async {
+                                  final newContact =
+                                      await showContactFormDialog(context, ref);
+                                  if (newContact != null) {
+                                    setStateDialog(() {
+                                      _contactIds.add(newContact.id);
+                                    });
+                                    setState(() {});
+                                  }
                                 },
                               ),
+                            if (!_isReadOnly) const Divider(),
+                            filteredContacts.isEmpty
+                                ? const Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(16.0),
+                                      child: Text('No s\'han trobat resultats'),
+                                    ),
+                                  )
+                                : Flexible(
+                                    child: ListView.builder(
+                                      shrinkWrap: true,
+                                      itemCount: filteredContacts.length,
+                                      itemBuilder: (ctx, i) {
+                                        final contact = filteredContacts[i];
+                                        final isSelected = _contactIds.contains(
+                                          contact.id,
+                                        );
+                                        return CheckboxListTile(
+                                          title: Text(contact.name),
+                                          subtitle: Text(contact.role),
+                                          secondary: CircleAvatar(
+                                            child: Text(
+                                              contact.name.isNotEmpty
+                                                  ? contact.name[0]
+                                                  : '?',
+                                            ),
+                                          ),
+                                          value: isSelected,
+                                          onChanged: (val) {
+                                            setStateDialog(() {
+                                              if (val == true) {
+                                                _contactIds.add(contact.id);
+                                              } else {
+                                                _contactIds.remove(contact.id);
+                                              }
+                                            });
+                                            setState(() {});
+                                          },
+                                        );
+                                      },
+                                    ),
+                                  ),
+                          ],
+                        ),
                       ),
                       actions: [
                         TextButton(

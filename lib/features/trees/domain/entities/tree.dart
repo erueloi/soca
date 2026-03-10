@@ -233,6 +233,14 @@ class Tree {
   }
 
   static DateTime? _parseDateTime(dynamic value) => _parseDate(value);
+
+  bool get isMature {
+    if (isVeteran) return true;
+    final now = DateTime.now();
+    final treeAgeYears =
+        (now.difference(plantingDate).inDays / 365.25) + initialAge;
+    return treeAgeYears >= 3.0; // Considered mature after 3 years
+  }
 }
 
 DateTime? _parseDate(dynamic value) {
