@@ -5,6 +5,7 @@ import 'zone_editor_page.dart';
 import 'espai_list_page.dart';
 import 'hort_library_page.dart';
 import 'rotation_patterns_page.dart';
+import '../../../nursery/presentation/pages/nursery_page.dart';
 
 class HorticulturePage extends ConsumerStatefulWidget {
   const HorticulturePage({super.key});
@@ -35,6 +36,17 @@ class _HorticulturePageState extends ConsumerState<HorticulturePage>
       appBar: AppBar(
         title: const Text('Gestió d\'Horticultura'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.yard_outlined),
+            tooltip: '🌱 Incubadora / Planter',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const NurseryPage(),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.local_library),
             tooltip: 'Biblioteca d\'Hort',

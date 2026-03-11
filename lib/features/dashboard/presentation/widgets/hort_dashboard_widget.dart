@@ -9,6 +9,7 @@ import '../../../horticulture/domain/services/assistent_hort_service.dart';
 import '../../../horticulture/domain/services/garden_irrigation_service.dart';
 import '../../../horticulture/presentation/pages/garden_designer_page.dart';
 import '../../../horticulture/presentation/pages/horticulture_page.dart';
+import '../../../nursery/presentation/pages/nursery_page.dart';
 
 class HortDashboardCarousel extends ConsumerStatefulWidget {
   const HortDashboardCarousel({super.key});
@@ -213,6 +214,21 @@ class _HortDashboardCarouselState extends ConsumerState<HortDashboardCarousel> {
                   child: IconButton(
                     padding: EdgeInsets.zero,
                     iconSize: 18,
+                    icon: Icon(Icons.yard_outlined, color: Colors.green.shade600),
+                    tooltip: '🌱 Incubadora',
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const NurseryPage()),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    iconSize: 18,
                     icon: Icon(Icons.info_outline, color: Colors.grey.shade400),
                     onPressed: () => _showInfoDialog(context),
                   ),
@@ -341,17 +357,14 @@ class _HortDashboardCarouselState extends ConsumerState<HortDashboardCarousel> {
                 ),
                 const SizedBox(height: 1),
                 Text(
-                  wateringReq.needsWater
-                      ? (wateringReq.actionText.contains('min')
-                          ? '🔴 💧 ${wateringReq.amountValue.round()} min'
-                          : '🔴 💧 ${wateringReq.amountValue.round()} L')
-                      : '🟢 Sòl Humit',
+                  wateringReq.actionText,
                   style: TextStyle(
                     fontSize: 10,
-                    color:
-                        wateringReq.needsWater
-                            ? Colors.red.shade900
-                            : Colors.green.shade900,
+                    color: switch (wateringReq.status) {
+                      WateringStatus.satiated => Colors.green.shade900,
+                      WateringStatus.forecast => Colors.orange.shade900,
+                      WateringStatus.critical => Colors.red.shade900,
+                    },
                     fontWeight: FontWeight.bold,
                   ),
                   overflow: TextOverflow.ellipsis,

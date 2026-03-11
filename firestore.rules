@@ -31,6 +31,12 @@ service cloud.firestore {
     match /finques/{fincaId} {
       allow read, write: if isEmailAuthorized();
       allow create: if request.auth != null;
+
+      // Nursery Trays — seed tray management per finca
+      match /nursery_trays/{trayId} {
+        allow read, update, delete: if isAuthorized(fincaId);
+        allow create: if isAuthorized(fincaId);
+      }
     }
 
     // Global Config (Buckets, etc) - Legacy/Shared

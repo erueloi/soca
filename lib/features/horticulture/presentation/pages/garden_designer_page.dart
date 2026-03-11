@@ -3369,39 +3369,40 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                                       vertical: 8,
                                     ),
                                     decoration: BoxDecoration(
-                                      color:
-                                          wateringReq.needsWater
-                                              ? Colors.blue.withValues(
-                                                alpha: 0.1,
-                                              )
-                                              : Colors.green.withValues(
-                                                alpha: 0.1,
-                                              ),
+                                      color: switch (wateringReq.status) {
+                                        WateringStatus.satiated =>
+                                          Colors.green.withValues(alpha: 0.1),
+                                        WateringStatus.forecast =>
+                                          Colors.orange.withValues(alpha: 0.1),
+                                        WateringStatus.critical =>
+                                          Colors.blue.withValues(alpha: 0.1),
+                                      },
                                       borderRadius: BorderRadius.circular(8),
                                       border: Border.all(
-                                        color:
-                                            wateringReq.needsWater
-                                                ? Colors.blue.withValues(
-                                                  alpha: 0.3,
-                                                )
-                                                : Colors.green.withValues(
-                                                  alpha: 0.3,
-                                                ),
+                                        color: switch (wateringReq.status) {
+                                          WateringStatus.satiated =>
+                                            Colors.green.withValues(alpha: 0.3),
+                                          WateringStatus.forecast =>
+                                            Colors.orange.withValues(alpha: 0.3),
+                                          WateringStatus.critical =>
+                                            Colors.blue.withValues(alpha: 0.3),
+                                        },
                                       ),
                                     ),
                                     child: Row(
                                       children: [
                                         Expanded(
                                           child: Text(
-                                            wateringReq.needsWater
-                                                ? wateringReq.actionText
-                                                    .replaceFirst('🔴 ', '')
-                                                : '🟢 Sòl humit. No cal regar',
+                                            wateringReq.actionText,
                                             style: TextStyle(
-                                              color:
-                                                  wateringReq.needsWater
-                                                      ? Colors.blue.shade900
-                                                      : Colors.green.shade900,
+                                              color: switch (wateringReq.status) {
+                                                WateringStatus.satiated =>
+                                                  Colors.green.shade900,
+                                                WateringStatus.forecast =>
+                                                  Colors.orange.shade900,
+                                                WateringStatus.critical =>
+                                                  Colors.blue.shade900,
+                                              },
                                               fontWeight: FontWeight.bold,
                                               fontSize: 13,
                                             ),

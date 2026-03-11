@@ -155,6 +155,10 @@ class PlantaHort {
   final HortGrupRotacio grupRotacio;
   final HortViaMetabolica viaMetabolica;
 
+  // Nursery-specific fields
+  final int diesGerminacio; // dies estimats de germinació
+  final int diesPlanter; // dies totals al planter abans de trasplantar
+
   const PlantaHort({
     required this.id,
     required this.nomComu,
@@ -175,6 +179,8 @@ class PlantaHort {
     this.tipusSembra = HortTipusSembra.trasplantament,
     this.grupRotacio = HortGrupRotacio.fulla,
     this.viaMetabolica = HortViaMetabolica.c3,
+    this.diesGerminacio = 8,
+    this.diesPlanter = 45,
   });
 
   Map<String, dynamic> toMap() {
@@ -198,6 +204,8 @@ class PlantaHort {
       'tipusSembra': tipusSembra.name,
       'grupRotacio': grupRotacio.name,
       'viaMetabolica': viaMetabolica.name,
+      'diesGerminacio': diesGerminacio,
+      'diesPlanter': diesPlanter,
     };
   }
 
@@ -250,6 +258,8 @@ class PlantaHort {
       tipusSembra: parseSembra(map['tipusSembra']),
       grupRotacio: parseRotacio(map['grupRotacio']),
       viaMetabolica: parseVia(map['viaMetabolica']),
+      diesGerminacio: map['diesGerminacio'] ?? 8,
+      diesPlanter: map['diesPlanter'] ?? 45,
     );
   }
 
@@ -273,6 +283,8 @@ class PlantaHort {
     HortTipusSembra? tipusSembra,
     HortGrupRotacio? grupRotacio,
     HortViaMetabolica? viaMetabolica,
+    int? diesGerminacio,
+    int? diesPlanter,
   }) {
     return PlantaHort(
       id: id ?? this.id,
@@ -294,6 +306,8 @@ class PlantaHort {
       tipusSembra: tipusSembra ?? this.tipusSembra,
       grupRotacio: grupRotacio ?? this.grupRotacio,
       viaMetabolica: viaMetabolica ?? this.viaMetabolica,
+      diesGerminacio: diesGerminacio ?? this.diesGerminacio,
+      diesPlanter: diesPlanter ?? this.diesPlanter,
     );
   }
 }

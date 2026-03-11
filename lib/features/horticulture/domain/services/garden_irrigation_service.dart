@@ -238,13 +238,26 @@ class GardenIrrigationService {
     }
     debugPrint('   [Reg Debug] 1. Bed Area M2: $actualAreaM2 m2');
 
-    if (bed.soilBalance == null || bed.soilBalance! > -2.0) {
-      debugPrint('   [Reg Debug] 2. Soil Balance: ${bed.soilBalance?.toStringAsFixed(1) ?? "NULL"} mm (Satiated / No Watering Needed)');
+    final balance = bed.soilBalance ?? 0.0;
+
+    if (balance > -1.0) {
+      debugPrint('   [Reg Debug] 2. Soil Balance: ${balance.toStringAsFixed(1)} mm (Satiated)');
       debugPrint('--- [Reg Debug] END CALC ---');
       return WateringRequirement(
         needsWater: false,
+        status: WateringStatus.satiated,
         actionText: '🟢 Sòl Humit',
         buttonText: 'Sòl Saciat',
+        amountValue: 0.0,
+      );
+    } else if (balance > -2.0) {
+      debugPrint('   [Reg Debug] 2. Soil Balance: ${balance.toStringAsFixed(1)} mm (Forecast / Yellow Alert)');
+      debugPrint('--- [Reg Debug] END CALC ---');
+      return WateringRequirement(
+        needsWater: false,
+        status: WateringStatus.forecast,
+        actionText: '🟡 Previsió: Reg imminent si no plou',
+        buttonText: 'Sòl gairebé al límit',
         amountValue: 0.0,
       );
     }
@@ -259,6 +272,7 @@ class GardenIrrigationService {
       debugPrint('--- [Reg Debug] END CALC ---');
       return WateringRequirement(
         needsWater: true,
+        status: WateringStatus.critical,
         actionText: '🔴 💧 Rega amb ${litersNeeded.round()} L',
         buttonText: 'Registrar Reg (${litersNeeded.round()} L)',
         amountValue: litersNeeded,
@@ -268,6 +282,7 @@ class GardenIrrigationService {
         debugPrint('--- [Reg Debug] END CALC ---');
         return WateringRequirement(
           needsWater: false,
+          status: WateringStatus.critical, // Even if it lacks data, it IS critical if deficit > 2.0
           actionText: '⚠️ Faltan les dades del Cabal',
           buttonText: 'Configura el Cabal',
           amountValue: 0.0,
@@ -277,6 +292,7 @@ class GardenIrrigationService {
       debugPrint('--- [Reg Debug] END CALC ---');
       return WateringRequirement(
         needsWater: true,
+        status: WateringStatus.critical,
         actionText: '🔴 💧 Obre la clau ${minutes.round()} min',
         buttonText: 'Registrar Reg (${minutes.round()} min)',
         amountValue: minutes,
@@ -291,14 +307,18 @@ class GardenIrrigationService {
   }
 }
 
+enum WateringStatus { satiated, forecast, critical }
+
 class WateringRequirement {
   final bool needsWater;
+  final WateringStatus status;
   final String actionText;
   final String buttonText;
   final double amountValue;
 
   WateringRequirement({
     required this.needsWater,
+    required this.status,
     required this.actionText,
     required this.buttonText,
     required this.amountValue,
