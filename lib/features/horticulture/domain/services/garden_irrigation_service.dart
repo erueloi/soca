@@ -57,7 +57,9 @@ class GardenIrrigationService {
       }
 
       DateTime lastUpdate;
-      if (bed.soilBalance == null) {
+      if (forceSync && oldestPlacedAt != null) {
+          lastUpdate = oldestPlacedAt;
+      } else if (bed.soilBalance == null) {
           lastUpdate = oldestPlacedAt ?? today;
       } else {
           lastUpdate = _normalizeDate(bed.lastBalanceUpdate ?? today);
