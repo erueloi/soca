@@ -16,7 +16,7 @@ class GardenIrrigationService {
 
   /// Synchronizes the soil balance for all beds in an EspaiHort up to today.
   /// Returns a new instance of EspaiHort with updated bed configurations.
-  Future<EspaiHort> syncSoilBalance(EspaiHort espai) async {
+  Future<EspaiHort> syncSoilBalance(EspaiHort espai, {bool forceSync = false}) async {
     final config = espai.layoutConfig;
     if (config == null || config.beds.isEmpty) return espai;
 
@@ -80,15 +80,20 @@ class GardenIrrigationService {
       }
     }
 
-    if (earliestUpdateDate == null ||
-        earliestUpdateDate.isAtSameMomentAs(today)) {
+    if (!forceSync && (earliestUpdateDate == null ||
+        earliestUpdateDate.isAtSameMomentAs(today))) {
       return espai;
+    }
+    
+    // If we only need to sync today (because of forceSync), we still need today's climate data if possible
+    if (earliestUpdateDate == null || earliestUpdateDate.isAtSameMomentAs(today)) {
+        earliestUpdateDate = today.subtract(const Duration(days: 1)); // Fetch at least yesterday to avoid meteocat errors
     }
 
     // 1. Fetch from Local Repository FIRST
     final List<ClimateDailyData> repoData = await _climateRepository.getHistory(
       earliestUpdateDate,
-      today.subtract(const Duration(days: 1)),
+      today.subtract(const Duration(days: 1)), // Wait, this gets history up to yesterday. Today's ETc is missing?
     );
     
     // 2. Fetch from Meteocat (might be empty due to Quota Saver)

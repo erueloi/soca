@@ -3431,8 +3431,19 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                                                   .layoutConfig!
                                                   .copyWith(beds: newBeds);
 
-                                              _saveBedData(newConfig);
-                                              setState(() {});
+                                              // 1. Create temporary espai with new bed config
+                                              final tempEspai = _espai.copyWith(layoutConfig: newConfig);
+
+                                              // 2. Force re-sync the soil balance to subtract today's new watering event
+                                              final irrigationService = ref.read(gardenIrrigationServiceProvider);
+                                              final updatedEspai = await irrigationService.syncSoilBalance(tempEspai, forceSync: true);
+
+                                              // 3. Save the thoroughly synced espai
+                                              setState(() {
+                                                _espai = updatedEspai;
+                                              });
+                                              await _saveChanges();
+                                              
                                             },
                                             child: Text(
                                               wateringReq.buttonText,
