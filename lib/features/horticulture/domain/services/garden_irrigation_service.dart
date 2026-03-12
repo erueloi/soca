@@ -257,7 +257,19 @@ class GardenIrrigationService {
     }
     debugPrint('   [Reg Debug] 1. Bed Area M2: $actualAreaM2 m2');
 
-    final balance = bed.soilBalance ?? 0.0;
+    double balance = bed.soilBalance ?? 0.0;
+
+    // Add today's manual watering since syncSoilBalance only computes up to the start of today
+    if (bed.wateringEvents != null && bed.wateringEvents!.isNotEmpty) {
+      final now = DateTime.now();
+      final todayStr = now.toIso8601String().split('T')[0];
+      final dailyEvents = bed.wateringEvents!.where((e) => e.date.toIso8601String().startsWith(todayStr));
+      final totalLiters = dailyEvents.fold(0.0, (sum, e) => sum + e.litersApplied);
+      final todayIrrigatedMm = totalLiters / actualAreaM2;
+      balance += todayIrrigatedMm;
+      if (balance > 0.0) balance = 0.0; 
+      debugPrint('   [Reg Debug] Added Today\'s Irrigation: ${todayIrrigatedMm.toStringAsFixed(2)} mm -> Effective Balance: ${balance.toStringAsFixed(2)} mm');
+    }
 
     if (balance > -1.0) {
       debugPrint('   [Reg Debug] 2. Soil Balance: ${balance.toStringAsFixed(1)} mm (Satiated)');
@@ -283,11 +295,11 @@ class GardenIrrigationService {
       );
     }
 
-    double deficitMm = bed.soilBalance!.abs();
-    debugPrint('   [Reg Debug] 2. Soil Deficit (mm): $deficitMm mm');
+    double deficitMm = balance.abs();
+    debugPrint('   [Reg Debug] 2. Soil Deficit (mm): ${deficitMm.toStringAsFixed(2)} mm');
 
     double litersNeeded = deficitMm * actualAreaM2;
-    debugPrint('   [Reg Debug] 3. Liters Needed = Deficit($deficitMm) * Area($actualAreaM2) = $litersNeeded L');
+    debugPrint('   [Reg Debug] 3. Liters Needed = Deficit(${deficitMm.toStringAsFixed(2)}) * Area(${actualAreaM2.toStringAsFixed(2)}) = ${litersNeeded.toStringAsFixed(2)} L');
 
     if (bed.irrigationMethod == IrrigationMethod.manual) {
       debugPrint('--- [Reg Debug] END CALC ---');
