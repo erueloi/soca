@@ -3307,9 +3307,43 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                                 bottom: BorderSide(
                                   color:
                                       tabIndex == 1
-                                          ? Colors.deepPurple
+                                          ? Colors.blue
                                           : Colors.grey.shade300,
                                   width: tabIndex == 1 ? 3 : 1,
+                                ),
+                              ),
+                            ),
+                            child: Text(
+                              'Reg',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontWeight:
+                                    tabIndex == 1
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                color:
+                                    tabIndex == 1
+                                        ? Colors.blue
+                                        : Colors.grey,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => tabIndex = 2),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                bottom: BorderSide(
+                                  color:
+                                      tabIndex == 2
+                                          ? Colors.deepPurple
+                                          : Colors.grey.shade300,
+                                  width: tabIndex == 2 ? 3 : 1,
                                 ),
                               ),
                             ),
@@ -3321,11 +3355,11 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontWeight:
-                                        tabIndex == 1
+                                        tabIndex == 2
                                             ? FontWeight.bold
                                             : FontWeight.normal,
                                     color:
-                                        tabIndex == 1
+                                        tabIndex == 2
                                             ? Colors.deepPurple
                                             : Colors.grey,
                                     fontSize: 13,
@@ -3355,103 +3389,11 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                   const SizedBox(height: 16),
                   // Tab content
                   Expanded(
-                    child:
-                        tabIndex == 0
-                            ? SingleChildScrollView(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Irrigation Banner
-                                  Container(
-                                    margin: const EdgeInsets.only(bottom: 16),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: switch (wateringReq.status) {
-                                        WateringStatus.satiated =>
-                                          Colors.green.withValues(alpha: 0.1),
-                                        WateringStatus.forecast =>
-                                          Colors.orange.withValues(alpha: 0.1),
-                                        WateringStatus.critical =>
-                                          Colors.blue.withValues(alpha: 0.1),
-                                      },
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                        color: switch (wateringReq.status) {
-                                          WateringStatus.satiated =>
-                                            Colors.green.withValues(alpha: 0.3),
-                                          WateringStatus.forecast =>
-                                            Colors.orange.withValues(alpha: 0.3),
-                                          WateringStatus.critical =>
-                                            Colors.blue.withValues(alpha: 0.3),
-                                        },
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            wateringReq.actionText,
-                                            style: TextStyle(
-                                              color: switch (wateringReq.status) {
-                                                WateringStatus.satiated =>
-                                                  Colors.green.shade900,
-                                                WateringStatus.forecast =>
-                                                  Colors.orange.shade900,
-                                                WateringStatus.critical =>
-                                                  Colors.blue.shade900,
-                                              },
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                        ),
-                                        if (wateringReq.needsWater)
-                                          TextButton(
-                                            onPressed: () async {
-                                              final bedData = currentBedData ?? BedData();
-                                              final newEvents = List<WateringEvent>.from(bedData.wateringEvents ?? []);
-                                              newEvents.add(WateringEvent(
-                                                date: DateTime.now(),
-                                                litersApplied: wateringReq.litersNeeded,
-                                              ));
-                                              
-                                              final newBedData = bedData.copyWith(
-                                                wateringEvents: newEvents,
-                                              );
-                                              
-                                              final newBeds =
-                                                  Map<int, BedData>.from(
-                                                    _espai.layoutConfig!.beds,
-                                                  );
-                                              newBeds[bedIndex] = newBedData;
-                                              final newConfig = _espai
-                                                  .layoutConfig!
-                                                  .copyWith(beds: newBeds);
-
-                                              // 1. Create temporary espai with new bed config
-                                              final tempEspai = _espai.copyWith(layoutConfig: newConfig);
-
-                                              // 2. Force re-sync the soil balance to subtract today's new watering event
-                                              final irrigationService = ref.read(gardenIrrigationServiceProvider);
-                                              final updatedEspai = await irrigationService.syncSoilBalance(tempEspai, forceSync: true);
-
-                                              // 3. Save the thoroughly synced espai
-                                              setState(() {
-                                                _espai = updatedEspai;
-                                              });
-                                              await _saveChanges();
-                                              
-                                            },
-                                            child: Text(
-                                              wateringReq.buttonText,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
+                    child: switch (tabIndex) {
+                      0 => SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                                   const Text('Assignar Patró de Rotació:'),
                                   const SizedBox(height: 8),
                                   Consumer(
@@ -3555,85 +3497,6 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                                     },
                                   ),
                                   const SizedBox(height: 8),
-                                  const Text(
-                                    'Mètode de Reg:',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  SegmentedButton<IrrigationMethod>(
-                                    segments: const [
-                                      ButtonSegment(
-                                        value: IrrigationMethod.manual,
-                                        label: Text('Manual'),
-                                        icon: Icon(Icons.water_drop_outlined),
-                                      ),
-                                      ButtonSegment(
-                                        value: IrrigationMethod.drip,
-                                        label: Text('Gota a Gota'),
-                                        icon: Icon(Icons.water),
-                                      ),
-                                    ],
-                                    selected: {irrigationMethod},
-                                    onSelectionChanged: (
-                                      Set<IrrigationMethod> newSelection,
-                                    ) {
-                                      setState(() {
-                                        irrigationMethod = newSelection.first;
-                                      });
-                                    },
-                                  ),
-                                  if (irrigationMethod ==
-                                      IrrigationMethod.drip) ...[
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        const Text('Cabal reg m² (L/h):'),
-                                        Text(
-                                          '${cabalOverride.toStringAsFixed(1)} L/h',
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    Slider(
-                                      value: cabalOverride,
-                                      min: 2.0,
-                                      max: 30.0,
-                                      divisions: 56, // steps of 0.5
-                                      label:
-                                          '${cabalOverride.toStringAsFixed(1)} L/h',
-                                      activeColor: Colors.blue,
-                                      onChanged: (val) {
-                                        setState(() {
-                                          cabalOverride = val;
-                                        });
-                                      },
-                                    ),
-                                  ],
-                                  const SizedBox(height: 16),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: ElevatedButton.icon(
-                                      icon: const Icon(Icons.auto_awesome),
-                                      label: const Text(
-                                        'Aplicar Gremi / Patró',
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.green,
-                                        foregroundColor: Colors.white,
-                                      ),
-                                      onPressed: () {
-                                        Navigator.pop(context);
-                                        _showApplyGremiDialog(bedIndex);
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
                                   SizedBox(
                                     width: double.infinity,
                                     child: ElevatedButton(
@@ -3687,10 +3550,51 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                                       ),
                                     ),
                                   ),
+                                  const SizedBox(height: 16),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      icon: const Icon(Icons.auto_awesome),
+                                      label: const Text(
+                                        'Aplicar Gremi / Patró',
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      onPressed: () {
+                                        Navigator.pop(context);
+                                        _showApplyGremiDialog(bedIndex);
+                                      },
+                                    ),
+                                  ),
                                 ],
                               ),
-                            )
-                            : _buildBedHistoricTab(bedHistoric),
+                            ),
+                      1 => _buildBedIrrigationTab(
+                          bedIndex,
+                          bedDataSafe,
+                          wateringReq,
+                          irrigationMethod,
+                          cabalOverride,
+                          (method) => setState(() => irrigationMethod = method),
+                          (cabal) => setState(() => cabalOverride = cabal),
+                          (bedInfo) async {
+                            final newBeds = Map<int, BedData>.from(_espai.layoutConfig!.beds);
+                            newBeds[bedIndex] = bedInfo;
+                            final newConfig = _espai.layoutConfig!.copyWith(beds: newBeds);
+                            final tempEspai = _espai.copyWith(layoutConfig: newConfig);
+                            final irrigationService = ref.read(gardenIrrigationServiceProvider);
+                            final updatedEspai = await irrigationService.syncSoilBalance(tempEspai, forceSync: true);
+                            setState(() {
+                              _espai = updatedEspai;
+                            });
+                            await _saveChanges();
+                          },
+                        ),
+                      2 => _buildBedHistoricTab(bedHistoric),
+                      _ => const SizedBox.shrink(),
+                    },
                   ),
                 ],
               ),
@@ -3803,6 +3707,250 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
       _espai = _espai.copyWith(layoutConfig: newConfig);
     });
     await _saveChanges();
+  }
+  Widget _buildBedIrrigationTab(
+      int bedIndex,
+      BedData bedData,
+      WateringRequirement wateringReq,
+      IrrigationMethod irrigationMethod,
+      double cabalOverride,
+      Function(IrrigationMethod) onIrrigationMethodChanged,
+      Function(double) onCabalChanged,
+      Function(BedData) onSaveConfig) {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Irrigation Banner
+          Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: switch (wateringReq.status) {
+                WateringStatus.satiated => Colors.green.withValues(alpha: 0.1),
+                WateringStatus.forecast => Colors.orange.withValues(alpha: 0.1),
+                WateringStatus.critical => Colors.blue.withValues(alpha: 0.1),
+              },
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: switch (wateringReq.status) {
+                  WateringStatus.satiated => Colors.green.withValues(alpha: 0.3),
+                  WateringStatus.forecast => Colors.orange.withValues(alpha: 0.3),
+                  WateringStatus.critical => Colors.blue.withValues(alpha: 0.3),
+                },
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    wateringReq.actionText,
+                    style: TextStyle(
+                      color: switch (wateringReq.status) {
+                        WateringStatus.satiated => Colors.green.shade900,
+                        WateringStatus.forecast => Colors.orange.shade900,
+                        WateringStatus.critical => Colors.blue.shade900,
+                      },
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                if (wateringReq.needsWater)
+                  TextButton(
+                    onPressed: () {
+                      final newEvents = List<WateringEvent>.from(bedData.wateringEvents ?? []);
+                      newEvents.add(WateringEvent(
+                        date: DateTime.now(),
+                        litersApplied: wateringReq.litersNeeded,
+                      ));
+                      onSaveConfig(bedData.copyWith(wateringEvents: newEvents));
+                    },
+                    child: Text(wateringReq.buttonText),
+                  ),
+              ],
+            ),
+          ),
+
+          // Irrigation System Settings Card
+          Card(
+            margin: const EdgeInsets.only(bottom: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            elevation: 1,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Sistema de Reg',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Mètode de Reg:',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 4),
+                  SegmentedButton<IrrigationMethod>(
+                    segments: const [
+                      ButtonSegment(
+                        value: IrrigationMethod.manual,
+                        label: Text('Manual'),
+                        icon: Icon(Icons.water_drop_outlined, size: 18),
+                      ),
+                      ButtonSegment(
+                        value: IrrigationMethod.drip,
+                        label: Text('Gota a Gota'),
+                        icon: Icon(Icons.water, size: 18),
+                      ),
+                    ],
+                    selected: {irrigationMethod},
+                    onSelectionChanged: (Set<IrrigationMethod> newSelection) {
+                      onIrrigationMethodChanged(newSelection.first);
+                    },
+                  ),
+                  if (irrigationMethod == IrrigationMethod.drip) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Cabal reg m² (L/h):'),
+                        Text(
+                          '${cabalOverride.toStringAsFixed(1)} L/h',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    Slider(
+                      value: cabalOverride,
+                      min: 2.0,
+                      max: 30.0,
+                      divisions: 56, // steps of 0.5
+                      label: '${cabalOverride.toStringAsFixed(1)} L/h',
+                      activeColor: Colors.blue,
+                      onChanged: onCabalChanged,
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade50,
+                        foregroundColor: Colors.blue.shade800,
+                      ),
+                      onPressed: () {
+                        onSaveConfig(bedData.copyWith(
+                          irrigationMethod: irrigationMethod,
+                          cabalSistemaLitersHora: cabalOverride,
+                        ));
+                      },
+                      child: const Text('Guardar Sistema de Reg'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Darrers Regs List
+          const Text(
+            'Darrers Regs',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          if (bedData.wateringEvents == null || bedData.wateringEvents!.isEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Column(
+                children: [
+                  Icon(Icons.not_interested, color: Colors.grey.shade400, size: 32),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Encara no hi ha regs registrats.',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            )
+          else ...[
+            ...((bedData.wateringEvents!.toList()..sort((a, b) => b.date.compareTo(a.date))).map((event) {
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                shape: RoundedRectangleBorder(
+                  side: BorderSide(color: Colors.blue.shade100, width: 1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                elevation: 0,
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Colors.blue,
+                    child: Icon(Icons.water_drop, color: Colors.white, size: 20),
+                  ),
+                  title: Text(
+                    '${event.date.day.toString().padLeft(2, '0')}/${event.date.month.toString().padLeft(2, '0')}/${event.date.year}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(
+                    '${event.date.hour.toString().padLeft(2, '0')}:${event.date.minute.toString().padLeft(2, '0')}h',
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${event.litersApplied.round()} L',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.red),
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (BuildContext context) {
+                              return AlertDialog(
+                                title: const Text('Esborrar Reg'),
+                                content: const Text('Estàs segur que vols esborrar aquest registre de reg? Això afectarà al càlcul del balanç hídric.'),
+                                actions: [
+                                  TextButton(
+                                    child: const Text('Cancel·lar'),
+                                    onPressed: () => Navigator.of(context).pop(),
+                                  ),
+                                  TextButton(
+                                    child: const Text('Esborrar', style: TextStyle(color: Colors.red)),
+                                    onPressed: () {
+                                      Navigator.of(context).pop();
+                                      final newEvents = List<WateringEvent>.from(bedData.wateringEvents!);
+                                      newEvents.remove(event);
+                                      onSaveConfig(bedData.copyWith(wateringEvents: newEvents.isEmpty ? null : newEvents));
+                                    },
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            })),
+          ],
+        ],
+      ),
+    );
   }
 }
 
