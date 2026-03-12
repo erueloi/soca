@@ -155,14 +155,14 @@ class GardenIrrigationService {
       final isLegacy = currentBal < -0.1 && (currentBal.abs() * 10).round() % 4 == 0;
 
       if (oldestPlacedAt == null) {
-        if (currentBal < -0.1) needsReset = true;
+        if (currentBal < -0.1 && !forceSync) needsReset = true;
       } else {
         final isRecent = today.difference(oldestPlacedAt).inDays < 7;
         if (bed.soilBalance == null || 
             bed.lastBalanceUpdate == null || 
-            !bed.lastBalanceUpdate!.isAfter(oldestPlacedAt) ||
-            isLegacy ||
-            (isRecent && currentBal < -0.1)) {
+            (!bed.lastBalanceUpdate!.isAfter(oldestPlacedAt) && !bed.lastBalanceUpdate!.isAtSameMomentAs(oldestPlacedAt)) ||
+            (isLegacy && !forceSync) ||
+            (isRecent && currentBal < -0.1 && bed.wateringEvents?.isEmpty == true && !forceSync)) {
           
           if (currentBal.abs() < 0.01 && bed.lastBalanceUpdate != null && _normalizeDate(bed.lastBalanceUpdate!).isAtSameMomentAs(oldestPlacedAt)) {
               needsReset = false;
@@ -182,9 +182,11 @@ class GardenIrrigationService {
           debugPrint('   [Reg Debug] Bed ${bed.name ?? "B${bedIndex + 1}"} resets to Day Zero (Planted ${oldestPlacedAt.toIso8601String().split('T')[0]})');
         }
       } else {
+        // If forceSync is true, we still want to calculate from lastBalanceUpdate to today.
         bedDate = _normalizeDate(bed.lastBalanceUpdate ?? today);
         balance = bed.soilBalance!;
-        if (oldestPlacedAt != null && bedDate.isAtSameMomentAs(oldestPlacedAt) && balance < -0.1) {
+        // Prevent immediate wipeout if planted today, but handle logic properly
+        if (oldestPlacedAt != null && bedDate.isAtSameMomentAs(oldestPlacedAt) && balance < -0.1 && !forceSync) {
            balance = 0.0;
         }
       }
