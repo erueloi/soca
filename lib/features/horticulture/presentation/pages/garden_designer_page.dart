@@ -3708,6 +3708,97 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
     });
     await _saveChanges();
   }
+  Future<void> _showWateringEventDialog(
+    BuildContext context,
+    BedData bedData,
+    WateringEvent? existingEvent,
+    double defaultLiters,
+    Function(BedData) onSaveConfig,
+  ) async {
+    DateTime selectedDate = existingEvent?.date ?? DateTime.now();
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(builder: (context, setState) {
+          return AlertDialog(
+            title: Text(existingEvent == null ? 'Registrar Reg' : 'Editar Data de Reg'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Data i Hora'),
+                  subtitle: Text(
+                      '${selectedDate.day.toString().padLeft(2, '0')}/${selectedDate.month.toString().padLeft(2, '0')}/${selectedDate.year} ${selectedDate.hour.toString().padLeft(2, '0')}:${selectedDate.minute.toString().padLeft(2, '0')}'),
+                  trailing: const Icon(Icons.calendar_today),
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: selectedDate,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now(),
+                    );
+                    if (date != null) {
+                      if (!context.mounted) return;
+                      final time = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.fromDateTime(selectedDate),
+                      );
+                      if (time != null) {
+                        setState(() {
+                          selectedDate = DateTime(
+                            date.year,
+                            date.month,
+                            date.day,
+                            time.hour,
+                            time.minute,
+                          );
+                        });
+                      }
+                    }
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel·lar'),
+              ),
+              TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  backgroundColor: Colors.blue,
+                ),
+                onPressed: () {
+                  Navigator.pop(context);
+                  final newEvents = List<WateringEvent>.from(bedData.wateringEvents ?? []);
+                  if (existingEvent != null) {
+                    final index = newEvents.indexOf(existingEvent);
+                    if (index != -1) {
+                      newEvents[index] = WateringEvent(
+                        date: selectedDate,
+                        litersApplied: existingEvent.litersApplied,
+                      );
+                    }
+                  } else {
+                    newEvents.add(WateringEvent(
+                      date: selectedDate,
+                      litersApplied: defaultLiters,
+                    ));
+                  }
+                  onSaveConfig(bedData.copyWith(wateringEvents: newEvents));
+                },
+                child: const Text('Guardar'),
+              ),
+            ],
+          );
+        });
+      },
+    );
+  }
+
   Widget _buildBedIrrigationTab(
       int bedIndex,
       BedData bedData,
@@ -3759,12 +3850,13 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                 if (wateringReq.needsWater)
                   TextButton(
                     onPressed: () {
-                      final newEvents = List<WateringEvent>.from(bedData.wateringEvents ?? []);
-                      newEvents.add(WateringEvent(
-                        date: DateTime.now(),
-                        litersApplied: wateringReq.litersNeeded,
-                      ));
-                      onSaveConfig(bedData.copyWith(wateringEvents: newEvents));
+                      _showWateringEventDialog(
+                        context,
+                        bedData,
+                        null,
+                        wateringReq.litersNeeded,
+                        onSaveConfig,
+                      );
                     },
                     child: Text(wateringReq.buttonText),
                   ),
@@ -3913,6 +4005,18 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                         ),
                       ),
                       const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.edit_calendar, color: Colors.blue),
+                        onPressed: () {
+                          _showWateringEventDialog(
+                            context,
+                            bedData,
+                            event,
+                            event.litersApplied,
+                            onSaveConfig,
+                          );
+                        },
+                      ),
                       IconButton(
                         icon: const Icon(Icons.delete_outline, color: Colors.red),
                         onPressed: () {
