@@ -149,25 +149,27 @@ class GardenIrrigationService {
       DateTime bedDate;
       double balance;
       
-      bool needsReset = false;
+      bool needsReset = forceSync;
       final currentBal = bed.soilBalance ?? 0.0;
       // Legacy check: common multiples of fallbacks (3.2, 9.6, 2.4, 1.2, 0.4)
       final isLegacy = currentBal < -0.1 && (currentBal.abs() * 10).round() % 4 == 0;
 
-      if (oldestPlacedAt == null) {
-        if (currentBal < -0.1 && !forceSync) needsReset = true;
-      } else {
-        final isRecent = today.difference(oldestPlacedAt).inDays < 7;
-        if (bed.soilBalance == null || 
-            bed.lastBalanceUpdate == null || 
-            (!bed.lastBalanceUpdate!.isAfter(oldestPlacedAt) && !bed.lastBalanceUpdate!.isAtSameMomentAs(oldestPlacedAt)) ||
-            (isLegacy && !forceSync) ||
-            (isRecent && currentBal < -0.1 && bed.wateringEvents?.isEmpty == true && !forceSync)) {
-          
-          if (currentBal.abs() < 0.01 && bed.lastBalanceUpdate != null && _normalizeDate(bed.lastBalanceUpdate!).isAtSameMomentAs(oldestPlacedAt)) {
-              needsReset = false;
-          } else {
-              needsReset = true;
+      if (!forceSync) {
+        if (oldestPlacedAt == null) {
+          if (currentBal < -0.1) needsReset = true;
+        } else {
+          final isRecent = today.difference(oldestPlacedAt).inDays < 7;
+          if (bed.soilBalance == null || 
+              bed.lastBalanceUpdate == null || 
+              (!bed.lastBalanceUpdate!.isAfter(oldestPlacedAt) && !bed.lastBalanceUpdate!.isAtSameMomentAs(oldestPlacedAt)) ||
+              isLegacy ||
+              (isRecent && currentBal < -0.1 && bed.wateringEvents?.isEmpty == true)) {
+            
+            if (currentBal.abs() < 0.01 && bed.lastBalanceUpdate != null && _normalizeDate(bed.lastBalanceUpdate!).isAtSameMomentAs(oldestPlacedAt)) {
+                needsReset = false;
+            } else {
+                needsReset = true;
+            }
           }
         }
       }
