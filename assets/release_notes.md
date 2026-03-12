@@ -1,5 +1,7 @@
 ﻿# Release Notes
 
+## v1.9.11
+Hort: Revisió del reg dels bancals i historic de reg.
 ## v1.9.10
 Hort: Nova funció de incubadora.
 Avís si el bancals es possible que necessitaran reg aviat si no plou.
@@ -190,6 +192,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 
