@@ -98,6 +98,27 @@ class GardenLayoutConfig {
 
 enum IrrigationMethod { manual, drip }
 
+class WateringEvent {
+  final DateTime date;
+  final double litersApplied;
+
+  WateringEvent({required this.date, required this.litersApplied});
+
+  Map<String, dynamic> toMap() {
+    return {
+      'date': date.toIso8601String(),
+      'litersApplied': litersApplied,
+    };
+  }
+
+  factory WateringEvent.fromMap(Map<String, dynamic> map) {
+    return WateringEvent(
+      date: DateTime.parse(map['date']),
+      litersApplied: (map['litersApplied'] as num).toDouble(),
+    );
+  }
+}
+
 class BedData {
   final String? rotationPatternId;
   final DateTime? rotationStartDate;
@@ -108,6 +129,7 @@ class BedData {
   final double? cabalSistemaLitersHora; // L/h/m2
   final double? soilBalance; // mm
   final DateTime? lastBalanceUpdate;
+  final List<WateringEvent>? wateringEvents;
 
   BedData({
     this.rotationPatternId,
@@ -118,6 +140,7 @@ class BedData {
     this.cabalSistemaLitersHora,
     this.soilBalance,
     this.lastBalanceUpdate,
+    this.wateringEvents,
   });
 
   Map<String, dynamic> toMap() {
@@ -130,6 +153,7 @@ class BedData {
       'cabalSistemaLitersHora': cabalSistemaLitersHora,
       'soilBalance': soilBalance,
       'lastBalanceUpdate': lastBalanceUpdate?.toIso8601String(),
+      'wateringEvents': wateringEvents?.map((x) => x.toMap()).toList(),
     };
   }
 
@@ -153,6 +177,13 @@ class BedData {
       lastBalanceUpdate: map['lastBalanceUpdate'] != null
           ? DateTime.parse(map['lastBalanceUpdate'])
           : null,
+      wateringEvents: map['wateringEvents'] != null
+          ? List<WateringEvent>.from(
+              (map['wateringEvents'] as List).map(
+                (x) => WateringEvent.fromMap(x as Map<String, dynamic>),
+              ),
+            )
+          : null,
     );
   }
 
@@ -165,6 +196,7 @@ class BedData {
     double? cabalSistemaLitersHora,
     double? soilBalance,
     DateTime? lastBalanceUpdate,
+    List<WateringEvent>? wateringEvents,
   }) {
     return BedData(
       rotationPatternId: rotationPatternId ?? this.rotationPatternId,
@@ -176,6 +208,7 @@ class BedData {
           cabalSistemaLitersHora ?? this.cabalSistemaLitersHora,
       soilBalance: soilBalance ?? this.soilBalance,
       lastBalanceUpdate: lastBalanceUpdate ?? this.lastBalanceUpdate,
+      wateringEvents: wateringEvents ?? this.wateringEvents,
     );
   }
 }

@@ -3411,13 +3411,17 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                                         if (wateringReq.needsWater)
                                           TextButton(
                                             onPressed: () async {
-                                              final newBedData = (currentBedData ??
-                                                      BedData())
-                                                  .copyWith(
-                                                    soilBalance: 0.0,
-                                                    lastBalanceUpdate:
-                                                        DateTime.now(),
-                                                  );
+                                              final bedData = currentBedData ?? BedData();
+                                              final newEvents = List<WateringEvent>.from(bedData.wateringEvents ?? []);
+                                              newEvents.add(WateringEvent(
+                                                date: DateTime.now(),
+                                                litersApplied: wateringReq.litersNeeded,
+                                              ));
+                                              
+                                              final newBedData = bedData.copyWith(
+                                                wateringEvents: newEvents,
+                                              );
+                                              
                                               final newBeds =
                                                   Map<int, BedData>.from(
                                                     _espai.layoutConfig!.beds,
@@ -3430,8 +3434,8 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                                               _saveBedData(newConfig);
                                               setState(() {});
                                             },
-                                            child: const Text(
-                                              'Marcar com a Regat',
+                                            child: Text(
+                                              wateringReq.buttonText,
                                             ),
                                           ),
                                       ],

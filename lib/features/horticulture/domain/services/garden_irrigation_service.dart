@@ -195,11 +195,23 @@ class GardenIrrigationService {
         if (data != null) {
           double etc = data.et0 * dynamicKc;
           double rain = data.rain;
-          balance = balance + rain - etc;
+          
+          double irrigatedMm = 0.0;
+          if (bed.wateringEvents != null) {
+            final double bedAreaSqm = (config.getBedWidth(bedIndex) * config.totalLength);
+            // Protect against dividing by zero or very small area:
+            final double actualAreaM2 = bedAreaSqm > 1000 ? bedAreaSqm / 10000.0 : bedAreaSqm;
+            if (actualAreaM2 > 0) {
+              final dailyEvents = bed.wateringEvents!.where((e) => _normalizeDate(e.date).isAtSameMomentAs(bedDate));
+              final totalLiters = dailyEvents.fold(0.0, (sum, e) => sum + e.litersApplied);
+              irrigatedMm = totalLiters / actualAreaM2;
+            }
+          }
+
+          balance = balance + rain + irrigatedMm - etc;
           debugPrint(
             "   [Reg Debug] Dt: ${bedDate.toIso8601String().split('T')[0]} | "
-            "Rain: $rain mm | ET0: ${data.et0} mm | Kc: $dynamicKc | "
-            "ETc (Perd): ${etc.toStringAsFixed(2)} mm -> Balance: ${balance.toStringAsFixed(2)}",
+            "Rain: $rain mm | Irrigated: ${irrigatedMm.toStringAsFixed(1)} mm | ETc: ${etc.toStringAsFixed(2)} mm -> Balance: ${balance.toStringAsFixed(2)}",
           );
         } else {
           double fallbackEtc = 4.0 * dynamicKc;
@@ -249,6 +261,7 @@ class GardenIrrigationService {
         actionText: '🟢 Sòl Humit',
         buttonText: 'Sòl Saciat',
         amountValue: 0.0,
+        litersNeeded: 0.0,
       );
     } else if (balance > -2.0) {
       debugPrint('   [Reg Debug] 2. Soil Balance: ${balance.toStringAsFixed(1)} mm (Forecast / Yellow Alert)');
@@ -259,6 +272,7 @@ class GardenIrrigationService {
         actionText: '🟡 Previsió: Reg imminent si no plou',
         buttonText: 'Sòl gairebé al límit',
         amountValue: 0.0,
+        litersNeeded: 0.0,
       );
     }
 
@@ -276,6 +290,7 @@ class GardenIrrigationService {
         actionText: '🔴 💧 Rega amb ${litersNeeded.round()} L',
         buttonText: 'Registrar Reg (${litersNeeded.round()} L)',
         amountValue: litersNeeded,
+        litersNeeded: litersNeeded,
       );
     } else {
       if (bed.cabalSistemaLitersHora == null || bed.cabalSistemaLitersHora! <= 0) {
@@ -286,6 +301,7 @@ class GardenIrrigationService {
           actionText: '⚠️ Faltan les dades del Cabal',
           buttonText: 'Configura el Cabal',
           amountValue: 0.0,
+          litersNeeded: 0.0,
         );
       }
       double minutes = (litersNeeded / bed.cabalSistemaLitersHora!) * 60.0;
@@ -296,6 +312,7 @@ class GardenIrrigationService {
         actionText: '🔴 💧 Obre la clau ${minutes.round()} min',
         buttonText: 'Registrar Reg (${minutes.round()} min)',
         amountValue: minutes,
+        litersNeeded: litersNeeded,
       );
     }
   }
@@ -315,6 +332,7 @@ class WateringRequirement {
   final String actionText;
   final String buttonText;
   final double amountValue;
+  final double litersNeeded;
 
   WateringRequirement({
     required this.needsWater,
@@ -322,6 +340,7 @@ class WateringRequirement {
     required this.actionText,
     required this.buttonText,
     required this.amountValue,
+    required this.litersNeeded,
   });
 }
 
