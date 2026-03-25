@@ -2192,12 +2192,16 @@ class _MapPageState extends ConsumerState<MapPage>
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    child: Wrap(
+                      spacing: 8.0,
+                      runSpacing: 8.0,
+                      alignment: WrapAlignment.center,
                       children: [
                         _buildWaterOption(context, ref, tree, 2),
                         _buildWaterOption(context, ref, tree, 5),
                         _buildWaterOption(context, ref, tree, 8),
+                        if (tree.waterNeedLiters > 0 && ![2, 5, 8].contains(tree.waterNeedLiters))
+                          _buildWaterOption(context, ref, tree, tree.waterNeedLiters.toDouble()),
                         _buildCustomWaterOption(context, ref, tree),
                       ],
                     ),
@@ -2409,6 +2413,7 @@ class _MapPageState extends ConsumerState<MapPage>
         foregroundColor: Colors.blue.shade800,
       ),
       onPressed: () async {
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.pop(context);
         final event = WateringEvent(
           id: '',
@@ -2421,13 +2426,11 @@ class _MapPageState extends ConsumerState<MapPage>
             .read(treesRepositoryProvider)
             .addWateringEvent(tree.id, event);
 
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Afegits ${liters.toInt()}L a ${tree.commonName}'),
-            ),
-          );
-        }
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Afegits ${liters.toInt()}L a ${tree.commonName}'),
+          ),
+        );
       },
       icon: const Icon(Icons.water_drop),
       label: Text('${liters.toInt()}L'),
@@ -2461,7 +2464,7 @@ class _MapPageState extends ConsumerState<MapPage>
     final controller = TextEditingController();
     return showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Quantitat Personalitzada'),
         content: TextField(
           controller: controller,
@@ -2475,14 +2478,16 @@ class _MapPageState extends ConsumerState<MapPage>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('CANCEL·LAR'),
           ),
           ElevatedButton(
             onPressed: () async {
-              final val = double.tryParse(controller.text);
+              final valStr = controller.text.replaceAll(',', '.');
+              final val = double.tryParse(valStr);
               if (val != null && val > 0) {
-                Navigator.pop(context);
+                final messenger = ScaffoldMessenger.of(dialogContext);
+                Navigator.pop(dialogContext);
                 final event = WateringEvent(
                   id: '',
                   date: DateTime.now(),
@@ -2494,15 +2499,13 @@ class _MapPageState extends ConsumerState<MapPage>
                     .read(treesRepositoryProvider)
                     .addWateringEvent(tree.id, event);
 
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Afegits ${val.toInt()}L a ${tree.commonName}',
-                      ),
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Afegits ${val.toInt()}L a ${tree.commonName}',
                     ),
-                  );
-                }
+                  ),
+                );
               }
             },
             child: const Text('GUARDAR'),

@@ -346,9 +346,11 @@ async function step2_GlobalRecalculation() {
 
         // 1. Area (Step D)
         const diameterCm = tree.trunkDiameter || 0;
-        let areaRadius = 0.4; // < 5cm -> 0.8m diam -> 0.4 radius
-        if (diameterCm >= 5 && diameterCm <= 15) areaRadius = 0.75; // 1.5m diam
-        if (diameterCm > 15) areaRadius = 1.5; // 3.0m diam (Ample Biblioteca)
+        let areaRadius = 0.3; // Default petit: < 3cm -> radi 0.3m (0.28m2)
+        if (diameterCm >= 3 && diameterCm < 8) areaRadius = 0.5; // Jove 3-8cm (ex: 8 mesos a camp) -> radi 0.5m (0.78m2)
+        if (diameterCm >= 8 && diameterCm < 15) areaRadius = 0.8; // Mig format -> radi 0.8m (2.0m2)
+        if (diameterCm >= 15 && diameterCm <= 30) areaRadius = 1.5; // Adult mitjà -> radi 1.5m (7.0m2)
+        if (diameterCm > 30) areaRadius = 2.5; // Arbre molt madur/gran -> radi 2.5m (19.6m2)
 
         const area = Math.PI * (areaRadius * areaRadius); // m2
 

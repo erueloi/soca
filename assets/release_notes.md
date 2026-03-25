@@ -1,5 +1,9 @@
 ﻿# Release Notes
 
+## v1.9.12
+Reg: Filtratge arbres existents.
+Litres recomantas, botó directe.
+Bugfix Altres Reg.
 ## v1.9.11
 Hort: Revisió del reg dels bancals i historic de reg.
 ## v1.9.10
@@ -192,6 +196,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

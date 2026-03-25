@@ -7,6 +7,17 @@ extension TreeWaterStatus on Tree {
     return (soilBalance ?? 0) < -15;
   }
 
+  int get waterNeedLiters {
+    if (isMature || status == 'Mort' || status == 'Perdut') return 0;
+    final balance = soilBalance ?? 0.0;
+    final area = calculatedRegArea ?? 1.0;
+    
+    if (balance < 0) {
+      return (balance.abs() * area).round();
+    }
+    return 0;
+  }
+
   // Colors based on user request:
   // Green: Critical (< -15) - "Go Water"
   // Orange: Wet (> -5) - "Stop"

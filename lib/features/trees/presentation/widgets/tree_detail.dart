@@ -19,6 +19,7 @@ import '../../data/repositories/species_repository.dart';
 import '../pages/watering_page.dart';
 import '../pages/location_picker_page.dart';
 import '../../domain/entities/tree.dart';
+import '../../domain/entities/tree_extensions.dart';
 import '../../domain/entities/species.dart';
 import '../pages/species_library_page.dart';
 import '../pages/tree_growth_timeline_page.dart';
@@ -1544,14 +1545,21 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildWaterOption(context, 2),
-                  _buildWaterOption(context, 5),
-                  _buildWaterOption(context, 8),
-                  _buildCustomWaterOption(context),
-                ],
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Wrap(
+                  spacing: 8.0,
+                  runSpacing: 8.0,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    _buildWaterOption(context, 2),
+                    _buildWaterOption(context, 5),
+                    _buildWaterOption(context, 8),
+                    if (widget.tree.waterNeedLiters > 0 && ![2, 5, 8].contains(widget.tree.waterNeedLiters))
+                      _buildWaterOption(context, widget.tree.waterNeedLiters.toDouble()),
+                    _buildCustomWaterOption(context),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
             ],
@@ -1569,6 +1577,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
         foregroundColor: Colors.blue.shade800,
       ),
       onPressed: () async {
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.pop(context);
         final event = WateringEvent(
           id: '',
@@ -1580,15 +1589,13 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
             .read(treesRepositoryProvider)
             .addWateringEvent(widget.tree.id, event);
 
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Afegits ${liters.toInt()}L a ${widget.tree.commonName}',
-              ),
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Afegits ${liters.toInt()}L a ${widget.tree.commonName}',
             ),
-          );
-        }
+          ),
+        );
       },
       icon: const Icon(Icons.water_drop),
       label: Text('${liters.toInt()}L'),
@@ -1614,7 +1621,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     final controller = TextEditingController();
     return showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Quantitat Personalitzada'),
         content: TextField(
           controller: controller,
@@ -1628,14 +1635,16 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('CANCEL·LAR'),
           ),
           ElevatedButton(
             onPressed: () async {
-              final val = double.tryParse(controller.text);
+              final valStr = controller.text.replaceAll(',', '.');
+              final val = double.tryParse(valStr);
               if (val != null && val > 0) {
-                Navigator.pop(context);
+                final messenger = ScaffoldMessenger.of(dialogContext);
+                Navigator.pop(dialogContext);
                 final event = WateringEvent(
                   id: '',
                   date: DateTime.now(),
@@ -1646,15 +1655,13 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                     .read(treesRepositoryProvider)
                     .addWateringEvent(widget.tree.id, event);
 
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Afegits ${val.toInt()}L a ${widget.tree.commonName}',
-                      ),
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Afegits ${val.toInt()}L a ${widget.tree.commonName}',
                     ),
-                  );
-                }
+                  ),
+                );
               }
             },
             child: const Text('GUARDAR'),
