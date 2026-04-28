@@ -25,6 +25,7 @@ class _WateringPageState extends ConsumerState<WateringPage> {
   late ScrollController _headerScroll;
   late ScrollController _bodyScroll;
   Timer? _debounce;
+  final Set<String> _selectedTreeIds = {};
 
   @override
   void initState() {
@@ -63,6 +64,18 @@ class _WateringPageState extends ConsumerState<WateringPage> {
         backgroundColor: Colors.blue.shade800,
         foregroundColor: Colors.white,
       ),
+      floatingActionButton: _selectedTreeIds.isNotEmpty
+          ? treesAsync.maybeWhen(
+              data: (trees) => FloatingActionButton.extended(
+                onPressed: () => _handleBatchWatering(trees),
+                label: Text('Regar ${_selectedTreeIds.length} arbres'),
+                icon: const Icon(Icons.water_drop),
+                backgroundColor: Colors.blue.shade600,
+                foregroundColor: Colors.white,
+              ),
+              orElse: () => null,
+            )
+          : null,
       body: treesAsync.when(
         data: (trees) {
           return wateringAsync.when(
@@ -132,7 +145,7 @@ class _WateringPageState extends ConsumerState<WateringPage> {
     // 2. Prepare Data Structure
     final Map<String, Map<String, List<WateringEvent>>> data = {};
 
-    final double colTreeWidth = 160;
+    final double colTreeWidth = 200;
     final double colDateWidth = 90;
     final double colTotalWidth = 110;
     final double colNeedsWidth = 180;
@@ -306,6 +319,30 @@ class _WateringPageState extends ConsumerState<WateringPage> {
                           : FontWeight.normal,
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  if (filteredTrees.isNotEmpty)
+                    TextButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          final allFilteredIds = filteredTrees.map((t) => t.id).toSet();
+                          if (_selectedTreeIds.containsAll(allFilteredIds)) {
+                            _selectedTreeIds.removeAll(allFilteredIds);
+                          } else {
+                            _selectedTreeIds.addAll(allFilteredIds);
+                          }
+                        });
+                      },
+                      icon: Icon(
+                        _selectedTreeIds.containsAll(filteredTrees.map((t) => t.id))
+                            ? Icons.deselect
+                            : Icons.select_all,
+                      ),
+                      label: Text(
+                        _selectedTreeIds.containsAll(filteredTrees.map((t) => t.id))
+                            ? 'Deseleccionar'
+                            : 'Seleccionar Tots',
+                      ),
+                    ),
                 ],
               ),
               // Active Filters Chips (Breadcrumbs)
@@ -541,27 +578,41 @@ class _WateringPageState extends ConsumerState<WateringPage> {
                             // Remove inner padding to allow InkWell to fill cell
                             padding: EdgeInsets.zero,
                             alignment: Alignment.centerLeft,
-                            child: InkWell(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        MapPage(initialTreeId: tree.id),
-                                  ),
-                                );
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
+                            child: Row(
+                              children: [
+                                Checkbox(
+                                  value: _selectedTreeIds.contains(tree.id),
+                                  onChanged: (val) {
+                                    setState(() {
+                                      if (val == true) {
+                                        _selectedTreeIds.add(tree.id);
+                                      } else {
+                                        _selectedTreeIds.remove(tree.id);
+                                      }
+                                    });
+                                  },
                                 ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      tree.commonName,
+                                Expanded(
+                                  child: InkWell(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              MapPage(initialTreeId: tree.id),
+                                        ),
+                                      );
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            tree.commonName,
                                       style: const TextStyle(
                                         fontWeight: FontWeight.bold,
                                         color: Colors.indigo,
@@ -580,18 +631,21 @@ class _WateringPageState extends ConsumerState<WateringPage> {
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
-                                    Text(
-                                      tree.species,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: Colors.grey.shade600,
-                                        fontStyle: FontStyle.italic,
+                                          Text(
+                                            tree.species,
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.grey.shade600,
+                                              fontStyle: FontStyle.italic,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
                                       ),
-                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                  ],
+                                  ),
                                 ),
-                              ),
+                              ],
                             ),
                           ),
                           // Date Cells
@@ -871,6 +925,105 @@ class _WateringPageState extends ConsumerState<WateringPage> {
         },
       ),
     );
+  }
+
+  Future<void> _handleBatchWatering(List<Tree> allTrees) async {
+    // 1. Pick Date
+    DateTime selectedDate = DateTime.now();
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    if (pickedDate == null || !mounted) return;
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(selectedDate),
+    );
+    if (pickedTime == null || !mounted) return;
+
+    selectedDate = DateTime(
+      pickedDate.year,
+      pickedDate.month,
+      pickedDate.day,
+      pickedTime.hour,
+      pickedTime.minute,
+    );
+
+    // 2. Filter valid trees
+    final treesToWater = allTrees.where((t) => _selectedTreeIds.contains(t.id) && t.waterNeedLiters > 0).toList();
+
+    if (treesToWater.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cap dels arbres seleccionats té necessitat de reg (>0L).')),
+      );
+      return;
+    }
+
+    // 3. Confirm
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirmar Reg Múltiple'),
+        content: Text('S\'afegiran regs per a ${treesToWater.length} arbres amb la seva quantitat estimada.\n\nVols continuar?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCEL·LAR')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('REGAR')),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    // 4. Execute with Progress
+    final progressNotifier = ValueNotifier<int>(0);
+    final total = treesToWater.length;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        content: Row(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 16),
+            ValueListenableBuilder<int>(
+              valueListenable: progressNotifier,
+              builder: (context, value, child) {
+                return Text('Regant arbre $value de $total...');
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+
+    int count = 0;
+    for (var tree in treesToWater) {
+      final liters = tree.waterNeedLiters.toDouble();
+      final event = WateringEvent(
+        id: '',
+        date: selectedDate,
+        liters: liters,
+        note: 'Reg Múltiple Estimació',
+        treeId: tree.id,
+      );
+      await ref.read(treesRepositoryProvider).addWateringEvent(tree.id, event);
+      count++;
+      progressNotifier.value = count;
+    }
+
+    if (mounted) {
+      Navigator.pop(context); // Close loading dialog
+      setState(() {
+        _selectedTreeIds.clear();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('S\'han registrat $count regs correctament!')),
+      );
+    }
   }
 
   Widget _buildHeaderCell(

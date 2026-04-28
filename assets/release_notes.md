@@ -1,5 +1,7 @@
 ﻿# Release Notes
 
+## v1.9.13
+Reg: Reg selecció múltiple.
 ## v1.9.12
 Reg: Filtratge arbres existents.
 Litres recomantas, botó directe.
@@ -196,6 +198,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 
