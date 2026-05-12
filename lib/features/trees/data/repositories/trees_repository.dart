@@ -651,13 +651,8 @@ class TreesRepository {
         // 4. Update
         double raw = currentBalance + pef + irrigationMm - etc;
 
-        // Cap max 35
-        if (raw > 35.0) raw = 35.0;
-
-        // No Min cap? Usually balance can go negative until wilting point (RAW).
-        // RuralCat usually tracks positive/negative relative to FC.
-        // Let's allow negative.
-        currentBalance = raw;
+        // Cap: Clamp between Wilting Point (-50mm PMP) and Field Capacity (35mm)
+        currentBalance = raw.clamp(-50.0, 35.0);
       }
 
       // If tree is mature, we force balance to 0 (or some positive value)
