@@ -7,6 +7,10 @@ const METEOCAT_API_KEY = process.env.METEOCAT_KEY || 'R5F8gNLcUw7Hr6KIiIS6w8INP3
 const METEOCAT_BASE_URL = 'https://api.meteo.cat/xema/v1';
 const STATION_CODE = 'YD'; // Les Borges Blanques
 
+// Soil Balance Limits
+const FIELD_CAPACITY_MM = 35.0; // Cap superior: Capacitat de Camp (drenatge profund)
+const WILTING_POINT_MM = -50.0; // Cap inferior: Punt de Marciment Permanent (PMP)
+
 
 
 /**
@@ -250,11 +254,9 @@ async function step2_GlobalRecalculation() {
         const et0 = day.et0 || 0;
         const etc = et0 * kc;
 
-        // Balance
+        // Balance (clamped between Wilting Point and Field Capacity)
         let rawBalance = currentBalance + pef - etc;
-        if (rawBalance > 35.0) rawBalance = 35.0;
-
-        currentBalance = rawBalance;
+        currentBalance = Math.max(WILTING_POINT_MM, Math.min(FIELD_CAPACITY_MM, rawBalance));
 
         // Update Global Doc
         batchHandler.add(db.collection('clima_historic').doc(day.id), {
@@ -362,12 +364,10 @@ async function step2_GlobalRecalculation() {
         const kc = tree.coeficient_kc || 0.6; // Default standard
         const etc = (latestDayData.et0 || 0) * kc;
 
-        // 4. Balance
+        // 4. Balance (clamped between Wilting Point and Field Capacity)
         // Balance = Start + Pef + Irrig - ETc
         let newBalance = startOfDayVal + (latestDayData.pef || 0) + irrigMm - etc;
-
-        // Cap (Max 35.0 similar to global)
-        if (newBalance > 35.0) newBalance = 35.0;
+        newBalance = Math.max(WILTING_POINT_MM, Math.min(FIELD_CAPACITY_MM, newBalance));
 
         treeBatchHandler.add(doc.ref, {
             soilBalance: newBalance, // Updated Balance (End of Day state)
