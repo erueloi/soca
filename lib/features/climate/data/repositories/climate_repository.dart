@@ -270,8 +270,9 @@ class ClimateRepository {
       // 3. Balance Update
       // Balance = PrevBalance + Pef - ETc
       // Cap at 35.0 (Runoff/Deep Drainage simulation)
+      // Floor at -50.0 (Punt de Marciment Permanent)
       double rawBalance = currentBalance + pef - etc;
-      currentBalance = rawBalance > 35.0 ? 35.0 : rawBalance;
+      currentBalance = rawBalance.clamp(-50.0, 35.0);
 
       // Create updated copy
       updatedDays.add(

@@ -9,6 +9,12 @@ import '../../../climate/data/repositories/climate_repository.dart';
 import '../../../climate/presentation/providers/climate_provider.dart';
 
 class GardenIrrigationService {
+  /// Punt de Marciment Permanent (PMP): límit negatiu del balanç hídric.
+  /// Representa la quantitat màxima d'aigua que el sòl pot perdre abans
+  /// que les plantes ja no puguin extreure'n més. Valor típic per sòl
+  /// argilós-llimós mediterrani en els primers 30-40 cm de profunditat.
+  static const double kWiltingPointMm = -50.0;
+
   final MeteocatService _meteocatService;
   final ClimateRepository _climateRepository;
 
@@ -233,7 +239,8 @@ class GardenIrrigationService {
           );
         }
 
-        if (balance > 0.0) balance = 0.0;
+        if (balance > 0.0) balance = 0.0; // Cap superior: Capacitat de Camp
+        if (balance < kWiltingPointMm) balance = kWiltingPointMm; // Cap inferior: Punt de Marciment
         bedDate = bedDate.add(const Duration(days: 1));
         bedDate = _normalizeDate(bedDate); // Strict normalization
       }
