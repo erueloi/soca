@@ -1,5 +1,7 @@
-﻿# Release Notes
+# Release Notes
 
+## v1.9.15
+Hort: Bugfix al afegir un nou espai.
 ## v1.9.14
 Clima: Bug fix negatiu balanç aplicant tope inferior.
 ## v1.9.13
@@ -200,6 +202,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

@@ -48,6 +48,7 @@ class EspaiHort {
     return {
       'id': id,
       'nom': nom,
+      'fincaId': fincaId,
       'center': {'lat': center.latitude, 'lng': center.longitude},
       'width': width,
       'length': length,
@@ -65,6 +66,7 @@ class EspaiHort {
     return {
       'id': id,
       'nom': nom,
+      'fincaId': fincaId,
       'center': {'lat': center.latitude, 'lng': center.longitude},
       'width': width,
       'length': length,

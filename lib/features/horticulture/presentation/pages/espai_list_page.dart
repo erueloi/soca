@@ -410,6 +410,16 @@ class _EspaiListPageState extends ConsumerState<EspaiListPage> {
                             .saveEspai(newEspai)
                             .then((_) {
                               if (context.mounted) Navigator.pop(context);
+                            })
+                            .catchError((e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Error guardant l\'espai: $e'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
                             });
                       }
                     : null,
