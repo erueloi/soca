@@ -8,6 +8,7 @@ import '../../domain/entities/plantacio_historica.dart';
 import '../../domain/services/assistent_hort_service.dart';
 import '../../domain/services/garden_irrigation_service.dart';
 import '../../../trees/presentation/pages/location_picker_page.dart';
+import '../../../settings/presentation/providers/settings_provider.dart';
 
 import '../../data/repositories/hort_repository.dart';
 import 'hort_library_page.dart';
@@ -1116,9 +1117,18 @@ class _GardenDesignerPageState extends ConsumerState<GardenDesignerPage> {
                                 double.tryParse(lengthCtrl.text) ??
                                 _espai.length;
 
+                            final farmConfig = ref.read(farmConfigStreamProvider).value;
+                            final defaultCenter = farmConfig != null
+                                ? LatLng(farmConfig.latitude, farmConfig.longitude)
+                                : const LatLng(41.5126, 0.9186);
+
+                            final initialPos = (lat == 0.0 && lng == 0.0)
+                                ? defaultCenter
+                                : LatLng(lat, lng);
+
                             final newPos = await _showLocationPicker(
                               context,
-                              LatLng(lat, lng),
+                              initialPos,
                               width: w,
                               height: l,
                               label: nameCtrl.text,

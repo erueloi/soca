@@ -179,7 +179,7 @@ exports.identifyTree = functions.https.onCall(async (data, context) => {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
 
     const prompt = `
     Analyze this image of a tree/plant acting as an expert in PERMACULTURE. Return a strict JSON object (no markdown) with the following fields:
@@ -261,7 +261,7 @@ exports.analyzeTree = functions.https.onCall(async (data, context) => {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
 
     const species = data.species || "Unknown";
     const format = data.format || "Unknown";
@@ -346,7 +346,7 @@ exports.getBotanicalDataFromText = functions.https.onCall(async (data, context) 
 
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
-        model: "gemini-2.0-flash",
+        model: "gemini-3.5-flash",
         generationConfig: {
             temperature: 0.1,
         }
@@ -403,7 +403,7 @@ exports.getHorticulturalData = functions.https.onCall(async (data, context) => {
 
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
-        model: "gemini-2.0-flash",
+        model: "gemini-3.5-flash",
         generationConfig: {
             temperature: 0.1,
         }

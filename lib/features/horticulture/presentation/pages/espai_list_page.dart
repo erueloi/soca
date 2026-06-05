@@ -5,6 +5,7 @@ import '../../data/repositories/hort_repository.dart';
 import '../../domain/entities/espai_hort.dart';
 import '../../domain/entities/garden_layout_config.dart';
 import 'garden_designer_page.dart';
+import '../../../settings/presentation/providers/settings_provider.dart';
 
 final espaiListStreamProvider = StreamProvider((ref) {
   final repo = ref.watch(hortRepositoryProvider);
@@ -190,6 +191,11 @@ class _EspaiListPageState extends ConsumerState<EspaiListPage> {
     final numBedsCtrl = TextEditingController(text: '4');
     final pathWidthCtrl = TextEditingController(text: '0.5');
     final cellSizeCtrl = TextEditingController(text: '0.2');
+
+    final farmConfig = ref.read(farmConfigStreamProvider).value;
+    final defaultCenter = farmConfig != null
+        ? LatLng(farmConfig.latitude, farmConfig.longitude)
+        : const LatLng(41.5126, 0.9186);
 
     showDialog(
       context: context,
@@ -398,7 +404,7 @@ class _EspaiListPageState extends ConsumerState<EspaiListPage> {
                         final newEspai = EspaiHort(
                           id: '',
                           nom: nom,
-                          center: const LatLng(0, 0), // Undefined location
+                          center: defaultCenter,
                           width: w,
                           length: l,
                           gridCellSize: cSize,

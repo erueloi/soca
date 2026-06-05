@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../features/map/presentation/providers/map_layers_provider.dart';
+import '../../../../features/settings/presentation/providers/settings_provider.dart';
 
 import '../../domain/entities/espai_hort.dart';
 import '../../domain/entities/garden_layout_config.dart';
@@ -47,12 +48,25 @@ class _ZoneEditorPageState extends ConsumerState<ZoneEditorPage> {
   Widget build(BuildContext context) {
     final espaisAsync = ref.watch(espaiListStreamProvider);
     final layers = ref.watch(mapLayersProvider);
+    final farmConfig = ref.watch(farmConfigStreamProvider).value;
     // Rotation logic mostly moved to Designer/Details, but showing status on Map popup is cool.
+
+    final defaultCenter = farmConfig != null
+        ? LatLng(farmConfig.latitude, farmConfig.longitude)
+        : const LatLng(41.5126, 0.9186);
 
     return espaisAsync.when(
       data: (espais) {
-        // Center on first if available and map not moved?
-        // simple logic
+        LatLng initialCenter = defaultCenter;
+        if (espais.isNotEmpty) {
+          final firstValid = espais.firstWhere(
+            (e) => e.center.latitude != 0.0 || e.center.longitude != 0.0,
+            orElse: () => espais.first,
+          );
+          if (firstValid.center.latitude != 0.0 || firstValid.center.longitude != 0.0) {
+            initialCenter = firstValid.center;
+          }
+        }
 
         return Stack(
           children: [
@@ -60,11 +74,8 @@ class _ZoneEditorPageState extends ConsumerState<ZoneEditorPage> {
               mapController: _mapController,
               options: MapOptions(
                 // Center on selected zone if possible, else farm center
-                // Default center
-                initialCenter: espais.isNotEmpty
-                    ? espais.first.center
-                    : const LatLng(41.5126, 0.9186),
-                initialZoom: 20.0,
+                initialCenter: initialCenter,
+                initialZoom: farmConfig?.zoom ?? 20.0,
                 maxZoom: 22.0,
                 onTap: (pos, latlng) {
                   setState(() => _selectedEspai = null);
