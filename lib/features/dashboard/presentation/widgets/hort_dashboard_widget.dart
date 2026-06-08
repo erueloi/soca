@@ -21,6 +21,19 @@ class HortDashboardCarousel extends ConsumerStatefulWidget {
 
 class _HortDashboardCarouselState extends ConsumerState<HortDashboardCarousel> {
   int _currentPage = 0;
+  PageController? _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pageController?.dispose();
+    super.dispose();
+  }
 
   Future<void> _syncEspais(List<EspaiHort> espais) async {
     final irrigationService = ref.read(gardenIrrigationServiceProvider);
@@ -76,16 +89,65 @@ class _HortDashboardCarouselState extends ConsumerState<HortDashboardCarousel> {
                 child: Column(
                   children: [
                     Expanded(
-                      child: PageView.builder(
-                        itemCount: espais.length,
-                        onPageChanged: (i) => setState(() => _currentPage = i),
-                        itemBuilder: (context, index) {
-                          return _buildEspaiCard(
-                            context,
-                            espais[index],
-                            plants,
-                          );
-                        },
+                      child: Stack(
+                        children: [
+                          PageView.builder(
+                            controller: _pageController,
+                            itemCount: espais.length,
+                            onPageChanged: (i) => setState(() => _currentPage = i),
+                            itemBuilder: (context, index) {
+                              return _buildEspaiCard(
+                                context,
+                                espais[index],
+                                plants,
+                              );
+                            },
+                          ),
+                          if (espais.length > 1) ...[
+                            if (_currentPage > 0)
+                              Positioned(
+                                left: 4,
+                                top: 0,
+                                bottom: 0,
+                                child: Center(
+                                  child: IconButton(
+                                    icon: const Icon(Icons.chevron_left, size: 28),
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: Colors.white.withValues(alpha: 0.7),
+                                      hoverColor: Colors.white.withValues(alpha: 0.9),
+                                    ),
+                                    onPressed: () {
+                                      _pageController?.previousPage(
+                                        duration: const Duration(milliseconds: 300),
+                                        curve: Curves.easeInOut,
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            if (_currentPage < espais.length - 1)
+                              Positioned(
+                                right: 4,
+                                top: 0,
+                                bottom: 0,
+                                child: Center(
+                                  child: IconButton(
+                                    icon: const Icon(Icons.chevron_right, size: 28),
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: Colors.white.withValues(alpha: 0.7),
+                                      hoverColor: Colors.white.withValues(alpha: 0.9),
+                                    ),
+                                    onPressed: () {
+                                      _pageController?.nextPage(
+                                        duration: const Duration(milliseconds: 300),
+                                        curve: Curves.easeInOut,
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ],
                       ),
                     ),
                     if (espais.length > 1)
@@ -95,16 +157,28 @@ class _HortDashboardCarouselState extends ConsumerState<HortDashboardCarousel> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: List.generate(
                             espais.length,
-                            (i) => AnimatedContainer(
-                              duration: const Duration(milliseconds: 250),
-                              margin: const EdgeInsets.symmetric(horizontal: 3),
-                              width: _currentPage == i ? 20 : 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(4),
-                                color: _currentPage == i
-                                    ? const Color(0xFF556B2F)
-                                    : Colors.grey.shade300,
+                            (i) => GestureDetector(
+                              onTap: () {
+                                _pageController?.animateToPage(
+                                  i,
+                                  duration: const Duration(milliseconds: 350),
+                                  curve: Curves.easeInOut,
+                                );
+                              },
+                              child: MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 250),
+                                  margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
+                                  width: _currentPage == i ? 20 : 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(4),
+                                    color: _currentPage == i
+                                        ? const Color(0xFF556B2F)
+                                        : Colors.grey.shade300,
+                                  ),
+                                ),
                               ),
                             ),
                           ),

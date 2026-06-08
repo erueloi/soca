@@ -8,6 +8,7 @@ class EspaiHort {
   final String id;
   final String nom;
   final String? fincaId;
+  final int displayOrder;
 
   // Physical properties
   final LatLng center;
@@ -33,6 +34,7 @@ class EspaiHort {
     required this.id,
     required this.nom,
     this.fincaId,
+    this.displayOrder = 0,
     required this.center,
     required this.width,
     required this.length,
@@ -49,6 +51,7 @@ class EspaiHort {
       'id': id,
       'nom': nom,
       'fincaId': fincaId,
+      'displayOrder': displayOrder,
       'center': {'lat': center.latitude, 'lng': center.longitude},
       'width': width,
       'length': length,
@@ -67,6 +70,7 @@ class EspaiHort {
       'id': id,
       'nom': nom,
       'fincaId': fincaId,
+      'displayOrder': displayOrder,
       'center': {'lat': center.latitude, 'lng': center.longitude},
       'width': width,
       'length': length,
@@ -100,6 +104,7 @@ class EspaiHort {
       id: id ?? map['id'] ?? '',
       nom: map['nom'] ?? '',
       fincaId: map['fincaId'],
+      displayOrder: map['displayOrder'] ?? 0,
       center: LatLng(centerMap['lat'] ?? 41.5, centerMap['lng'] ?? 0.9),
       width: (map['width'] as num?)?.toDouble() ?? 1.0,
       length: (map['length'] as num?)?.toDouble() ?? 1.0,
@@ -130,6 +135,7 @@ class EspaiHort {
   EspaiHort copyWith({
     String? nom,
     String? fincaId,
+    int? displayOrder,
     LatLng? center,
     double? width,
     double? length,
@@ -144,6 +150,7 @@ class EspaiHort {
       id: id, // ID cannot change
       nom: nom ?? this.nom,
       fincaId: fincaId ?? this.fincaId,
+      displayOrder: displayOrder ?? this.displayOrder,
       center: center ?? this.center,
       width: width ?? this.width,
       length: length ?? this.length,

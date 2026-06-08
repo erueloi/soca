@@ -1,5 +1,8 @@
 # Release Notes
 
+## v1.9.17
+ Hort: Ordenació dels espais.
+Widget inicial.
 ## v1.9.16
 General: Upgrade IA for deprecated model.
 Hort: Bugfix al mapa.
@@ -205,6 +208,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

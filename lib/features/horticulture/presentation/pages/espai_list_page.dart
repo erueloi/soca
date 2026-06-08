@@ -53,12 +53,34 @@ class _EspaiListPageState extends ConsumerState<EspaiListPage> {
 
           return Stack(
             children: [
-              ListView.builder(
+              ReorderableListView.builder(
                 padding: const EdgeInsets.all(16),
                 itemCount: espais.length,
+                onReorder: (oldIndex, newIndex) async {
+                  if (oldIndex < newIndex) {
+                    newIndex -= 1;
+                  }
+                  final copy = List<EspaiHort>.from(espais);
+                  final item = copy.removeAt(oldIndex);
+                  copy.insert(newIndex, item);
+                  try {
+                    await ref.read(hortRepositoryProvider).updateEspaisOrder(copy);
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error al reordenar els espais: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
+                buildDefaultDragHandles: false,
                 itemBuilder: (context, index) {
                   final espai = espais[index];
                   return Card(
+                    key: ValueKey(espai.id),
                     elevation: 2,
                     margin: const EdgeInsets.only(bottom: 12),
                     child: Padding(
@@ -67,16 +89,29 @@ class _EspaiListPageState extends ConsumerState<EspaiListPage> {
                         children: [
                           ListTile(
                             contentPadding: EdgeInsets.zero,
-                            leading: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.green[100],
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.grass,
-                                color: Colors.green,
-                              ),
+                            leading: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ReorderableDragStartListener(
+                                  index: index,
+                                  child: const Icon(
+                                    Icons.drag_handle,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green[100],
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.grass,
+                                    color: Colors.green,
+                                  ),
+                                ),
+                              ],
                             ),
                             title: Text(
                               espai.nom,

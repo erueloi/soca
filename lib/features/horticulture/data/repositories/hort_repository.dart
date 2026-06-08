@@ -79,12 +79,14 @@ class HortRepository {
           debugPrint(
             'HortRepository: Espais snapshot: ${snapshot.docs.length} docs',
           );
-          return snapshot.docs.map((doc) {
+          final list = snapshot.docs.map((doc) {
             return EspaiHort.fromMap(
               doc.data() as Map<String, dynamic>,
               doc.id,
             );
           }).toList();
+          list.sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+          return list;
         })
         .handleError((e) {
           debugPrint('HortRepository: Error in espais stream: $e');
@@ -107,6 +109,16 @@ class HortRepository {
 
   Future<void> deleteEspai(String id) async {
     await _espaisCollection.doc(id).delete();
+  }
+
+  Future<void> updateEspaisOrder(List<EspaiHort> orderedEspais) async {
+    if (fincaId == null) return;
+    final batch = FirebaseFirestore.instance.batch();
+    for (int i = 0; i < orderedEspais.length; i++) {
+      final espai = orderedEspais[i];
+      batch.update(_espaisCollection.doc(espai.id), {'displayOrder': i});
+    }
+    await batch.commit();
   }
 
   // --- Rotation Patterns ---
