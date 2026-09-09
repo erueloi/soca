@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../../../../core/providers/app_version_provider.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -214,6 +215,23 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           ? 'No tens compte? Registra\'t'
                           : 'Ja tens compte? Inicia sessió',
                     ),
+                  ),
+                  const SizedBox(height: 16),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final versionAsync = ref.watch(appVersionProvider);
+                      return versionAsync.when(
+                        data: (version) => Text(
+                          'v$version',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                        loading: () => const SizedBox.shrink(),
+                        error: (_, _) => const SizedBox.shrink(),
+                      );
+                    },
                   ),
                 ],
               ),

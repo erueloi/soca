@@ -688,4 +688,36 @@ class TreesRepository {
 
     debugPrint('TreesRepository: Updated balance for $batchCount trees.');
   }
+
+  /// Updates the drip irrigation configuration for multiple trees at once.
+  Future<void> updateTreesDripConfig(
+    List<String> treeIds, {
+    required int dripEmitters,
+    required double dripFlowRate,
+  }) async {
+    if (fincaId == null || treeIds.isEmpty) return;
+
+    WriteBatch batch = FirebaseFirestore.instance.batch();
+    int count = 0;
+
+    for (final treeId in treeIds) {
+      final docRef = _treesCollection.doc(treeId);
+      batch.update(docRef, {
+        'dripEmitters': dripEmitters,
+        'dripFlowRate': dripFlowRate,
+      });
+      count++;
+
+      if (count % 450 == 0) {
+        await batch.commit();
+        batch = FirebaseFirestore.instance.batch();
+      }
+    }
+
+    if (count % 450 != 0) {
+      await batch.commit();
+    }
+
+    debugPrint('TreesRepository: Updated drip config for $count trees.');
+  }
 }

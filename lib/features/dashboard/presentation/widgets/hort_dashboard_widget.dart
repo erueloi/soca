@@ -11,6 +11,8 @@ import '../../../horticulture/presentation/pages/garden_designer_page.dart';
 import '../../../horticulture/presentation/pages/horticulture_page.dart';
 import '../../../nursery/presentation/pages/nursery_page.dart';
 
+import '../../../horticulture/presentation/providers/hort_providers.dart';
+
 class HortDashboardCarousel extends ConsumerStatefulWidget {
   const HortDashboardCarousel({super.key});
 
@@ -21,173 +23,222 @@ class HortDashboardCarousel extends ConsumerStatefulWidget {
 
 class _HortDashboardCarouselState extends ConsumerState<HortDashboardCarousel> {
   int _currentPage = 0;
-  PageController? _pageController;
+  late final PageController _pageController;
+  final Set<String> _syncedEspaiIds = {};
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
+    _pageController = PageController(initialPage: _currentPage);
   }
 
   @override
   void dispose() {
-    _pageController?.dispose();
+    _pageController.dispose();
     super.dispose();
   }
 
-  Future<void> _syncEspais(List<EspaiHort> espais) async {
-    final irrigationService = ref.read(gardenIrrigationServiceProvider);
-    final repo = ref.read(hortRepositoryProvider);
+  void _triggerSoilSyncIfNeeded(List<EspaiHort> espais) {
+    // Only sync each espai once per session to avoid infinite rebuild loops with Firestore
+    final espaisToSync = espais
+        .where((e) => !_syncedEspaiIds.contains(e.id))
+        .toList();
 
-    for (final espai in espais) {
-      try {
-        final updatedEspai = await irrigationService.syncSoilBalance(espai);
-        if (updatedEspai != espai) {
-          await repo.saveEspai(updatedEspai);
+    if (espaisToSync.isEmpty) return;
+
+    for (final espai in espaisToSync) {
+      _syncedEspaiIds.add(espai.id);
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final irrigationService = ref.read(gardenIrrigationServiceProvider);
+      final repo = ref.read(hortRepositoryProvider);
+
+      for (final espai in espaisToSync) {
+        try {
+          final updatedEspai = await irrigationService.syncSoilBalance(espai);
+          if (updatedEspai != espai) {
+            await repo.saveEspai(updatedEspai);
+          }
+        } catch (e) {
+          debugPrint('Error syncing soil balance for ${espai.nom}: $e');
         }
-      } catch (e) {
-        debugPrint('Error syncing soil balance for ${espai.nom}: $e');
       }
+    });
+  }
+
+  void _goToNextPage(int total) {
+    if (_currentPage < total - 1) {
+      final next = _currentPage + 1;
+      _pageController.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+      setState(() => _currentPage = next);
+    }
+  }
+
+  void _goToPrevPage() {
+    if (_currentPage > 0) {
+      final prev = _currentPage - 1;
+      _pageController.animateToPage(
+        prev,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+      setState(() => _currentPage = prev);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final repo = ref.watch(hortRepositoryProvider);
+    final espaisAsync = ref.watch(espaisStreamProvider);
+    final plantsAsync = ref.watch(plantsStreamProvider);
 
     return Card(
       elevation: 4,
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: StreamBuilder<List<EspaiHort>>(
-        stream: repo.getEspaisStream(),
-        builder: (context, espaisSnap) {
-          if (espaisSnap.connectionState == ConnectionState.waiting) {
-            return const SizedBox(
-              height: 280,
-              child: Center(child: CircularProgressIndicator()),
-            );
-          }
-
-          final espais = espaisSnap.data ?? [];
-
-          if (espais.isNotEmpty) {
-            _syncEspais(espais);
-          }
-
+      child: espaisAsync.when(
+        loading: () => const SizedBox(
+          height: 280,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+        error: (e, _) => SizedBox(
+          height: 280,
+          child: Center(child: Text('Error en carregar horts: $e')),
+        ),
+        data: (espais) {
           if (espais.isEmpty) {
             return _buildEmptyState(context);
           }
 
-          return StreamBuilder<List<PlantaHort>>(
-            stream: repo.getPlantsStream(),
-            builder: (context, plantsSnap) {
-              final plants = plantsSnap.data ?? [];
+          _triggerSoilSyncIfNeeded(espais);
 
-              return SizedBox(
-                height: 280,
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: Stack(
-                        children: [
-                          PageView.builder(
-                            controller: _pageController,
-                            itemCount: espais.length,
-                            onPageChanged: (i) => setState(() => _currentPage = i),
-                            itemBuilder: (context, index) {
-                              return _buildEspaiCard(
-                                context,
-                                espais[index],
-                                plants,
-                              );
-                            },
-                          ),
-                          if (espais.length > 1) ...[
-                            if (_currentPage > 0)
-                              Positioned(
-                                left: 4,
-                                top: 0,
-                                bottom: 0,
-                                child: Center(
-                                  child: IconButton(
-                                    icon: const Icon(Icons.chevron_left, size: 28),
-                                    style: IconButton.styleFrom(
-                                      backgroundColor: Colors.white.withValues(alpha: 0.7),
-                                      hoverColor: Colors.white.withValues(alpha: 0.9),
-                                    ),
-                                    onPressed: () {
-                                      _pageController?.previousPage(
-                                        duration: const Duration(milliseconds: 300),
-                                        curve: Curves.easeInOut,
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                            if (_currentPage < espais.length - 1)
-                              Positioned(
-                                right: 4,
-                                top: 0,
-                                bottom: 0,
-                                child: Center(
-                                  child: IconButton(
-                                    icon: const Icon(Icons.chevron_right, size: 28),
-                                    style: IconButton.styleFrom(
-                                      backgroundColor: Colors.white.withValues(alpha: 0.7),
-                                      hoverColor: Colors.white.withValues(alpha: 0.9),
-                                    ),
-                                    onPressed: () {
-                                      _pageController?.nextPage(
-                                        duration: const Duration(milliseconds: 300),
-                                        curve: Curves.easeInOut,
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ],
+          if (_currentPage >= espais.length) {
+            _currentPage = 0;
+          }
+
+          final plants = plantsAsync.value ?? [];
+
+          return SizedBox(
+            height: 280,
+            child: Column(
+              children: [
+                Expanded(
+                  child: Stack(
+                    children: [
+                      PageView.builder(
+                        controller: _pageController,
+                        itemCount: espais.length,
+                        onPageChanged: (i) => setState(() => _currentPage = i),
+                        itemBuilder: (context, index) {
+                          return _buildEspaiCard(
+                            context,
+                            espais[index],
+                            plants,
+                            index: index,
+                            totalEspais: espais.length,
+                          );
+                        },
                       ),
-                    ),
-                    if (espais.length > 1)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(
-                            espais.length,
-                            (i) => GestureDetector(
-                              onTap: () {
-                                _pageController?.animateToPage(
-                                  i,
-                                  duration: const Duration(milliseconds: 350),
-                                  curve: Curves.easeInOut,
-                                );
-                              },
-                              child: MouseRegion(
-                                cursor: SystemMouseCursors.click,
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 250),
-                                  margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
-                                  width: _currentPage == i ? 20 : 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(4),
-                                    color: _currentPage == i
-                                        ? const Color(0xFF556B2F)
-                                        : Colors.grey.shade300,
+                      if (espais.length > 1) ...[
+                        if (_currentPage > 0)
+                          Positioned(
+                            left: 6,
+                            top: 0,
+                            bottom: 0,
+                            child: Center(
+                              child: Material(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                shape: const CircleBorder(),
+                                elevation: 3,
+                                child: InkWell(
+                                  customBorder: const CircleBorder(),
+                                  onTap: _goToPrevPage,
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(6.0),
+                                    child: Icon(
+                                      Icons.chevron_left,
+                                      size: 26,
+                                      color: Color(0xFF556B2F),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
+                        if (_currentPage < espais.length - 1)
+                          Positioned(
+                            right: 6,
+                            top: 0,
+                            bottom: 0,
+                            child: Center(
+                              child: Material(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                shape: const CircleBorder(),
+                                elevation: 3,
+                                child: InkWell(
+                                  customBorder: const CircleBorder(),
+                                  onTap: () => _goToNextPage(espais.length),
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(6.0),
+                                    child: Icon(
+                                      Icons.chevron_right,
+                                      size: 26,
+                                      color: Color(0xFF556B2F),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (espais.length > 1)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(
+                        espais.length,
+                        (i) => GestureDetector(
+                          onTap: () {
+                            _pageController.animateToPage(
+                              i,
+                              duration: const Duration(milliseconds: 350),
+                              curve: Curves.easeInOut,
+                            );
+                            setState(() => _currentPage = i);
+                          },
+                          child: MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 250),
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 4,
+                              ),
+                              width: _currentPage == i ? 22 : 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(4),
+                                color: _currentPage == i
+                                    ? const Color(0xFF556B2F)
+                                    : Colors.grey.shade300,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                  ],
-                ),
-              );
-            },
+                    ),
+                  ),
+              ],
+            ),
           );
         },
       ),
@@ -231,13 +282,16 @@ class _HortDashboardCarouselState extends ConsumerState<HortDashboardCarousel> {
   Widget _buildEspaiCard(
     BuildContext context,
     EspaiHort espai,
-    List<PlantaHort> plants,
-  ) {
+    List<PlantaHort> plants, {
+    int index = 0,
+    int totalEspais = 1,
+  }) {
     final totalPlants = espai.placedPlants.length;
     final config = espai.layoutConfig;
     final numBeds = config?.numberOfBeds ?? 0;
 
     return InkWell(
+      key: ValueKey(espai.id),
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => GardenDesignerPage(espai: espai)),
@@ -253,14 +307,31 @@ class _HortDashboardCarouselState extends ConsumerState<HortDashboardCarousel> {
                 const Icon(Icons.grass, color: Color(0xFF556B2F), size: 24),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    espai.nom,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: const Color(0xFF556B2F),
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          espai.nom,
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 17,
+                            color: const Color(0xFF556B2F),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (totalEspais > 1) ...[
+                        const SizedBox(width: 6),
+                        Text(
+                          '(${index + 1}/$totalEspais)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 Container(

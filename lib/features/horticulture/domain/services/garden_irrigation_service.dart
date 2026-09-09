@@ -334,7 +334,11 @@ class GardenIrrigationService {
           litersNeeded: 0.0,
         );
       }
-      double minutes = (litersNeeded / bed.cabalSistemaLitersHora!) * 60.0;
+      final double totalBedFlowRate = bed.cabalSistemaLitersHora! * actualAreaM2;
+      double minutes = totalBedFlowRate > 0
+          ? (litersNeeded / totalBedFlowRate) * 60.0
+          : 0.0;
+      debugPrint('   [Reg Debug] 4. Drip Time = LitersNeeded(${litersNeeded.toStringAsFixed(1)}L) / TotalFlowRate(${totalBedFlowRate.toStringAsFixed(1)} L/h) * 60 = ${minutes.toStringAsFixed(1)} min');
       debugPrint('--- [Reg Debug] END CALC ---');
       return WateringRequirement(
         needsWater: true,

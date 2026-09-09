@@ -14,6 +14,7 @@ import '../../../../core/services/version_check_service.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../features/settings/presentation/providers/settings_provider.dart';
+import '../../../../core/providers/app_version_provider.dart';
 import '../../../horticulture/presentation/pages/horticulture_page.dart';
 import '../../../auth/presentation/pages/user_profile_page.dart';
 
@@ -49,13 +50,41 @@ class SocaDrawer extends ConsumerWidget {
                       children: [
                         Image.asset('assets/logo-soca.png', height: 70),
                         const SizedBox(height: 16),
-                        Text(
-                          'Soca',
-                          style: Theme.of(context).textTheme.headlineMedium
-                              ?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Soca',
+                              style: Theme.of(context).textTheme.headlineMedium
+                                  ?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                            ),
+                            const SizedBox(width: 8),
+                            ref.watch(appVersionProvider).when(
+                              data: (version) => Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white24,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  'v$version',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ),
+                              loading: () => const SizedBox.shrink(),
+                              error: (_, _) => const SizedBox.shrink(),
+                            ),
+                          ],
                         ),
                         Text(
                           farmName,

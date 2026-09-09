@@ -433,47 +433,72 @@ class _HomePageState extends ConsumerState<HomePage> {
                               if (!snapshot.hasData) {
                                 return const SizedBox.shrink();
                               }
-                              return IconButton(
-                                icon: const Icon(Icons.info_outline),
-                                tooltip: 'Versió ${snapshot.data!.version}',
-                                onPressed: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (context) => AlertDialog(
-                                      title: Text(
-                                        'Novetats v${snapshot.data!.version}',
-                                      ),
-                                      content: SizedBox(
-                                        width: 400,
-                                        child: FutureBuilder<String>(
-                                          future: DefaultAssetBundle.of(context)
-                                              .loadString(
-                                                'assets/release_notes.md',
-                                              ),
-                                          builder: (context, noteSnapshot) {
-                                            if (noteSnapshot.hasData) {
-                                              return SingleChildScrollView(
-                                                child: Text(noteSnapshot.data!),
-                                              );
-                                            }
-                                            return const Center(
-                                              child:
-                                                  CircularProgressIndicator(),
+                              final version = snapshot.data!.version;
+                              void showReleaseNotes() {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: Text('Novetats v$version'),
+                                    content: SizedBox(
+                                      width: 400,
+                                      child: FutureBuilder<String>(
+                                        future: DefaultAssetBundle.of(context)
+                                            .loadString(
+                                              'assets/release_notes.md',
+                                            ),
+                                        builder: (context, noteSnapshot) {
+                                          if (noteSnapshot.hasData) {
+                                            return SingleChildScrollView(
+                                              child: Text(noteSnapshot.data!),
                                             );
-                                          },
-                                        ),
+                                          }
+                                          return const Center(
+                                            child:
+                                                CircularProgressIndicator(),
+                                          );
+                                        },
                                       ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(context),
-                                          child: const Text('Tancar'),
-                                        ),
-                                      ],
                                     ),
-                                  );
-                                },
-                              );
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context),
+                                        child: const Text('Tancar'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+
+                              if (isRailExtended) {
+                                return TextButton.icon(
+                                  onPressed: showReleaseNotes,
+                                  icon: const Icon(Icons.info_outline, size: 20),
+                                  label: Text(
+                                    'v$version',
+                                    style: const TextStyle(fontWeight: FontWeight.w600),
+                                  ),
+                                );
+                              } else {
+                                return Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.info_outline),
+                                      tooltip: 'Versió $version',
+                                      onPressed: showReleaseNotes,
+                                    ),
+                                    Text(
+                                      'v$version',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }
                             },
                           ),
                         ],

@@ -17,6 +17,7 @@ import 'features/auth/data/repositories/auth_repository.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'core/widgets/widget_sync_manager.dart';
+import 'core/providers/app_version_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -99,34 +100,60 @@ Future<void> homeWidgetBackgroundCallback(Uri? uri) async {
   // Note: full dependency injection is hard here without setup.
 }
 
-class WelcomeScreen extends StatelessWidget {
+class WelcomeScreen extends ConsumerWidget {
   const WelcomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final versionAsync = ref.watch(appVersionProvider);
+
     return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      backgroundColor: const Color(0xFFEFEBE9),
+      body: SafeArea(
+        child: Stack(
           children: [
-            const Icon(Icons.home, size: 80, color: Colors.brown),
-            const SizedBox(height: 16),
-            Text(
-              'Soca',
-              style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                color: Colors.brown,
-                fontWeight: FontWeight.bold,
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Image.asset(
+                    'assets/splash-logo.png',
+                    width: 220,
+                    fit: BoxFit.contain,
+                  ),
+                  const SizedBox(height: 24),
+                  const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Color(0xFF556B2F),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Molí de Cal Jeroni',
-              style: Theme.of(
-                context,
-              ).textTheme.headlineMedium?.copyWith(color: Colors.brown[700]),
+            Positioned(
+              bottom: 32,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: versionAsync.when(
+                  data: (version) => Text(
+                    'v$version',
+                    style: const TextStyle(
+                      fontFamily: 'Segoe UI',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF556B2F),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, _) => const SizedBox.shrink(),
+                ),
+              ),
             ),
-            const SizedBox(height: 32),
-            const CircularProgressIndicator(),
           ],
         ),
       ),

@@ -31,6 +31,8 @@ class _Sentinel {
 
 const _sentinel = _Sentinel();
 
+enum DripFilter { all, drip, manual }
+
 class WateringFilters {
   final DateTime? startDate;
   final DateTime? endDate;
@@ -38,6 +40,7 @@ class WateringFilters {
   final String? species;
   final String? reference;
   final bool onlyNeedsWater;
+  final DripFilter dripFilter;
 
   const WateringFilters({
     this.startDate,
@@ -46,6 +49,7 @@ class WateringFilters {
     this.species,
     this.reference,
     this.onlyNeedsWater = false,
+    this.dripFilter = DripFilter.all,
   });
 
   WateringFilters copyWith({
@@ -55,6 +59,7 @@ class WateringFilters {
     Object? species = _sentinel,
     Object? reference = _sentinel,
     bool? onlyNeedsWater,
+    DripFilter? dripFilter,
   }) {
     return WateringFilters(
       startDate: startDate == _sentinel
@@ -65,6 +70,7 @@ class WateringFilters {
       species: species == _sentinel ? this.species : species as String?,
       reference: reference == _sentinel ? this.reference : reference as String?,
       onlyNeedsWater: onlyNeedsWater ?? this.onlyNeedsWater,
+      dripFilter: dripFilter ?? this.dripFilter,
     );
   }
 }
@@ -85,6 +91,7 @@ class WateringFiltersNotifier extends Notifier<WateringFilters> {
       species: null,
       reference: null,
       onlyNeedsWater: false,
+      dripFilter: DripFilter.all,
     );
   }
 
@@ -95,6 +102,7 @@ class WateringFiltersNotifier extends Notifier<WateringFilters> {
     String? species,
     String? reference,
     bool? onlyNeedsWater,
+    DripFilter? dripFilter,
   }) {
     state = state.copyWith(
       startDate: start,
@@ -103,6 +111,7 @@ class WateringFiltersNotifier extends Notifier<WateringFilters> {
       species: species,
       reference: reference,
       onlyNeedsWater: onlyNeedsWater,
+      dripFilter: dripFilter,
     );
   }
 
@@ -115,11 +124,24 @@ class WateringFiltersNotifier extends Notifier<WateringFilters> {
       species: null,
       reference: null,
       onlyNeedsWater: false,
+      dripFilter: DripFilter.all,
     );
   }
 
   void toggleNeedsWater() {
     state = state.copyWith(onlyNeedsWater: !state.onlyNeedsWater);
+  }
+
+  void setDripFilter(DripFilter filter) {
+    state = state.copyWith(dripFilter: filter);
+  }
+
+  void toggleDripFilter(DripFilter filter) {
+    if (state.dripFilter == filter) {
+      state = state.copyWith(dripFilter: DripFilter.all);
+    } else {
+      state = state.copyWith(dripFilter: filter);
+    }
   }
 
   void setDates(DateTimeRange range) {

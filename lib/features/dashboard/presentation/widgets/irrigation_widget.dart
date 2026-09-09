@@ -33,19 +33,24 @@ class IrrigationWidget extends ConsumerWidget {
     final wateringAsync = ref.watch(globalWateringEventsProvider);
     final treesAsync = ref.watch(treesStreamProvider);
 
+    final activeTrees = (treesAsync.asData?.value ?? [])
+            .where((t) =>
+                t.status != 'Planned' &&
+                t.status != 'Existent' &&
+                !t.isVeteran)
+            .toList();
+    final treesNeedingWater =
+        activeTrees.where((t) => t.needsWater).toList();
+    final critical = activeTrees
+        .where((t) => t.waterStatusText == 'Estrès Hídric')
+        .length;
+    final optional = activeTrees
+        .where((t) => t.waterStatusText == 'Reg Opcional')
+        .length;
+
     // Calculate LED Color based on status
     Color ledColor = Colors.grey;
     if (treesAsync.hasValue) {
-      final trees = treesAsync.value!
-          .where((t) => t.status != 'Planned')
-          .toList();
-      final critical = trees
-          .where((t) => t.waterStatusText == 'Estrès Hídric')
-          .length;
-      final optional = trees
-          .where((t) => t.waterStatusText == 'Reg Opcional')
-          .length;
-
       if (critical > 0) {
         ledColor = Colors.red;
       } else if (optional > 0) {
@@ -91,7 +96,7 @@ class IrrigationWidget extends ConsumerWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               Expanded(
                 child: wateringAsync.when(
                   loading: () =>
@@ -104,17 +109,51 @@ class IrrigationWidget extends ConsumerWidget {
               const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.warning_amber_rounded),
-                  label: const Text('PARADA EMERGÈNCIA'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red[50],
-                    foregroundColor: Colors.red[800],
-                    elevation: 0,
-                    side: BorderSide(color: Colors.red[200]!),
-                  ),
-                ),
+                child: treesNeedingWater.isNotEmpty
+                    ? ElevatedButton.icon(
+                        onPressed: () {
+                          ref
+                              .read(wateringFiltersProvider.notifier)
+                              .updateFilters(onlyNeedsWater: true);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const WateringPage(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.water_drop, size: 18),
+                        label: Text('REGAR ARA (${treesNeedingWater.length})'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue.shade700,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      )
+                    : OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const WateringPage(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.calendar_month, size: 18),
+                        label: const Text('GESTIONAR REG'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.blue.shade800,
+                          side: BorderSide(color: Colors.blue.shade300),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
               ),
             ],
           ),
@@ -128,7 +167,7 @@ class IrrigationWidget extends ConsumerWidget {
     List<WateringEvent> recentEvents,
     AsyncValue<List<Tree>> treesAsync,
   ) {
-    // 1. Manual Summary (Today)
+    // 1. Summary (Today)
     final now = DateTime.now();
     final todayEvents = recentEvents
         .where(
@@ -144,143 +183,217 @@ class IrrigationWidget extends ConsumerWidget {
       (sum, e) => sum + (e.liters),
     );
 
-    // 2. Deficit Check (RuralCat Model)
-    // We check how many trees are in "Estrès Hídric" (Critical) or "Reg Opcional"
     return treesAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, s) => const SizedBox(),
       data: (allTrees) {
         final activeTrees = allTrees
-            .where((t) => t.status != 'Planned')
+            .where((t) =>
+                t.status != 'Planned' &&
+                t.status != 'Existent' &&
+                !t.isVeteran)
             .toList();
+        final treesNeedingWater =
+            activeTrees.where((t) => t.needsWater).toList();
         final criticalCount = activeTrees
             .where((t) => t.waterStatusText == 'Estrès Hídric')
             .length;
-        final optionalCount = activeTrees
-            .where((t) => t.waterStatusText == 'Reg Opcional')
-            .length;
 
-        return Column(
-          children: [
-            // Today's Stats
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.shade100),
+        final totalLitersNeeded = treesNeedingWater.fold<int>(
+          0,
+          (sum, t) => sum + t.waterNeedLiters,
+        );
+        final double maxHours = treesNeedingWater.isEmpty
+            ? 0.0
+            : treesNeedingWater
+                .map((t) => t.recommendedWateringHours)
+                .fold<double>(0.0, (max, h) => h > max ? h : max);
+        final double neededHours = maxHours > 0.0
+            ? maxHours
+            : (treesNeedingWater.isNotEmpty ? 2.0 : 0.0);
+        final double ibcTanks = totalLitersNeeded / 1000.0;
+
+        return SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Today's Stats
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade100),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.check_circle_outline,
+                            size: 16, color: Colors.blue.shade700),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Regat Avui',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: Colors.blue.shade900,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '${todayLiters.toInt()} L',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: Colors.blue.shade800,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Reg Manual (Avui)',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
+              const SizedBox(height: 8),
+              // Status Warning/Info
+              if (treesNeedingWater.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: criticalCount > 0
+                        ? Colors.red.shade50
+                        : Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: criticalCount > 0
+                          ? Colors.red.shade200
+                          : Colors.amber.shade200,
                     ),
                   ),
-                  Text(
-                    '${todayLiters.toInt()} Litres',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Colors.blue,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            criticalCount > 0
+                                ? Icons.warning_amber_rounded
+                                : Icons.water_drop_outlined,
+                            color: criticalCount > 0
+                                ? Colors.red.shade800
+                                : Colors.amber.shade900,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              criticalCount > 0
+                                  ? '$criticalCount arbres amb Estrès Hídric'
+                                  : '${treesNeedingWater.length} arbres amb Reg Opcional',
+                              style: TextStyle(
+                                color: criticalCount > 0
+                                    ? Colors.red.shade900
+                                    : Colors.amber.shade900,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.opacity,
+                                  size: 14, color: Colors.blueGrey.shade700),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$totalLitersNeeded L necessaris',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.blueGrey.shade800,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              Icon(Icons.timer_outlined,
+                                  size: 14, color: Colors.blueGrey.shade700),
+                              const SizedBox(width: 4),
+                              Text(
+                                '~${neededHours.toStringAsFixed(1)} h',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.blueGrey.shade800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      if (totalLitersNeeded >= 500) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(Icons.propane_tank_outlined,
+                                size: 13, color: Colors.blueGrey.shade600),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${ibcTanks.toStringAsFixed(1)} dipòsits IBC (1.000 L)',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.blueGrey.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            // Status Warning/Info
-            if (criticalCount > 0)
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.shade200),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.warning_amber,
-                      color: Colors.red,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        'Atenció: $criticalCount arbres amb Estrès Hídric',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.red.shade900,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.check_circle,
+                        color: Colors.green,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          'Tots els arbres ben hidratats (${activeTrees.length})',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.green.shade800,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              )
-            else if (optionalCount > 0)
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.amber.shade200),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.water_drop_outlined,
-                      color: Colors.amber.shade900,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        'Info: $optionalCount arbres amb Reg Opcional',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.amber.shade900,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            else
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.check_circle,
-                      color: Colors.green,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        'Tots els arbres ben hidratats',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.green.shade700,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
+            ],
+          ),
         );
       },
     );

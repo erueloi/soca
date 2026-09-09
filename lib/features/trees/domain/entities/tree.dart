@@ -63,6 +63,12 @@ class Tree {
   final double? calculatedRegArea;
   final DateTime? lastBalanceUpdate;
 
+  // Drip Irrigation Fields
+  final int dripEmitters; // Number of drippers (0 = manual, 1 = standard, 2 = large tree)
+  final double dripFlowRate; // L/h per emitter (default 4.0 L/h)
+
+  double get totalDripRate => dripEmitters * dripFlowRate;
+
   const Tree({
     required this.id,
     required this.species,
@@ -93,6 +99,8 @@ class Tree {
     this.soilBalance,
     this.calculatedRegArea,
     this.lastBalanceUpdate,
+    this.dripEmitters = 1,
+    this.dripFlowRate = 4.0,
   });
 
   Tree copyWith({
@@ -124,6 +132,8 @@ class Tree {
     double? soilBalance,
     double? calculatedRegArea,
     DateTime? lastBalanceUpdate,
+    int? dripEmitters,
+    double? dripFlowRate,
   }) {
     return Tree(
       id: id,
@@ -155,6 +165,8 @@ class Tree {
       soilBalance: soilBalance ?? this.soilBalance,
       calculatedRegArea: calculatedRegArea ?? this.calculatedRegArea,
       lastBalanceUpdate: lastBalanceUpdate ?? this.lastBalanceUpdate,
+      dripEmitters: dripEmitters ?? this.dripEmitters,
+      dripFlowRate: dripFlowRate ?? this.dripFlowRate,
     );
   }
 
@@ -189,6 +201,8 @@ class Tree {
       'lastBalanceUpdate': lastBalanceUpdate != null
           ? Timestamp.fromDate(lastBalanceUpdate!)
           : null,
+      'dripEmitters': dripEmitters,
+      'dripFlowRate': dripFlowRate,
       'timeline': timeline.map((e) => e.toMap()).toList(),
     };
   }
@@ -224,6 +238,8 @@ class Tree {
       soilBalance: (map['soilBalance'] as num?)?.toDouble(),
       calculatedRegArea: (map['calculatedRegArea'] as num?)?.toDouble(),
       lastBalanceUpdate: _parseDateTime(map['lastBalanceUpdate']),
+      dripEmitters: (map['dripEmitters'] as num?)?.toInt() ?? 1,
+      dripFlowRate: (map['dripFlowRate'] as num?)?.toDouble() ?? 4.0,
       timeline: map['timeline'] != null
           ? (map['timeline'] as List<dynamic>)
                 .map((e) => TreeEvent.fromMap(e as Map<String, dynamic>))

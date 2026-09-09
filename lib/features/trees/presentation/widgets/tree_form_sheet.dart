@@ -48,6 +48,8 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
   late TextEditingController _initialAgeController;
   late TextEditingController _heightController;
   late TextEditingController _diameterController;
+  late int _dripEmitters;
+  late double _dripFlowRate;
 
   double? _latitude;
   double? _longitude;
@@ -178,6 +180,8 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
     _selectedSpeciesId = widget.tree?.speciesId;
     _selectedZoneId = widget.tree?.zoneId;
     _isVeteran = widget.tree?.isVeteran ?? false;
+    _dripEmitters = widget.tree?.dripEmitters ?? 1;
+    _dripFlowRate = widget.tree?.dripFlowRate ?? 4.0;
 
     // If it's a new tree, check Sandbox Mode default
     // If it's a new tree (null or empty ID), check Sandbox Mode default
@@ -350,6 +354,8 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
       initialAge: double.tryParse(_initialAgeController.text) ?? 0.0,
       height: double.tryParse(_heightController.text),
       trunkDiameter: double.tryParse(_diameterController.text),
+      dripEmitters: _dripEmitters,
+      dripFlowRate: _dripFlowRate,
     );
 
     if (widget.tree == null || widget.tree!.id.isEmpty) {
@@ -958,6 +964,39 @@ class _TreeFormSheetState extends ConsumerState<TreeFormSheet> {
                           )
                           .toList(),
                       onChanged: (v) => setState(() => _vigor = v),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<int>(
+                      key: ValueKey('emitters_$_dripEmitters'),
+                      initialValue: _dripEmitters,
+                      decoration: const InputDecoration(
+                        labelText: 'Reg Gota a Gota',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.water_drop_outlined, color: Colors.blue),
+                        helperText: 'Cabal per defecte: 4 L/h per degoter',
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 1,
+                          child: Text('1 degoter (4 L/h) - Estàndard/Jove'),
+                        ),
+                        DropdownMenuItem(
+                          value: 2,
+                          child: Text('2 degoters (8 L/h) - Arbre gran'),
+                        ),
+                        DropdownMenuItem(
+                          value: 0,
+                          child: Text('Sense degoter - Reg manual'),
+                        ),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            _dripEmitters = val;
+                            _dripFlowRate = val > 0 ? 4.0 : 0.0;
+                          });
+                        }
+                      },
                     ),
                     const SizedBox(height: 16),
                     Row(

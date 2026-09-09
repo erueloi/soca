@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.9.18
+Arbres: Visor unificat de fotos amb zoom interactiu.
+Reg: Configurador de gota a gota (degoters i cabal) i càlcul de dosi de suport.
+Reg: Giny de dipòsit d'aigua, targeta de necessitat actual i filtre manual vs gota a gota.
+Tauler: Actualització de mètriques i accessos al giny de reg.
+Hort: Ajust del càlcul de temps de reg per degoteig als bancals.
 ## v1.9.17
  Hort: Ordenació dels espais.
 Widget inicial.
@@ -208,6 +214,7 @@ Persistència, Fotos i Desplegament Web
 
 ## v1.0.0
 - Versió inicial amb Dashboard i Pissarra de Tasques.
+
 
 
 

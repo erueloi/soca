@@ -1,3 +1,4 @@
+// ignore_for_file: deprecated_member_use
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -24,6 +25,7 @@ import '../../domain/entities/species.dart';
 import '../pages/species_library_page.dart';
 import '../pages/tree_growth_timeline_page.dart';
 import 'growth_entry_form_sheet.dart';
+import 'tree_photo_gallery_page.dart';
 import '../../domain/entities/growth_entry.dart';
 import '../../../settings/presentation/providers/settings_provider.dart';
 import '../../../settings/domain/entities/farm_config.dart';
@@ -390,7 +392,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
                 background: GestureDetector(
                   onTap: () {
                     if (_displayTree.photoUrl != null) {
-                      _showFullImage(context, _displayTree.photoUrl!);
+                      _openHeaderPhotoGallery();
                     }
                   },
                   child: Stack(
@@ -582,6 +584,7 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
 
           _buildAgeCard(),
           _buildDimensionsCard(),
+          _buildIrrigationCard(),
           const SizedBox(height: 24),
 
           if (!_isAnalyzing)
@@ -2102,14 +2105,51 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => _EvolutionGalleryPage(
+        builder: (context) => TreePhotoGalleryPage(
           entries: allEntries,
           initialIndex: initialIndex,
           tree: widget.tree,
-          ref: ref,
         ),
       ),
     );
+  }
+
+  Future<void> _openHeaderPhotoGallery() async {
+    final currentMainUrl = _displayTree.photoUrl ?? widget.tree.photoUrl;
+    if (currentMainUrl == null) return;
+
+    List<GrowthEntry> entries = [];
+    try {
+      final streamEntries = await ref
+          .read(treesRepositoryProvider)
+          .getGrowthEntriesStream(widget.tree.id)
+          .first
+          .timeout(const Duration(seconds: 2));
+      entries = List<GrowthEntry>.from(streamEntries);
+    } catch (_) {
+      entries = [];
+    }
+
+    final exists = entries.any((e) => e.photoUrl == currentMainUrl);
+    if (!exists) {
+      final mainEntry = GrowthEntry(
+        id: 'MAIN_PHOTO',
+        date: widget.tree.plantingDate,
+        photoUrl: currentMainUrl,
+        height: 0,
+        trunkDiameter: 0,
+        healthStatus: 'Inicial',
+        observations: 'Foto Principal',
+      );
+      entries = [mainEntry, ...entries];
+    }
+
+    if (mounted) {
+      int targetIndex = entries.indexWhere((e) => e.photoUrl == currentMainUrl);
+      if (targetIndex < 0) targetIndex = 0;
+
+      _showEvolutionPhotoDetail(context, entries, targetIndex);
+    }
   }
 
   // --- HELPERS ---
@@ -2304,52 +2344,6 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
     );
   }
 
-  void _showFullImage(BuildContext context, String url) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        insetPadding: const EdgeInsets.all(16),
-        child: Container(
-          height: 400,
-          color: Colors.black, // Dark background for better contrast
-          child: Stack(
-            children: [
-              Center(
-                child: InteractiveViewer(
-                  minScale: 0.5,
-                  maxScale: 4.0,
-                  child: Image.network(
-                    url,
-                    fit: BoxFit.contain,
-                    width: double.infinity,
-                    height: double.infinity,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return const Center(child: CircularProgressIndicator());
-                    },
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.black45,
-                    shape: BoxShape.circle,
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   // --- BOTANICAL CARD ---
 
@@ -2740,6 +2734,481 @@ class _TreeDetailState extends ConsumerState<TreeDetail>
       ),
     );
   }
+
+  Widget _buildIrrigationCard() {
+    final hasDrip = _displayTree.dripEmitters > 0;
+    final totalRate = _displayTree.totalDripRate;
+    final needLiters = _displayTree.waterNeedLiters;
+    final hours = _displayTree.recommendedWateringHours;
+
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.only(top: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    hasDrip ? Icons.water_drop : Icons.pan_tool_alt_outlined,
+                    color: Colors.blue,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'REG',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blueGrey,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      Text(
+                        hasDrip
+                            ? 'Gota a gota: ${_displayTree.dripEmitters} ${_displayTree.dripEmitters == 1 ? "degoter" : "degoters"} (${_displayTree.dripFlowRate.toStringAsFixed(1).replaceAll(".0", "")} L/h)'
+                            : 'Manual (garrafa / mànega)',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.tune, color: Colors.blue),
+                  tooltip: 'Configurar reg',
+                  onPressed: () => _showDripConfigSheet(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Balanced 3-column stats row (same aesthetic as dimensions and age cards)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Row(
+                children: [
+                  // Col 1: Installation
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Icon(
+                          hasDrip ? Icons.opacity : Icons.water_outlined,
+                          size: 20,
+                          color: Colors.blue.shade600,
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Instal·lació',
+                          style: TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          hasDrip ? '${_displayTree.dripEmitters} degoters' : 'Manual',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(width: 1, height: 36, color: Colors.grey.shade300),
+
+                  // Col 2: Flow Rate
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.speed,
+                          size: 20,
+                          color: hasDrip ? Colors.orange.shade600 : Colors.grey,
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Cabal total',
+                          style: TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          hasDrip
+                              ? '${totalRate.toStringAsFixed(1).replaceAll(".0", "")} L/h'
+                              : 'Sense degoters',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: hasDrip ? Colors.black87 : Colors.grey.shade600,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(width: 1, height: 36, color: Colors.grey.shade300),
+
+                  // Col 3: Recommended support dose
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.eco_outlined,
+                          size: 20,
+                          color: needLiters > 0 ? Colors.blue.shade700 : Colors.green.shade600,
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Necessitat',
+                          style: TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          needLiters > 0
+                              ? (hasDrip
+                                  ? '$needLiters L (${hours.toStringAsFixed(1).replaceAll(".0", "")}h)'
+                                  : '$needLiters L')
+                              : '0 L (Òptim)',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: needLiters > 0 ? Colors.blue.shade800 : Colors.green.shade700,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Action: Single full-width REGAR ARA button (config is accessed via top-right icon)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _showQuickWateringSheet(context),
+                icon: const Icon(Icons.water_drop, size: 18),
+                label: const Text('REGAR ARA'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDripCardOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.blue.shade50 : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? Colors.blue : Colors.grey.shade300,
+            width: isSelected ? 2.0 : 1.0,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isSelected ? Colors.blue : Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                icon,
+                color: isSelected ? Colors.white : Colors.grey.shade700,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: isSelected ? Colors.blue.shade900 : Colors.black87,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ),
+            if (isSelected)
+              const Icon(Icons.check_circle, color: Colors.blue, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showDripConfigSheet(BuildContext context) async {
+    int mode = 1;
+    if (_displayTree.dripEmitters == 0) {
+      mode = 0;
+    } else if (_displayTree.dripEmitters == 1 && (_displayTree.dripFlowRate - 4.0).abs() < 0.01) {
+      mode = 1;
+    } else if (_displayTree.dripEmitters == 2 && (_displayTree.dripFlowRate - 4.0).abs() < 0.01) {
+      mode = 2;
+    } else {
+      mode = -1;
+    }
+
+    int selectedEmitters = _displayTree.dripEmitters;
+    double selectedRate = _displayTree.dripFlowRate > 0 ? _displayTree.dripFlowRate : 4.0;
+    final customEmittersController = TextEditingController(
+      text: selectedEmitters > 0 ? selectedEmitters.toString() : '3',
+    );
+    final customRateController = TextEditingController(
+      text: selectedRate > 0 ? selectedRate.toStringAsFixed(1).replaceAll('.0', '') : '4.0',
+    );
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.tune, color: Colors.blue),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Configurar Reg: ${_displayTree.commonName}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Tria el tipus d\'instal·lació de reg:',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildDripCardOption(
+                      icon: Icons.water_drop,
+                      title: '1 degoter (4 L/h)',
+                      subtitle: 'Arbres petits o joves (reg de 2h = 8 L)',
+                      isSelected: mode == 1,
+                      onTap: () {
+                        setDialogState(() {
+                          mode = 1;
+                          selectedEmitters = 1;
+                          selectedRate = 4.0;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    _buildDripCardOption(
+                      icon: Icons.opacity,
+                      title: '2 degoters (8 L/h)',
+                      subtitle: 'Arbres grans o fruiters (reg de 2h = 16 L)',
+                      isSelected: mode == 2,
+                      onTap: () {
+                        setDialogState(() {
+                          mode = 2;
+                          selectedEmitters = 2;
+                          selectedRate = 4.0;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    _buildDripCardOption(
+                      icon: Icons.pan_tool_alt_outlined,
+                      title: 'Sense degoter (Manual)',
+                      subtitle: 'Reg amb garrafa o mànega',
+                      isSelected: mode == 0,
+                      onTap: () {
+                        setDialogState(() {
+                          mode = 0;
+                          selectedEmitters = 0;
+                          selectedRate = 0.0;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    _buildDripCardOption(
+                      icon: Icons.tune,
+                      title: 'Personalitzat (Lliure)',
+                      subtitle: 'Defineix nombre de degoters i cabal lliurement',
+                      isSelected: mode == -1,
+                      onTap: () {
+                        setDialogState(() {
+                          mode = -1;
+                          selectedEmitters = int.tryParse(customEmittersController.text) ?? 3;
+                          selectedRate = double.tryParse(customRateController.text) ?? 4.0;
+                        });
+                      },
+                    ),
+                    if (mode == -1) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: customEmittersController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Nº Degoters',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                ),
+                                keyboardType: TextInputType.number,
+                                onChanged: (val) {
+                                  setDialogState(() {
+                                    selectedEmitters = int.tryParse(val) ?? 0;
+                                  });
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextFormField(
+                                controller: customRateController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Cabal (L/h)',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                  suffixText: 'L/h',
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                ),
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                onChanged: (val) {
+                                  setDialogState(() {
+                                    selectedRate = double.tryParse(val) ?? 0.0;
+                                  });
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: selectedEmitters > 0 ? Colors.blue.shade50 : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        selectedEmitters > 0
+                            ? 'Cabal resultant: ${(selectedEmitters * selectedRate).toStringAsFixed(1).replaceAll(".0", "")} L/h ($selectedEmitters degoters)'
+                            : 'Reg Manual (Sense degoters instal·lats)',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: selectedEmitters > 0 ? Colors.blue.shade800 : Colors.grey.shade800,
+                          fontSize: 13,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('CANCEL·LAR'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  await ref.read(treesRepositoryProvider).updateTreesDripConfig(
+                    [_displayTree.id],
+                    dripEmitters: selectedEmitters,
+                    dripFlowRate: selectedRate,
+                  );
+                  if (context.mounted) {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _displayTree = _displayTree.copyWith(
+                        dripEmitters: selectedEmitters,
+                        dripFlowRate: selectedRate,
+                      );
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          selectedEmitters > 0
+                              ? 'Reg actualitzat: $selectedEmitters deg. (${(selectedEmitters * selectedRate).toStringAsFixed(1).replaceAll(".0", "")} L/h)'
+                              : 'Reg actualitzat a Manual per a ${_displayTree.commonName}',
+                        ),
+                      ),
+                    );
+                  }
+                },
+                child: const Text('GUARDAR'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
@@ -2759,407 +3228,3 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   bool shouldRebuild(_SliverAppBarDelegate oldDelegate) => false;
 }
 
-/// Gallery page for navigating between evolution photos
-class _EvolutionGalleryPage extends StatefulWidget {
-  final List<GrowthEntry> entries;
-  final int initialIndex;
-  final Tree tree;
-  final WidgetRef ref;
-
-  const _EvolutionGalleryPage({
-    required this.entries,
-    required this.initialIndex,
-    required this.tree,
-    required this.ref,
-  });
-
-  @override
-  State<_EvolutionGalleryPage> createState() => _EvolutionGalleryPageState();
-}
-
-class _EvolutionGalleryPageState extends State<_EvolutionGalleryPage> {
-  late PageController _pageController;
-  late int _currentIndex;
-
-  @override
-  void initState() {
-    super.initState();
-    _currentIndex = widget.initialIndex;
-    _pageController = PageController(initialPage: _currentIndex);
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  GrowthEntry get _currentEntry => widget.entries[_currentIndex];
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: Text(
-          '${_currentIndex + 1} / ${widget.entries.length}',
-          style: const TextStyle(color: Colors.white),
-        ),
-        actions: [
-          if (_currentEntry.id != 'MAIN_PHOTO')
-            IconButton(
-              icon: const Icon(Icons.wallpaper),
-              tooltip: 'Establir com a foto principal',
-              onPressed: _setAsMainPhoto,
-            ),
-          if (_currentEntry.id != 'MAIN_PHOTO')
-            IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.red),
-              tooltip: 'Eliminar',
-              onPressed: _deletePhoto,
-            ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Photo PageView with navigation buttons
-          Expanded(
-            child: Stack(
-              children: [
-                PageView.builder(
-                  controller: _pageController,
-                  itemCount: widget.entries.length,
-                  onPageChanged: (index) {
-                    setState(() => _currentIndex = index);
-                  },
-                  itemBuilder: (context, index) {
-                    final entry = widget.entries[index];
-                    return GestureDetector(
-                      onDoubleTap: () => _showZoomView(entry.photoUrl),
-                      child: Image.network(
-                        entry.photoUrl,
-                        fit: BoxFit.contain,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return const Center(
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                            ),
-                          );
-                        },
-                        errorBuilder: (context, error, stack) => const Center(
-                          child: Icon(Icons.error, color: Colors.red, size: 48),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                // Navigation buttons
-                if (widget.entries.length > 1)
-                  Positioned.fill(
-                    child: Row(
-                      children: [
-                        // Previous button
-                        if (_currentIndex > 0)
-                          GestureDetector(
-                            onTap: () {
-                              _pageController.previousPage(
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeInOut,
-                              );
-                            },
-                            child: Container(
-                              width: 60,
-                              color: Colors.transparent,
-                              alignment: Alignment.center,
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.black45,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: const Icon(
-                                  Icons.chevron_left,
-                                  color: Colors.white,
-                                  size: 32,
-                                ),
-                              ),
-                            ),
-                          )
-                        else
-                          const SizedBox(width: 60),
-                        const Spacer(),
-                        // Next button
-                        if (_currentIndex < widget.entries.length - 1)
-                          GestureDetector(
-                            onTap: () {
-                              _pageController.nextPage(
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeInOut,
-                              );
-                            },
-                            child: Container(
-                              width: 60,
-                              color: Colors.transparent,
-                              alignment: Alignment.center,
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.black45,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: const Icon(
-                                  Icons.chevron_right,
-                                  color: Colors.white,
-                                  size: 32,
-                                ),
-                              ),
-                            ),
-                          )
-                        else
-                          const SizedBox(width: 60),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          // Info panel
-          Container(
-            color: Colors.black87,
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      DateFormat('dd/MM/yyyy HH:mm').format(_currentEntry.date),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    if (_currentEntry.healthStatus.isNotEmpty)
-                      Chip(
-                        label: Text(
-                          _currentEntry.healthStatus,
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        backgroundColor: Colors.indigo.shade100,
-                        padding: EdgeInsets.zero,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                  ],
-                ),
-                if (_currentEntry.observations.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    _currentEntry.observations,
-                    style: const TextStyle(color: Colors.white70),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-                if (_currentEntry.height > 0 ||
-                    _currentEntry.trunkDiameter > 0) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      if (_currentEntry.height > 0)
-                        Text(
-                          'Alçada: ${_currentEntry.height.toStringAsFixed(0)} cm',
-                          style: const TextStyle(
-                            color: Colors.white60,
-                            fontSize: 12,
-                          ),
-                        ),
-                      if (_currentEntry.height > 0 &&
-                          _currentEntry.trunkDiameter > 0)
-                        const Text(
-                          ' • ',
-                          style: TextStyle(color: Colors.white60),
-                        ),
-                      if (_currentEntry.trunkDiameter > 0)
-                        Text(
-                          'Diàmetre: ${_currentEntry.trunkDiameter.toStringAsFixed(1)} cm',
-                          style: const TextStyle(
-                            color: Colors.white60,
-                            fontSize: 12,
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showZoomView(String photoUrl) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog.fullscreen(
-        backgroundColor: Colors.black,
-        child: Stack(
-          children: [
-            Center(
-              child: InteractiveViewer(
-                minScale: 0.5,
-                maxScale: 5.0,
-                child: Image.network(
-                  photoUrl,
-                  fit: BoxFit.contain,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return const Center(
-                      child: CircularProgressIndicator(color: Colors.white),
-                    );
-                  },
-                ),
-              ),
-            ),
-            Positioned(
-              top: 40,
-              right: 16,
-              child: IconButton(
-                style: IconButton.styleFrom(backgroundColor: Colors.black54),
-                icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
-            Positioned(
-              bottom: 40,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    'Pinça per fer zoom',
-                    style: TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _setAsMainPhoto() async {
-    final currentMain = widget.tree.photoUrl;
-
-    // Check if current main photo exists in history
-    if (currentMain != null && currentMain != _currentEntry.photoUrl) {
-      try {
-        final entries = await widget.ref
-            .read(treesRepositoryProvider)
-            .getGrowthEntriesStream(widget.tree.id)
-            .first;
-
-        final exists = entries.any((e) => e.photoUrl == currentMain);
-
-        if (!exists && mounted) {
-          final shouldSave = await showDialog<bool>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Guardar foto actual?'),
-              content: const Text(
-                'La foto principal actual no existeix al diari visual. '
-                'Vols guardar-la a l\'historial abans de substituir-la?',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('NO, PERDRE-LA'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('SÍ, GUARDAR-LA'),
-                ),
-              ],
-            ),
-          );
-
-          if (shouldSave == true) {
-            final archiveEntry = GrowthEntry(
-              id: '',
-              date: widget.tree.plantingDate,
-              photoUrl: currentMain,
-              height: 0,
-              trunkDiameter: 0,
-              healthStatus: 'Desconegut',
-              observations: 'Foto principal anterior arxivada automàticament',
-            );
-            await widget.ref
-                .read(treesRepositoryProvider)
-                .addGrowthEntry(widget.tree.id, archiveEntry);
-          }
-        }
-      } catch (e) {
-        debugPrint('Error checking duplicate photo: $e');
-      }
-    }
-
-    // Update Tree Main Photo
-    final updatedTree = widget.tree.copyWith(photoUrl: _currentEntry.photoUrl);
-    await widget.ref.read(treesRepositoryProvider).updateTree(updatedTree);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Foto principal actualitzada'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
-  }
-
-  Future<void> _deletePhoto() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Eliminar foto?'),
-        content: const Text('Aquesta acció no es pot desfer.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('CANCEL·LAR'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('ELIMINAR'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true && mounted) {
-      await widget.ref
-          .read(treesRepositoryProvider)
-          .deleteGrowthEntry(widget.tree.id, _currentEntry.id);
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Foto eliminada')));
-      }
-    }
-  }
-}

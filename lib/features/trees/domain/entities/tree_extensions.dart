@@ -7,15 +7,23 @@ extension TreeWaterStatus on Tree {
     return (soilBalance ?? 0) < -15;
   }
 
+  /// Dosi recomanada de reg de suport (gota a gota):
+  /// - Arbre estàndard (1 degoter de 4 L/h) -> 2h = 8 L
+  /// - Arbre gran (2 degoters de 4 L/h) -> 2h = 16 L
+  /// Si el sòl està saciat (> -5 mm) o l'arbre és madur/arrelat: 0 L
   int get waterNeedLiters {
     if (isMature || status == 'Mort' || status == 'Perdut') return 0;
     final balance = soilBalance ?? 0.0;
-    final area = calculatedRegArea ?? 1.0;
-    
-    if (balance < 0) {
-      return (balance.abs() * area).round();
-    }
-    return 0;
+    if (balance >= -5) return 0;
+
+    final rate = totalDripRate > 0 ? totalDripRate : 4.0;
+    return (rate * 2.0).round();
+  }
+
+  /// Hores recomanades d'obertura del reg gota a gota
+  double get recommendedWateringHours {
+    if (waterNeedLiters == 0) return 0.0;
+    return 2.0;
   }
 
   // Colors based on user request:
